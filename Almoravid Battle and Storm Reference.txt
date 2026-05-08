@@ -1,0 +1,561 @@
+# =============================================================================
+# ALMORAVID — BATTLE & STORM (machine-readable)
+# Source: Player Aid Foldout v2, page 2 (Battle & Storm chart only;
+#         Forces and Strongholds tables intentionally excluded)
+# Reconciled with: Living Rules (AlmoravidRulesofPlayLIVINGRULES1) and
+#                  Official Errata 15Feb2023.
+# Precedence (high to low): errata > living_rules > player_aid
+# Format: YAML 1.2
+# =============================================================================
+ 
+schema_version: "1.0"
+ 
+meta:
+  document_type: battle_and_storm_procedure
+  precedence_order: [errata, living_rules, player_aid]
+  scope:
+    includes: [battle_procedure, storm_procedure, sally_procedure, sack_procedure, aftermath]
+    excludes: [forces_table, strongholds_table]
+    excludes_reason: "User direction — Forces and Strongholds page intentionally ignored."
+ 
+# -----------------------------------------------------------------------------
+# COMMON DEFINITIONS
+# -----------------------------------------------------------------------------
+ 
+definitions:
+ 
+  hit:
+    rule_ref: "4.4.2"
+    text: "A unit of damage caused by a Striking unit (½, 1, or 2 per unit, see Forces table)."
+ 
+  rout:
+    rule_ref: "4.4.2"
+    text: "Failed Protection roll → unit slides to Routed area; cannot Strike or absorb Hits."
+ 
+  flanking:
+    rule_ref: "4.4.2"
+    text: >
+      A Front Lord with no Enemy Lord directly opposite Strikes the closest
+      Front Enemy Lord (center may pick left or right). Hits from Flanking
+      Lord(s) plus the directly opposed Lord total together; round up.
+ 
+  pursuit_marker:
+    rule_ref: "4.4.2"
+    granted_to: "side opposite the Conceding side, that Round only"
+    effect: "Conceding side halves its total Hits against Pursuing side; round all fractions up by step"
+ 
+  javelins:
+    rule_ref: "4.4.2"
+    placed_on: "each Lord with African Horse, Jabalinas, or Harbah"
+    use: "Once per Battle/Storm at side's choice; flip marker to red X when used"
+ 
+  rounding_halves:
+    rule_ref: "4.4.2"
+    principle: >
+      Each unit causes ½, 1, or 2 Hits per Strike type (Forces table). Hits
+      accumulate in halves; any fractional TOTAL rounds UP to the next whole
+      Hit before Protection rolls are made. A leftover ½ always becomes a
+      full Hit — the defender never gets to ignore a half.
+    granularity:
+      per_step: >
+        Round at each Strike step separately (1.a, 1.b, 2.a, 2.b, 2.c, 2.d for
+        Battle; 1.a, 1.b, 2.a, 2.b for Storm). Do NOT carry fractions between
+        steps or sum across the Round before rounding.
+      per_target_group: >
+        Within a step, Total Hits = (directly opposed Lord's Strikes)
+        + (Flanking Lords' Strikes) + (Garrison Strikes if Storm). Round the
+        combined total ONCE, after summing all contributors aimed at the same
+        target group.
+    examples:
+      - case: "3 Garrison Bowmen Missiles (x½ each)"
+        raw: "1½"
+        rounded: 2
+        source: "Background Book p.16 example"
+      - case: "5 Light Horse Melee (x½ each)"
+        raw: "2½"
+        rounded: 3
+      - case: "Pursuit clause — Conceding side has 5 Hits, halved"
+        raw: "2½"
+        rounded: 3
+        rule: "'Round all fractions up by step' (4.4.2 Pursuit)"
+      - case: "Flanking — opposed Lord 1½ + Flanker 1, summed for the same target"
+        raw: "2½"
+        rounded: 3
+    interactions:
+      mixed_missiles:
+        ref: mixed_missiles_rounding
+        effect: "If Crossbows contribute any portion, the rounded-up half counts as a Crossbow Hit, not a Bowmen/other Hit."
+      pursuit:
+        ref: pursuit_marker
+        sequence: "1) Halve the Conceding side's step total. 2) Round any fraction up. (Halve first, then round.)"
+      garrison_in_storm:
+        ref: garrison_during_storm
+        effect: "Garrison Hits are added to Defending Lord's Hits BEFORE rounding (single round-up of the combined total)."
+      capability_stacking:
+        rule: >
+          If different sources give the same unit 'Missiles x½' and 'Missiles x1',
+          the unit is x1 (highest applicable rate); the ½ does not stack to 1½.
+        rule_ref: "4.4.2 TOTAL HITS"
+    note_player_aid: "Player aid says only 'round up' inline. Rules 4.4.2 (TOTAL HITS, Pursuit) supply the by-step granularity and the halve-then-round sequence."
+ 
+  mixed_missiles_rounding:
+    rule_ref: "4.4.2"
+    rule: "When Crossbows combine with other Missiles, round Hits in favor of Crossbows."
+    depends_on: rounding_halves
+    example:
+      input: "3 Crossbow Men-at-Arms (x½) + 3 Militia Bowmen (x½)"
+      raw: "1½ Crossbow + 1½ Bowmen = 3 total"
+      result: "3 Hits — 2 Crossbow + 1 Bowmen (the rounded-up half goes to Crossbows)"
+      source: "Rules 4.4.2 Mixed Missiles example"
+    note_player_aid: "Not on player aid; rules-only clarification."
+ 
+  storm_only_modifiers:
+    rule_ref: "4.5.2"
+    rules:
+      - "Javelins and Slingers Strike at x½ (not x1) in Storm."
+      - "Each Lord adds at most 6 Melee Hits per Round (Missiles unlimited)."
+      - "Attacking side absorbs Hits with Armored units before any other units."
+      - "Garrison absorbs Hits before any Defending Lord units."
+ 
+  withdraw_definition:
+    rule_ref: "4.3.4"
+    text: "Inactive side moves Lords into Friendly Stronghold there, up to Siege Capacity."
+    does_not_count_as_moved_fought: true
+ 
+# =============================================================================
+# BATTLE PROCEDURE (4.4)
+# =============================================================================
+ 
+battle_procedure:
+  rule_refs: ["4.4", "4.4.1", "4.4.2", "4.4.3", "4.4.4", "4.4.5"]
+  triggered_when:
+    rule_ref: "4.3.4"
+    text: >
+      Active side Approaches Locale of Unbesieged and Unbypassed Enemy Lord
+      who neither Avoids Battle nor Withdraws. ALL Lords at the Locale not
+      inside a Stronghold must participate.
+    errata_ref: "p.17 — line 3 'inside a Stronghold' (replaces 'under Siege or Bypassed')"
+ 
+  steps:
+ 
+    # -------------------------------------------------------------------------
+    - id: array
+      rule_ref: "4.4.1"
+      ordered_actions: [attacker_arrays, defender_arrays, play_events]
+ 
+      attacker_arrays:
+        front_positions: [left, center, right]
+        rules:
+          - "Active Lord must occupy Front center"
+          - "Up to one other Lord each in Front left and Front right"
+          - "All other Attacker Lords go to Reserve"
+ 
+      defender_arrays:
+        rule: >
+          Place one Defending Lord directly opposite each Attacking Front Lord,
+          beginning center, then left and/or right, as able. Remainder to Reserve.
+ 
+      relief_sally:
+        rule_ref: "4.4.1"
+        when: "Active side Approaches a Locale where it is also Besieged"
+        special_array:
+          - "Sallying Attackers Array behind the Defenders"
+          - "Up to 3 Reserve Defenders Array facing the Sallying Attackers (as Front)"
+          - "Sallying Lords Attack Reserve Defenders, or if none, Front Defenders, all as Flanking equally closely"
+        siegeworks_for: "Sallying Attackers only"
+        on_attacker_loss: "Sallying Lords Withdraw back into Stronghold; reduce Siege markers there to 1"
+ 
+      play_events:
+        rule_ref: "3.1.3"
+        actor_order: [attacker, defender]
+        timing: "Before Round 1 (Events may affect later rounds, but all played here)"
+ 
+      javelins_placement:
+        rule_ref: "4.4.2"
+        per_lord_check: "If Lord has African Horse, Jabalinas, or Harbah, place Javelins marker"
+ 
+    # -------------------------------------------------------------------------
+    - id: round
+      loop: true
+      ordered_steps: [concede_check, reposition, strike]
+ 
+      concede_check:
+        rule_ref: "4.4.2"
+        actor_order: [attacker, defender]
+        timing: "Start of each Round (Battle lasts at least 1 Round)"
+        optional: true
+        effect: >
+          Declaring side will lose at end of this Round but with diminished losses;
+          Enemy gains Pursuit advantage this Round (place Pursuit marker pointing
+          from Pursuer to Conceder).
+ 
+      reposition:
+        rule_ref: "4.4.2"
+        when: "every Round AFTER the first"
+        skipped_round_1: true
+        ordered_actions:
+ 
+          - id: rout_removal
+            rule_ref: "4.4.2"
+            text: "Remove Routed Lords from Battle Array; they no longer occupy any Array position."
+            note_player_aid: "OMITTED from player aid Reposition list."
+ 
+          - id: advance
+            rule_ref: "4.4.2"
+            text: "Slide any Unrouted Reserve Lords into empty Front positions, one Reserve Lord per empty Front position."
+            note_player_aid: "Player aid says 'any empty Front'; rules specify ONE-EACH."
+ 
+          - id: center
+            rule_ref: "4.4.2"
+            actor_order: [attacker, defender]
+            condition: "Front center still empty after Advance"
+            text: "Slide one Lord from Front left or Front right into empty Front center; mandatory."
+ 
+      strike:
+        rule_ref: "4.4.2"
+        ordered_substeps:
+ 
+          - step: "1.a"
+            type: missile
+            actor: defender
+            label: "Defending Missiles"
+ 
+          - step: "1.b"
+            type: missile
+            actor: attacker
+            label: "Attacking Missiles"
+ 
+          - step: "2.a"
+            type: melee
+            actor: defender
+            unit_class: horse
+            label: "Defending Horse"
+            javelins_check_before: true
+ 
+          - step: "2.b"
+            type: melee
+            actor: attacker
+            unit_class: horse
+            label: "Attacking Horse"
+            javelins_check_before: true
+ 
+          - step: "2.c"
+            type: melee
+            actor: defender
+            unit_class: foot
+            label: "Defending Foot"
+            javelins_check_before: true
+ 
+          - step: "2.d"
+            type: melee
+            actor: attacker
+            unit_class: foot
+            label: "Attacking Foot"
+            javelins_check_before: true
+ 
+        per_step_resolution:
+          rule_ref: "4.4.2"
+          ordered:
+            - id: total_hits
+              text: "Total all Striking Hits this step (opposite + Flanking + Garrison if Storm); round up."
+              rounding_ref: rounding_halves   # see definitions for ½-Hit rounding mechanics
+              modifiers:
+                - mixed_missiles_rounding   # see definitions
+                - pursuit:
+                    when: "Conceding side is Striking"
+                    effect: "Halve total; round up by step (see rounding_halves)"
+ 
+            - id: assign_target
+              text: >
+                Hits apply to opposed, Flanked, or Flanking Enemy Lord.
+                Player with Flanking Lord chooses which (Flanking or directly
+                opposed) takes Hits.
+ 
+            - id: roll_walls
+              rule_ref: "4.4.2"
+              when: "this is a Storm or Sally"
+              who_rolls: "side benefiting from Walls or Siegeworks"
+              dice_count: "= total Hits in this step"
+              cancels_if: "die roll <= Walls range OR <= total Siege markers there (for Siegeworks)"
+              note: "Roll separately for Hits of differing source (e.g., Crossbows)."
+ 
+            - id: assign_hits_to_units
+              rule_ref: "4.4.2"
+              who_assigns: "owner of receiving Lord"
+              exception_crossbows:
+                rule_ref: "4.4.2 PROTECTION"
+                text: "For Crossbow Hits, the STRIKING side selects which units take Hits."
+              hit_by_hit: true
+              one_unit_can_absorb_multiple: true   # if it keeps making Protection rolls
+ 
+            - id: protection_roll
+              rule_ref: "4.4.2"
+              roll_per_hit: 1
+              outcomes_by_protection_type:
+                armor:
+                  cancels_if: "roll within Armor range (Forces table)"
+                  applies_to: "Battle and Storm Missiles and Melee"
+                evade:
+                  cancels_if: "roll within Evade range AND Hit is Battle Melee"
+                  excluded_from: ["missile_hits", "any_storm_hits"]
+                unarmored:
+                  cancels_if: "roll == 1"
+                  excludes: "serfs (Serfs have no Protection — auto remove on Hit)"
+                walls:
+                  cancels_if: "roll within Walls range"
+                  applies_to_strongholds_only: true
+              on_failure: "unit Routs"
+ 
+            - id: rout
+              rule_ref: "4.4.2"
+              effect:
+                - "Slide Routed unit to Routed section of Lord's mat"
+                - "Routed units cannot Strike or absorb further Hits this Battle/Storm"
+                - "When Lord's last Unrouted unit Routs, Lord Routs — remove from Array"
+              new_flanking_situation_possible: true
+ 
+      new_round_check:
+        rule_ref: "4.4.2"
+        end_battle_when:
+          any_of:
+            - "all Lords on one side Routed"
+            - "a side Conceded the Field this Round"
+        else: "Begin new Round at concede_check"
+ 
+    # -------------------------------------------------------------------------
+    - id: ending_battle
+      rule_refs: ["4.4.3", "4.4.4", "4.4.5"]
+ 
+      retreat_withdraw_remove:
+        rule_ref: "4.4.3"
+        applies_to: "all losing-side Lords"
+        choice_per_lord:
+          - id: retreat
+            requires: "single adjacent Locale with no Enemy Lord and no Enemy Stronghold (unless Besieged or Bypassed)"
+            constraints:
+              defenders: "may not Retreat along the Way the Attackers used to Approach"
+              marching_attackers: "must Retreat to the Locale they Approached from"
+              sallying_attackers_must_withdraw: true   # cannot Retreat
+          - id: withdraw
+            requires: "Friendly Stronghold present at Battle Locale"
+            preserves_assets: true
+          - id: permanent_removal
+            when: "Retreat and Withdraw both unavailable"
+            rule_ref: "3.3.1"
+ 
+      losses:
+        rule_ref: "4.4.4"
+        applies_to: "Routed units of all sides"
+        per_unit_roll: 1
+        outcomes:
+          - condition: "unit belongs to Lord who Retreated without Conceding (or Attacker in Storm)"
+            roll_target: "must roll 1 to survive"
+            on_failure: "remove unit to pool"
+          - condition: "all other Lords"
+            roll_target: "roll within unmodified Protection range (Armor / Evade / Unarmored)"
+            on_failure: "remove unit to pool"
+            note: "African Horse always uses Evade range here."
+        recovery_for_survivors: "Push unit above Routed line; no longer Routed (Service markers stay put)"
+        lord_removal:
+          condition: "Lord has all units Removed"
+          effect: "permanently_remove_lord (per 3.3.1)"
+ 
+      spoils:
+        rule_ref: "4.4.3"
+        winner_takes_from_loser: true
+        distribution: "winning player distributes among winning Lords at Locale"
+        rules:
+          - lord_state: "permanently removed"
+            transfers: "all Assets"
+          - lord_state: "Retreated without having Conceded"
+            transfers: "all Assets"
+          - lord_state: "Conceded then Retreated"
+            transfers: >
+              all Loot AND any Provender beyond what could be taken along Retreat
+              Way without becoming Laden (4.3.2)
+            keeps: "non-Loot, non-excess-Provender Assets"
+          - lord_state: "Withdrew"
+            transfers: "nothing"
+            keeps: "all Assets"
+            note_player_aid: "OMITTED from player aid Spoils text."
+ 
+      service:
+        rule_ref: "4.4.3"
+        applies_to: "each Retreating Lord (NOT Withdrawing Lords)"
+        roll: 1d6
+        shift_left:
+          "1-2": 1
+          "3-4": 2
+          "5-6": 3
+        vassal_markers_shift_too: "ONLY if using advanced Vassal Service rule (3.4.2)"
+        note_player_aid: "Player aid says '[and his Vassals'\\']' without noting it's conditional on advanced rule."
+ 
+      aftermath:
+        rule_ref: "4.4.5"
+        ordered_actions:
+          - "Mark all participating Lords Moved/Fought (if not already)"
+          - "Discard all 'Hold' Events used in this Battle/Storm"
+          - "If combat created or ended a Siege: place/remove Siege, Conquered, Jihad markers; adjust VP (1.4, 4.3.4-.5, 4.5.2, 5.1)"
+          - "If Sally Raid: reduce Siege to 1 marker (4.5.3)"
+        recovery:
+          rule_ref: "4.4.5"
+          effect: "Skip any remaining actions on this Command card; go to Feed/Pay/Disband (4.8)"
+          blocking: "Battle or Storm blocks any further Command actions on the current card"
+ 
+# =============================================================================
+# STORM PROCEDURE (4.5.2) — diffs from Battle Procedure
+# =============================================================================
+ 
+storm_procedure:
+  rule_ref: "4.5.2"
+  base: battle_procedure        # follow Battle except where overridden below
+ 
+  triggered_when: "Active Lord outside Besieged Stronghold uses 1 Command action"
+ 
+  array_overrides:
+    rule_ref: "4.5.2"
+    front_max_lords_attacker: 1   # Active Lord only
+    front_max_lords_either_side: stronghold_capacity   # ❶, ❷, or ❸
+    defender_garrison_placement: "place Garrison units (per Strongholds table)"
+    attacker_siegeworks_placement: "place Siegeworks as Walls (in front of Attacking Lord(s))"
+ 
+  concede_check_overrides:
+    rule_ref: "4.5.2"
+    eligible_actor: attacker_only
+    timing: "start of each Round AFTER the first"
+    note_player_aid: "Player aid does not emphasize that ONLY Attacker may Concede in Storm."
+ 
+  reposition_overrides:
+    rule_ref: "4.5.2"
+    when: "each Round AFTER the first"
+    actor_order: [attacker, defender]
+    optional_advance:
+      effect: "Each side may add 1 Reserve Lord to Front, up to Stronghold Capacity"
+    mandatory_advance:
+      condition: "all Front Lords on a side Routed"
+      effect: "A Reserve Lord (if any present) MUST move to Front"
+      note_player_aid: "OMITTED from player aid Reposition text."
+ 
+  strike_overrides:
+    rule_ref: "4.5.2"
+    melee_substeps_replace_battle:
+      - step: "2.a"
+        actor: defender
+        unit_class: all_stronghold_defenders   # all Garrison + Defending Lord units together
+        label: "All Stronghold Defenders"
+      - step: "2.b"
+        actor: attacker
+        unit_class: all
+        label: "All Attackers"
+ 
+    storm_modifiers:
+      - "Javelins and Slingers Strike x½ (not x1)"
+      - "Each Lord max 6 Melee Hits per Round (Missiles unlimited)"
+      - "Attacking side absorbs Hits with Armored units BEFORE other units"
+      - "Defender's Garrison absorbs Hits BEFORE any Defending Lord units"
+      - "Evade Protection does NOT apply during Storm"
+ 
+  garrison_during_storm:
+    rule_ref: "4.5.2"
+    composition_per_stronghold: "see Strongholds table (excluded from this file)"
+    men_at_arms_missiles: "Crossbowmen with -1 to Enemy Armor and selection of target"
+    militia_missiles: "regular Bowmen"
+    independence_from_lord: "Garrison adds Strikes to Defending Lord (round up); not affected by cards on Lord"
+    routed_garrison: "return to pool"
+    end_of_storm: "all Garrison units return to pool"
+    refresh: "Full Garrison defends in each Storm action regardless of prior actions"
+ 
+  new_round_check_overrides:
+    rule_ref: "4.5.2"
+    end_storm_when:
+      any_of:
+        - "all Attackers Routed"
+        - "all Defenders Routed"
+        - "Rounds completed >= Siege markers there (Attacker loses)"
+        - "Attacker Concedes (Attacker loses)"
+ 
+  ending_storm_overrides:
+ 
+    on_attacker_loss:
+      effect:
+        - "Attackers neither Retreat nor surrender Spoils"
+        - "Locale remains Besieged; return Siege markers to map"
+        - "Mark all Storm Lords (incl. Reserves) Moved/Fought"
+        - "Proceed to aftermath"
+ 
+    on_defender_loss_sack:
+      rule_ref: "4.5.2"
+      label: SACK
+      ordered_effects:
+        - "Permanently remove all losing (Defending) Lords (per 3.3.1)"
+        - "Award Spoils from removed Lords (all their Assets, 4.4.3)"
+        - "Besiegers Conquer the Stronghold per Surrender (4.5.1)"
+        - "Award Stronghold Spoils: Coin/Loot/Prov per Strongholds table"
+        - "Adjust Conquered/Jihad/Ravaged/VP (1.3.1, 1.4.4, 4.5.1)"
+        - "Aftermath (4.4.5)"
+ 
+    losses_overrides:
+      attacker_routed_units:
+        roll_target: "must roll 1 to survive"
+      defender_routed_units:
+        roll_target: "roll against unmodified Protection (Armor/Evade/Unarmored)"
+ 
+# =============================================================================
+# SALLY PROCEDURE (4.5.3) — Battle variant initiated by Besieged Lord
+# =============================================================================
+ 
+sally_procedure:
+  rule_ref: "4.5.3"
+  base: battle_procedure
+  triggered_when: "Besieged Lord uses 1 Command action to Attack Besiegers"
+ 
+  attacker_role: "all Besieged Lords there (Sallying Attackers)"
+  defender_role: "Besieging Lords (now Defenders)"
+ 
+  combat_modifiers:
+    rule_ref: "4.5.3"
+    sallying_attackers:
+      walls: none
+      garrison: none
+      note_player_aid: "OMITTED from player aid Sally row."
+    defenders_get_siegeworks: true
+    note_player_aid: "OMITTED from player aid Sally row."
+ 
+  outcomes:
+    on_defender_loss:
+      effect: "Losing Defenders Retreat normally; Siege ENDS"
+    on_attacker_loss:
+      label: RAID
+      effect:
+        - "Sallying Attackers Withdraw back into Stronghold (must, not Retreat)"
+        - "Reduce Siege markers at the Locale to 1 (Siege continues)"
+ 
+# =============================================================================
+# SIEGE SURRENDER (4.5.1) — non-combat resolution included for completeness
+# =============================================================================
+ 
+siege_surrender_procedure:
+  rule_ref: "4.5.1"
+  errata_ref: "p.20 — 2nd bullet replaced"
+  triggered_by: "Besieging Lord Siege action"
+  preconditions:
+    - "no Besieged Lords inside the Stronghold"
+  procedure:
+    - "Roll dice = Stronghold VP value (1, 2, or 3)"
+    - "Each die must be <= (siege_markers + besieging_side_ravaged_markers)"
+  on_all_dice_pass:
+    ordered_effects:
+      - "Remove all Siege markers there"
+      - "Place or remove Conquered, Jihad, and/or Seat marker(s) per Stronghold type and Territory (1.3.1, 1.4.3)"
+      - "If Conquering side has Ravaged marker there: flip it (4.7.2)"
+      - "Adjust Taifa status (1.4) ONLY AFTER placing/removing victory markers"
+    no_spoils: true
+  on_failure_or_decline_to_roll:
+    next_step: siegeworks_check
+  siegeworks_check:
+    requires:
+      - "besieging_lords_count >= stronghold_capacity (❶/❷/❸)"
+    effect: "Add 1 Siege marker (max 4)"
+  finalize:
+    moved_fought: "mark all Lords of both sides as Fought"
+ 
