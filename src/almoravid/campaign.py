@@ -690,6 +690,184 @@ def _h_cmd_tax(state, action):
     return {"coin_after": new_coin, "actions_consumed": consumed}
 
 
+
+# ---------------------------------------------------------------------------
+# 4.7.1 Forage (Phase 5c)
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_forage(state, action):
+    """4.7.1 Forage: 1 action. Two eligibility paths:
+
+      (a) Locale Unravaged AND Lord Unbesieged: roll 1d6, 1-3 add
+          1 Provender, 4-6 nothing.
+      (b) Locale is Friendly City or Fortress (Gardens): auto-add
+          1 Provender. Besieged Lord may use Forage Gardens only when
+          inside his own Friendly Stronghold (4.7.1 Gardens exemption).
+
+    Pattern 12: Provender capped at 8 (rule 1.7.3).
+    """
+    from almoravid.effective import has_gardens, is_besieged, is_friendly_locale
+    from almoravid.rng import roll_d6
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale", code="not_on_map")
+    _require(state.meta.actions_remaining >= 1,
+             "Forage costs 1 action", code="not_enough_actions")
+
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    gardens_path = (has_gardens(state, here)
+                    and is_friendly_locale(state, here, side))
+    besieged = is_besieged(state, lord_id)
+    if besieged:
+        # Besieged Lord may Forage only via the Gardens path.
+        _require(gardens_path,
+                 "Besieged Lord may Forage only at Friendly City/Fortress "
+                 "Gardens (4.7.1)",
+                 code="besieged_no_gardens")
+    elif gardens_path:
+        pass  # Friendly Stronghold: auto path
+    else:
+        # Open Forage requires Unravaged
+        _require(loc.ravaged == "none",
+                 f"Cannot Forage Ravaged Locale {here}",
+                 code="ravaged")
+
+    if gardens_path:
+        new_prov = min(8, lord.assets.get("prov", 0) + 1)
+        lord.assets["prov"] = new_prov
+        _record(state, action,
+                f"{side} {lord_id} Forages Gardens at {here} (+1 Prov -> "
+                f"{new_prov})")
+        state.meta.actions_remaining -= 1
+        return {"path": "gardens", "prov_after": new_prov, "roll": None,
+                "actions_remaining": state.meta.actions_remaining}
+
+    # Open Forage: 1d6 roll.
+    roll = roll_d6(state)
+    if roll <= 3:
+        new_prov = min(8, lord.assets.get("prov", 0) + 1)
+        lord.assets["prov"] = new_prov
+        result = "success"
+    else:
+        new_prov = lord.assets.get("prov", 0)
+        result = "fail"
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{side} {lord_id} Forages at {here} (roll={roll} -> {result}, "
+            f"prov={new_prov})")
+    return {"path": "open", "roll": roll, "result": result,
+            "prov_after": new_prov,
+            "actions_remaining": state.meta.actions_remaining}
+
+
+# ---------------------------------------------------------------------------
+# 4.7.2 Ravage (Phase 5c)
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_ravage(state, action):
+    """4.7.2 Ravage: 1 action. Not Besieged. Enemy Locale not already
+    Ravaged by this side.
+
+    Effects:
+      - Place this side's Ravaged marker (yellow=Christian, green=Muslim).
+      - VP adjust: 1/2 VP per Ravaged marker (5.1).
+      - Rustling: at Stronghold +1 Loot AND +1 Prov; at Region +1 Loot.
+      - Enforcing Parias: if this is the 1st, 3rd, 5th... CHRISTIAN
+        (yellow) Ravaged marker in the Taifa, shift that Taifa Lord's
+        (not Yusuf/Sir/Rodrigo) Service 1 box left. Phase 5c stub: log
+        the trigger; actual Service shift lands with Calendar mutators.
+    """
+    from almoravid.effective import is_besieged, is_friendly_locale
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord cannot Ravage (4.7.2)", code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale", code="not_on_map")
+    _require(state.meta.actions_remaining >= 1,
+             "Ravage costs 1 action", code="not_enough_actions")
+
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    # Enemy Locale: not Friendly to active side (rule 4.7.2 "locale_is_enemy")
+    _require(not is_friendly_locale(state, here, side),
+             f"Cannot Ravage Friendly Locale {here}", code="friendly_locale")
+    # Already Ravaged by this side check.
+    color = "yellow" if side == "christian" else "green"
+    _require(loc.ravaged != color,
+             f"{here} already Ravaged by {side} (color {color})",
+             code="already_ravaged_by_us")
+
+    # Place Ravaged marker; rule 4.7.2: each side has at most one
+    # Ravaged marker per Locale. The other side's marker is overwritten
+    # only per Adjust-Status (1.4.3); for now if the locale has the
+    # opposite-color marker, the rule says we still place ours (the
+    # Locale ends up with one of each — represented here by overwriting
+    # with our color since the model only stores one). Q-001 candidate.
+    loc.ravaged = color  # type: ignore[assignment]
+
+    # Rustling: assets to the Ravaging Lord.
+    if loc.base_type == "region":
+        new_loot = min(8, lord.assets.get("loot", 0) + 1)
+        lord.assets["loot"] = new_loot
+        rustling_note = f"+1 Loot -> {new_loot} (Region)"
+    else:
+        new_loot = min(8, lord.assets.get("loot", 0) + 1)
+        new_prov = min(8, lord.assets.get("prov", 0) + 1)
+        lord.assets["loot"] = new_loot
+        lord.assets["prov"] = new_prov
+        rustling_note = f"+1 Loot -> {new_loot}, +1 Prov -> {new_prov} (Stronghold)"
+
+    # VP: 1/2 per Ravaged marker (5.1)
+    if side == "christian":
+        state.score.christian += 0.5
+    else:
+        state.score.muslim += 0.5
+
+    # Enforcing Parias trigger check: count Christian Ravage markers in
+    # this Taifa AFTER placing the new one. If the count is odd, the
+    # Service-shift hook fires.
+    enforcing_parias = False
+    if side == "christian" and loc.territory in state.taifas:
+        taifa_ravage_count = sum(
+            1 for lid in state.taifas[loc.territory].locale_ids
+            if state.locales[lid].ravaged == "yellow"
+        )
+        if taifa_ravage_count % 2 == 1:
+            enforcing_parias = True
+            # Phase 5c: log only. Service-shift implementation needs the
+            # Calendar mutators (shift_service_left, off-edge handling
+            # per Pattern 6 / SMOKE-062). Q-NNN candidate.
+
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{side} {lord_id} Ravages {here}: {rustling_note}, "
+            f"+0.5 VP{', Enforcing Parias triggered (Service shift TODO)' if enforcing_parias else ''}")
+    return {"locale": here, "color": color, "rustling": rustling_note,
+            "enforcing_parias": enforcing_parias,
+            "actions_remaining": state.meta.actions_remaining}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -700,5 +878,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_march": _h_cmd_march,
     "cmd_supply": _h_cmd_supply,
     "cmd_tax": _h_cmd_tax,
+    "cmd_forage": _h_cmd_forage,
+    "cmd_ravage": _h_cmd_ravage,
     "end_campaign": _h_end_campaign,
 }

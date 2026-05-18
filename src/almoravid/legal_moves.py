@@ -250,6 +250,38 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cmd_tax", "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
+
+                # Forage (4.7.1) and Ravage (4.7.2). CROSS_PROJECT
+                # _LESSONS §1: try/except wrap.
+                try:
+                    from almoravid.effective import (
+                        has_gardens, is_besieged as _ib, is_friendly_locale,
+                    )
+                    if (lord.cylinder.kind == "locale"
+                            and state.meta.actions_remaining >= 1):
+                        here = lord.cylinder.locale_id
+                        loc = state.locales[here]
+                        besieged = _ib(state, lord_id)
+                        gardens_path = (has_gardens(state, here)
+                                        and is_friendly_locale(state, here,
+                                                               active))
+                        # Forage: gardens path always available if
+                        # eligible; open-forage available if not Besieged
+                        # and Locale Unravaged.
+                        if (gardens_path
+                                or (not besieged and loc.ravaged == "none")):
+                            out.append({"type": "cmd_forage", "side": active})
+                        # Ravage: not Besieged, Enemy Locale, not already
+                        # Ravaged by us. Pattern 9 mirror against handler.
+                        if not besieged:
+                            color = ("yellow" if active == "christian"
+                                     else "green")
+                            if (not is_friendly_locale(state, here, active)
+                                    and loc.ravaged != color):
+                                out.append({"type": "cmd_ravage",
+                                            "side": active})
+                except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                    pass
             out.append({"type": "end_card", "side": active})
         return out
 
