@@ -225,6 +225,8 @@ def _resolve_protection_roll(
     state: GameState,
     target_side: BattleSide,
     striker_kind: StrikeKind,
+    *,
+    context: Literal["battle", "storm"] = "battle",
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -232,6 +234,14 @@ def _resolve_protection_roll(
     ASSIGN HITS); for now we pick the first available unrouted unit
     deterministically (highest-Protection first to maximize cancel
     chance — a reasonable greedy default).
+
+    Pattern 9 audit fix (Bug H): Evade Protection (rule 4.4.2 + Forces
+    table 'Evade range') is applied for units with an evade row in their
+    Protection spec, ONLY when the striker_kind is 'melee' AND
+    context == 'battle'. Evade does NOT apply to Missile Hits or to
+    any Storm Hits. Affected units: African Horse (Evade 1-2 vs Battle
+    Melee per Quick Ref Table 1) and Light Horse with M10 Andalusians
+    (Evade 1-3 vs Battle Melee).
     """
     forces_data = load_forces()
 
@@ -283,9 +293,19 @@ def _resolve_protection_roll(
     elif ptype == "unarmored":
         if rng == 1:
             canceled = True
-    # Evade applies only in Battle Melee — not modeled here for simplicity;
-    # would need to know whether this is a Battle Melee Hit. Phase 5e
-    # uses the base Armor / Unarmored / auto_remove split as a baseline.
+        # Bug H (Pattern 9 audit) — Evade Protection: unit's spec may
+        # include an 'evade' clause with its own range that supplements
+        # Unarmored, but ONLY for Battle Melee Hits (not Missiles, not
+        # Storm). African Horse: Evade 1-2; Light Horse + M10
+        # Andalusians: Evade 1-3 (M10 not yet wired). Apply when
+        # context='battle' and striker_kind=='melee'.
+        if (not canceled
+                and context == "battle"
+                and striker_kind == "melee"
+                and "evade" in unit["protection"]):
+            elo, ehi = unit["protection"]["evade"]["range"]
+            if elo <= rng <= ehi:
+                canceled = True
     if canceled:
         return (True, None)
     # Failed Protection -> Rout
@@ -354,7 +374,8 @@ def _resolve_step(
     for _ in range(hits_to_apply):
         if not target.has_unrouted():
             break
-        _, routed = _resolve_protection_roll(state, target, striker_kind)
+        _, routed = _resolve_protection_roll(state, target, striker_kind,
+                                                context=context)
         if routed is not None:
             result.losses[routed] = result.losses.get(routed, 0) + 1
     return result
