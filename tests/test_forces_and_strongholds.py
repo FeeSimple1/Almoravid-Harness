@@ -126,8 +126,8 @@ def test_build_strike_rows_for_alfonso() -> None:
                for r in rows)
 
 
-def test_resolve_battle_skeleton() -> None:
-    """Skeleton returns a BattleResult with the two sides preserved."""
+def test_resolve_battle_runs() -> None:
+    """Phase 5e: resolve_battle runs rounds and selects a winner."""
     state = load_scenario("scenario_a_toledo_beset")
     alfonso = state.lords["alfonso"]
     al_mutamid = state.lords["al_mutamid"]
@@ -139,5 +139,5 @@ def test_resolve_battle_skeleton() -> None:
     assert result.engagement == "battle"
     assert result.attacker.side == "christian"
     assert result.defender.side == "muslim"
-    # Phase 3b skeleton: no rounds resolved yet
-    assert result.rounds == []
+    # At least one round resolved; either a winner emerges or capped out.
+    assert len(result.rounds) >= 1

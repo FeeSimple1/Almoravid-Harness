@@ -291,6 +291,24 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 if cur < 4:
                                     out.append({"type": "cmd_siege",
                                                 "side": active})
+                            # Battle: single-Lord against single enemy
+                            # Lord at this Locale (Phase 5e baseline).
+                            our_here = [
+                                l.id for l in state.lords.values()
+                                if l.side == active
+                                and l.cylinder.kind == "locale"
+                                and l.cylinder.locale_id == here
+                            ]
+                            enemy_here = [
+                                l.id for l in state.lords.values()
+                                if l.side != active
+                                and l.cylinder.kind == "locale"
+                                and l.cylinder.locale_id == here
+                                and not _ib(state, l.id)
+                            ]
+                            if len(our_here) == 1 and len(enemy_here) == 1:
+                                out.append({"type": "cmd_battle",
+                                            "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
             out.append({"type": "end_card", "side": active})

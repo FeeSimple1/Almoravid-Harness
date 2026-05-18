@@ -953,6 +953,100 @@ def _h_cmd_siege(state, action):
             "siegeworks": siegeworks, "actions_consumed": consumed}
 
 
+
+# ---------------------------------------------------------------------------
+# 4.4 Battle (Phase 5e — single-Lord baseline; multi-Lord arrays land
+# with Reserve/Flanking handling in Phase 5e+).
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_battle(state, action):
+    """4.4 Battle: end-of-card action.
+
+    Active Lord at a Locale containing exactly one Enemy Lord triggers
+    a Battle. Both Lords participate; Battle resolution is deterministic
+    per seed.
+
+    Phase 5e: only single-Lord-each-side Battles supported. If multiple
+    Lords are on either side at the Locale, raises IllegalAction with
+    code='multi_lord_battle' (Phase 5e+ work).
+    """
+    from almoravid.battle import (
+        apply_aftermath,
+        battleside_for_lord,
+        commit_forces_after_battle,
+        resolve_battle,
+    )
+    from almoravid.effective import is_besieged
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord cannot Battle; must Sally instead (4.5.3)",
+             code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale", code="not_on_map")
+    here = lord.cylinder.locale_id
+
+    # Find enemy Lord(s) at this Locale
+    other = "muslim" if side == "christian" else "christian"
+    enemy_lord_ids = [
+        l.id for l in state.lords.values()
+        if l.side == other
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here
+        and not is_besieged(state, l.id)  # 4.4 doesn't engage besieged Lords here
+    ]
+    _require(enemy_lord_ids, f"No Enemy Lord at {here} to Battle",
+             code="no_enemy")
+    _require(len(enemy_lord_ids) == 1,
+             f"Phase 5e supports only single-Lord battles "
+             f"(found {len(enemy_lord_ids)} enemy Lords at {here})",
+             code="multi_lord_battle")
+    # Also restrict our side to one Lord (Phase 5e baseline)
+    our_at_here = [
+        l.id for l in state.lords.values()
+        if l.side == side
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here
+    ]
+    _require(len(our_at_here) == 1,
+             f"Phase 5e supports only single-Lord battles "
+             f"(found {len(our_at_here)} {side} Lords at {here})",
+             code="multi_lord_battle")
+
+    enemy_id = enemy_lord_ids[0]
+    atk = battleside_for_lord(state, lord_id, "attacker")
+    dfd = battleside_for_lord(state, enemy_id, "defender")
+    result = resolve_battle(state, atk, dfd)
+    commit_forces_after_battle(state, atk)
+    commit_forces_after_battle(state, dfd)
+    apply_aftermath(state, result)
+
+    # Battle ends the card (rule 4.4.5).
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+
+    _record(state, action,
+            f"{side} {lord_id} Battles {enemy_id} at {here}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}; "
+            f"card spent ({consumed} actions)")
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+    }
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -966,5 +1060,6 @@ CAMPAIGN_HANDLERS = {
     "cmd_forage": _h_cmd_forage,
     "cmd_ravage": _h_cmd_ravage,
     "cmd_siege": _h_cmd_siege,
+    "cmd_battle": _h_cmd_battle,
     "end_campaign": _h_end_campaign,
 }
