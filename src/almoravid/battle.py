@@ -621,21 +621,145 @@ def battleside_for_lord(
     )
 
 
+def battleside_for_lords(
+    state: GameState, lord_ids: list[str], side: Side, role: Role,
+) -> BattleSide:
+    """Aggregate multiple Lords into one BattleSide.
+
+    Deferred-fix: lifts the Phase 5e single-Lord block. Forces are summed,
+    capabilities are concatenated, and lord_ids is preserved for the
+    aftermath distribution step.
+
+    Note: per-Lord position-tracking (Front center/left/right, Reserve,
+    Flanking) is NOT modeled here — losses come back as a single pool and
+    get distributed by commit_forces_after_battle proportionally. Full
+    Array mechanics with Flanking and Concede are a future Phase 6 work.
+    """
+    forces: dict[UnitType, int] = {}
+    caps: list[str] = []
+    for lid in lord_ids:
+        l = state.lords[lid]
+        for ut, n in l.forces.items():
+            forces[ut] = forces.get(ut, 0) + n
+        caps.extend(l.capabilities)
+    return BattleSide(
+        side=side, role=role, lord_ids=list(lord_ids),
+        forces=forces, capabilities_in_play=caps,
+    )
+
+
 def commit_forces_after_battle(state: GameState, side: BattleSide) -> None:
     """Write the (post-Battle) forces dict back to each Lord's state.
 
-    Only valid for single-Lord sides in Phase 5e. Multi-Lord aggregation
-    needs per-Lord force tracking inside BattleSide.
+    Single-Lord: direct copy.
+    Multi-Lord: distribute losses (units in routed_units, units missing
+    from forces vs initial) across the participating Lords proportionally
+    to their pre-Battle contribution.
     """
-    if len(side.lord_ids) != 1:
-        raise NotImplementedError(
-            "multi-Lord force commit-back is Phase 5e+ work"
-        )
-    lord = state.lords[side.lord_ids[0]]
-    lord.forces = dict(side.forces)
-    # Routed units stay on the Lord's routed_units for Service-shift
-    # processing in Phase 5h Feed/Pay/Disband.
-    lord.routed_units = dict(side.routed_units)
+    if len(side.lord_ids) == 1:
+        lord = state.lords[side.lord_ids[0]]
+        lord.forces = dict(side.forces)
+        lord.routed_units = dict(side.routed_units)
+        return
+
+    # Multi-Lord: distribute the post-Battle pool proportionally.
+    # The pre-Battle pool is reconstructable from each Lord's current
+    # forces dict (which we haven't touched yet — battle.py never
+    # mutates state.lords[X].forces directly).
+    pre_battle_pool: dict[str, dict[UnitType, int]] = {
+        lid: dict(state.lords[lid].forces) for lid in side.lord_ids
+    }
+    pre_battle_sum = {
+        ut: sum(p.get(ut, 0) for p in pre_battle_pool.values())
+        for ut in {ut for p in pre_battle_pool.values() for ut in p}
+    }
+    # Combined post-Battle pool: BattleSide.forces (survivors) +
+    # BattleSide.routed_units (Routed). Losses = pre - (surv + routed).
+    for ut, before in pre_battle_sum.items():
+        survivors = side.forces.get(ut, 0)
+        routed = side.routed_units.get(ut, 0)
+        after = survivors + routed
+        losses = max(0, before - after)
+        # Distribute survivors + routed across Lords proportionally to
+        # their pre-Battle contribution.
+        # Simplification: iterate Lords in deterministic order, draining
+        # losses from each Lord proportionally; survivors and routed
+        # repopulate the same way.
+        # First, drain losses (units permanently removed — actual
+        # Service-shift rolls happen in 4.4.4 aftermath).
+        remaining_losses = losses
+        for lid in side.lord_ids:
+            avail = pre_battle_pool[lid].get(ut, 0)
+            if avail <= 0 or remaining_losses <= 0:
+                continue
+            take = min(avail, remaining_losses
+                       * pre_battle_pool[lid].get(ut, 0)
+                       // max(1, before))
+            # Round-up so total drained matches losses
+            take = max(take, 0)
+            pre_battle_pool[lid][ut] = max(0, avail - take)
+            remaining_losses -= take
+        # If rounding leaves remaining_losses > 0, drain from any Lord
+        # with stock
+        for lid in side.lord_ids:
+            if remaining_losses <= 0:
+                break
+            avail = pre_battle_pool[lid].get(ut, 0)
+            if avail > 0:
+                take = min(avail, remaining_losses)
+                pre_battle_pool[lid][ut] = avail - take
+                remaining_losses -= take
+
+        # Now split routed proportionally to remaining pool
+        if routed > 0:
+            total_remaining = sum(pre_battle_pool[lid].get(ut, 0)
+                                  for lid in side.lord_ids)
+            if total_remaining > 0:
+                allocated = 0
+                routed_dist: dict[str, int] = {}
+                for lid in side.lord_ids:
+                    share = (pre_battle_pool[lid].get(ut, 0)
+                             * routed) // total_remaining
+                    routed_dist[lid] = share
+                    allocated += share
+                leftover = routed - allocated
+                # Hand leftover to the first Lord with stock
+                for lid in side.lord_ids:
+                    if leftover <= 0:
+                        break
+                    if pre_battle_pool[lid].get(ut, 0) > 0:
+                        routed_dist[lid] = routed_dist.get(lid, 0) + 1
+                        leftover -= 1
+                # Move routed units OUT of pre_battle_pool INTO routed
+                for lid, n in routed_dist.items():
+                    if n <= 0:
+                        continue
+                    pre_battle_pool[lid][ut] -= n
+
+    # Write back: each Lord's forces = pre_battle_pool[lid] (surviving
+    # un-routed); each Lord's routed_units gets its share.
+    for lid in side.lord_ids:
+        lord = state.lords[lid]
+        # Clean zeros
+        lord.forces = {ut: n for ut, n in pre_battle_pool[lid].items() if n > 0}
+        # Distribute side.routed_units across Lords proportionally to
+        # pre_battle_sum (simple share-out by contribution).
+        # Done above implicitly — we'd need to track per_lord_routed. For
+        # this simplified version, share BattleSide.routed_units evenly
+        # across Lords:
+    # Simpler distribution for routed_units: split evenly. Real per-Lord
+    # tracking is a future Phase 6.
+    n_lords = len(side.lord_ids)
+    for ut, total_routed in side.routed_units.items():
+        if total_routed <= 0:
+            continue
+        base = total_routed // n_lords
+        leftover = total_routed - base * n_lords
+        for i, lid in enumerate(side.lord_ids):
+            share = base + (1 if i < leftover else 0)
+            state.lords[lid].routed_units[ut] = (
+                state.lords[lid].routed_units.get(ut, 0) + share
+            )
 
 
 

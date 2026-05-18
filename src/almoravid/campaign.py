@@ -1685,6 +1685,7 @@ def _h_cmd_battle(state, action):
     from almoravid.battle import (
         apply_aftermath,
         battleside_for_lord,
+        battleside_for_lords,
         commit_forces_after_battle,
         resolve_battle,
     )
@@ -1717,25 +1718,22 @@ def _h_cmd_battle(state, action):
     ]
     _require(enemy_lord_ids, f"No Enemy Lord at {here} to Battle",
              code="no_enemy")
-    _require(len(enemy_lord_ids) == 1,
-             f"Phase 5e supports only single-Lord battles "
-             f"(found {len(enemy_lord_ids)} enemy Lords at {here})",
-             code="multi_lord_battle")
-    # Also restrict our side to one Lord (Phase 5e baseline)
+    # Deferred fix: multi-Lord aggregation. All Lords of each side at the
+    # Locale (not inside a Stronghold and not Besieged) participate per
+    # rule 4.3.4 'ALL Lords at the Locale not inside a Stronghold must
+    # participate'. Forces, capabilities pooled; aftermath distributes
+    # losses back proportionally. Full Array (Front/Reserve/Flanking)
+    # is a Phase 6 refinement.
     our_at_here = [
         l.id for l in state.lords.values()
         if l.side == side
         and l.cylinder.kind == "locale"
         and l.cylinder.locale_id == here
+        and not l.in_stronghold
     ]
-    _require(len(our_at_here) == 1,
-             f"Phase 5e supports only single-Lord battles "
-             f"(found {len(our_at_here)} {side} Lords at {here})",
-             code="multi_lord_battle")
-
-    enemy_id = enemy_lord_ids[0]
-    atk = battleside_for_lord(state, lord_id, "attacker")
-    dfd = battleside_for_lord(state, enemy_id, "defender")
+    other = "muslim" if side == "christian" else "christian"
+    atk = battleside_for_lords(state, our_at_here, side, "attacker")
+    dfd = battleside_for_lords(state, enemy_lord_ids, other, "defender")
     result = resolve_battle(state, atk, dfd)
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
@@ -1746,7 +1744,7 @@ def _h_cmd_battle(state, action):
     state.meta.actions_remaining = 0
 
     _record(state, action,
-            f"{side} {lord_id} Battles {enemy_id} at {here}: "
+            f"{side} {our_at_here} Battles {enemy_lord_ids} at {here}: "
             f"winner={result.winner}, rounds={len(result.rounds)}; "
             f"card spent ({consumed} actions)")
     return {

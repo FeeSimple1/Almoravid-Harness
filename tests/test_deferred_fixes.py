@@ -185,3 +185,44 @@ def test_supply_route_blocked_by_enemy_returns_none() -> None:
     # blocked.
     # (Structural assertion: function ran without exception.)
     assert "leon" in routes
+
+
+# ---- Multi-Lord Battle ------------------------------------------------
+
+def test_multi_lord_battle_aggregates_forces() -> None:
+    """Deferred fix: multi-Lord Battle aggregates forces and distributes
+    losses back to participating Lords after resolution."""
+    from almoravid.battle import battleside_for_lords, commit_forces_after_battle
+    s = load_scenario("scenario_a_toledo_beset")
+    # Place 3 Christian Lords at Sahagun (already there: alfonso, pedro,
+    # garcia per scenario setup).
+    christian_at_sahagun = [
+        l.id for l in s.lords.values()
+        if l.side == "christian"
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == "sahagun"
+    ]
+    assert len(christian_at_sahagun) >= 2
+    initial_total = sum(
+        sum(s.lords[lid].forces.values())
+        for lid in christian_at_sahagun
+    )
+    side = battleside_for_lords(s, christian_at_sahagun, "christian", "attacker")
+    # Aggregated forces equal the sum
+    assert sum(side.forces.values()) == initial_total
+    # Simulate losses: drop 2 units of the most common type
+    by_type = {ut: sum(s.lords[lid].forces.get(ut, 0)
+                       for lid in christian_at_sahagun)
+               for ut in side.forces}
+    most_common = max(by_type.items(), key=lambda kv: kv[1])[0]
+    side.forces[most_common] -= 2
+    side.routed_units[most_common] = 2
+    # Commit back
+    commit_forces_after_battle(s, side)
+    # Total units across the Lords now = initial_total (routed + surviving)
+    final_total = sum(
+        sum(s.lords[lid].forces.values())
+        + sum(s.lords[lid].routed_units.values())
+        for lid in christian_at_sahagun
+    )
+    assert final_total == initial_total

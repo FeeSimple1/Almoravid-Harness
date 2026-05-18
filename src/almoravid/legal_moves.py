@@ -321,7 +321,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 and l.cylinder.locale_id == here
                                 and not _ib(state, l.id)
                             ]
-                            if len(our_here) == 1 and len(enemy_here) == 1:
+                            # Deferred fix: multi-Lord battles now
+                            # allowed via aggregated BattleSide.
+                            if our_here and enemy_here:
                                 out.append({"type": "cmd_battle",
                                             "side": active})
                             # Storm: at enemy Stronghold with our Siege.

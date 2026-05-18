@@ -200,14 +200,18 @@ def test_cmd_battle_requires_enemy_lord_present() -> None:
     assert ei.value.code == "no_enemy"
 
 
-def test_cmd_battle_rejects_multi_lord() -> None:
-    s = _activate_lord("scenario_a_toledo_beset", "alfonso")
-    # Put two Muslim Lords here
+def test_cmd_battle_accepts_multi_lord_after_deferred_fix() -> None:
+    """Deferred fix: multi-Lord Battle is now supported via aggregation."""
+    s = _activate_lord("scenario_a_toledo_beset", "alfonso", seed=11)
+    # Two Muslim Lords at Sahagun
     s.lords["al_mutamid"].cylinder = Cylinder(kind="locale", locale_id="sahagun")
     s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="sahagun")
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_battle", "side": "christian"})
-    assert ei.value.code == "multi_lord_battle"
+    # Move other Christian Lords away to leave alfonso alone on his side
+    s.lords["pedro_ansurez"].cylinder = Cylinder(kind="locale", locale_id="leon")
+    s.lords["garcia_ordonez"].cylinder = Cylinder(kind="locale", locale_id="burgos")
+    r = apply_action(s, {"type": "cmd_battle", "side": "christian"})
+    assert r["winner"] in ("christian", "muslim", None)
+    assert s.meta.actions_remaining == 0
 
 
 def test_cmd_battle_resolves_and_ends_card() -> None:
