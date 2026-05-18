@@ -415,6 +415,223 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+
+
+
+# ---------------------------------------------------------------------------
+# 6.2 Curias check + 6.3 Winter Sequence (Phase 5k — Scenario F only)
+# ---------------------------------------------------------------------------
+
+
+def check_curias(state) -> dict:
+    """Rule 6.2: Curias check at start of Autumn (box 5) and again at
+    box 6 if not triggered in 5. Only applies in Scenario F.
+
+    Condition: Locales (NOT Taifas Box) have MORE total yellow (Christian)
+    Conquered + Ravaged markers than green (Muslim) Conquered + Ravaged +
+    Jihad markers.
+
+    Returns dict with {triggered: bool, yellow_count, green_count}.
+    """
+    yellow = 0
+    green = 0
+    for loc in state.locales.values():
+        # Conquered markers: store side via territory context.
+        # Phase 1 simplification: conquered_markers is a single counter;
+        # we attribute by territory's allegiance (Muslim Taifa -> Christian
+        # placed). Phase 5k will refine if needed.
+        if loc.territory in state.taifas:
+            # Muslim Taifa: yellow Conquered markers (Christian conquered)
+            yellow += loc.conquered_markers
+            green += loc.jihad_markers
+        elif loc.territory in ("leon", "aragon"):
+            # Christian Kingdom: green Conquered markers (Muslim conquered)
+            green += loc.conquered_markers
+        if loc.ravaged == "yellow":
+            yellow += 1
+        elif loc.ravaged == "green":
+            green += 1
+    return {"triggered": yellow > green,
+            "yellow_count": yellow, "green_count": green}
+
+
+def apply_curias(state, box: int) -> dict:
+    """Rule 6.2 trigger actions. Returns dict describing the cascade.
+
+    Place a Curias marker in the current box (and a 2nd in box 6 if firing
+    at box 5). Remove 1 yellow Conquered marker from the Taifas box per
+    Curias marker placed (adjust VP). Advance Levy marker to box 7.
+    Shift Service markers of Beyond-Service Lords (box <= current box)
+    forward to box 7. If Pedro Ansurez and/or Garcia Ordonez on map,
+    Disband them (3.3.2).
+    """
+    # Place Curias marker in current box (and a 2nd in box 6 if firing
+    # at box 5).
+    placed = []
+    state.calendar.boxes[box - 1].decorations.append("curias")
+    placed.append(box)
+    if box == 5:
+        state.calendar.boxes[5].decorations.append("curias")  # box 6 (index 5)
+        placed.append(6)
+
+    # Phase 5k baseline: deduct from Christian VP for each Curias marker
+    # placed (treating Taifas Box 1VP markers as already-counted yellow
+    # Conquered that get reversed by Curias). The actual Taifas Box marker
+    # model is small enough to add when Phase 5l Adjust Status lands.
+    state.score.christian = max(0, state.score.christian - len(placed))
+
+    # Advance Levy marker to box 7
+    state.calendar.current_box = 7
+
+    # Shift Beyond-Service Lords (Service marker at box <= prior current
+    # box) forward to box 7.
+    shifted = []
+    for sm in list(state.calendar.service_markers):
+        if sm.box <= box:
+            sm.box = 7
+            shifted.append(sm.lord_id)
+
+    # Disband Pedro Ansurez / Garcia Ordonez if on map
+    disbanded = []
+    from almoravid.state import Cylinder
+    for lid in ("pedro_ansurez", "garcia_ordonez"):
+        l = state.lords.get(lid)
+        if l is None or l.cylinder.kind != "locale":
+            continue
+        # Apply Phase 5g _h_disband_lord behavior inline
+        new_box = state.calendar.current_box + l.service_rating
+        if new_box > 16:
+            new_box = 17
+            state.calendar.off_right.append(lid)
+        l.cylinder = Cylinder(kind="calendar", box=new_box)
+        l.forces = {}
+        l.assets = {}
+        l.capabilities = []
+        l.vassals = []
+        l.in_stronghold = False
+        l.moved_fought = False
+        l.routed_units = {}
+        state.calendar.service_markers = [
+            s for s in state.calendar.service_markers if s.lord_id != lid
+        ]
+        disbanded.append(lid)
+
+    return {"curias_placed_in_boxes": placed,
+            "service_shifted_lords": shifted,
+            "auto_disbanded": disbanded}
+
+
+def winter_disband(state) -> dict:
+    """Rule 6.3.1 Winter Disband at box 7 (Scenario F only).
+
+    Mustered Lords (except those at Sieges) Disband to their mats:
+    clear mat fields, place cylinder on mat (not Calendar). Disbanding
+    Taifa Lords put all Coin from mats into the Taifas box. If
+    Disbanding either Rodrigo, cylinder goes to Calendar box 9 even
+    if Beyond Service. Discard all board-edge Capabilities.
+
+    Phase 5k baseline: applies the structural pieces (cylinder->mat,
+    clear forces/assets/caps, Rodrigo->box 9). Taifas-box coin
+    aggregation is a stub; full pool model lands with the Taifas Box
+    state expansion.
+    """
+    from almoravid.state import Cylinder
+    results = {"disbanded_to_mat": [], "rodrigo_to_box_9": [],
+               "lords_at_sieges_kept": [], "board_edge_discarded": []}
+
+    for lid, l in state.lords.items():
+        if l.cylinder.kind != "locale":
+            continue
+        loc = state.locales[l.cylinder.locale_id]
+        # Lord at an active Siege keeps for Winter Siege step
+        at_siege = (loc.siege_yellow > 0 or loc.siege_green > 0)
+        if at_siege:
+            results["lords_at_sieges_kept"].append(lid)
+            continue
+        if lid in ("rodrigo_campeador", "rodrigo_al_sayyid"):
+            l.cylinder = Cylinder(kind="calendar", box=9)
+            results["rodrigo_to_box_9"].append(lid)
+        else:
+            l.cylinder = Cylinder(kind="mat")
+            results["disbanded_to_mat"].append(lid)
+        # Clear cleanup_on_removal_fields except: cylinder already set,
+        # we DO keep capabilities on mat (3.4.1 - they re-Muster with the
+        # Lord). Actually per 6.3.1 we 'clear each mat' — so capabilities
+        # too go. But the cards aren't lost — board-edge holds them.
+        l.forces = {}
+        l.assets = {}
+        l.capabilities = []
+        l.in_stronghold = False
+        l.moved_fought = False
+        l.routed_units = {}
+
+    # Discard board-edge Capabilities
+    for side in ("christian", "muslim"):
+        edge = state.decks.board_edge.get(side, [])
+        if edge:
+            state.decks.discard.extend(edge)
+            results["board_edge_discarded"].extend(edge)
+        state.decks.board_edge[side] = []
+
+    # Clear Service markers (6.3.1 Disbands)
+    state.calendar.service_markers = []
+    return results
+
+
+def spring_muster(state) -> dict:
+    """Rule 6.3.3 Spring Muster at end of box 8 (Scenario F only).
+
+    Christian Lords on mats automatically Muster — cylinder to a free
+    Seat, Service markers ahead. Lords with no free Seat go to Calendar
+    as if Disbanded this turn. Then Muslim Lords likewise; Taifa Lords
+    with no free Seat go to Calendar and adjust Taifa status.
+    """
+    from almoravid.state import Cylinder, ServiceMarker
+    from almoravid.static_data import load_lords
+    results = {"christian_mustered": [], "muslim_mustered": [],
+               "no_free_seat": []}
+    static = load_lords()["lords"]
+
+    for side in ("christian", "muslim"):
+        for lid, l in state.lords.items():
+            if l.side != side:
+                continue
+            if l.cylinder.kind != "mat":
+                continue
+            free_seats = []
+            for seat in l.seats:
+                # Free = no Enemy Lord present
+                enemy_here = any(
+                    o for o in state.lords.values()
+                    if o.side != side
+                    and o.cylinder.kind == "locale"
+                    and o.cylinder.locale_id == seat
+                )
+                if not enemy_here:
+                    free_seats.append(seat)
+            if free_seats:
+                # Alfonso prefers Leon (per Scenario F rule)
+                if lid == "alfonso" and "leon" in free_seats:
+                    chosen = "leon"
+                else:
+                    chosen = free_seats[0]
+                l.cylinder = Cylinder(kind="locale", locale_id=chosen)
+                l.forces = dict(static[lid]["forces"])
+                l.assets = dict(static[lid]["assets"])
+                # Service marker advanced
+                new_box = state.calendar.current_box + l.service_rating
+                state.calendar.service_markers.append(
+                    ServiceMarker(lord_id=lid, box=min(new_box, 17)))
+                results[f"{side}_mustered"].append((lid, chosen))
+            else:
+                # No free Seat: place on Calendar
+                new_box = state.calendar.current_box + l.service_rating
+                l.cylinder = Cylinder(kind="calendar",
+                                       box=min(new_box, 17))
+                results["no_free_seat"].append(lid)
+    return results
+
+
 # Public registry — actions.py picks these up
 # ---------------------------------------------------------------------------
 
