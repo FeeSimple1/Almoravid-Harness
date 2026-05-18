@@ -215,6 +215,41 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     # Safe: omit March moves; the agent can still
                     # cmd_pass / end_card. CROSS_PROJECT_LESSONS.md §1.
                     pass
+
+                # cmd_supply (4.6) and cmd_tax (4.7.3) enumeration.
+                # CROSS_PROJECT_LESSONS.md §1 defensive try/except.
+                try:
+                    from almoravid.effective import is_besieged
+                    from almoravid.campaign import _own_seats
+                    from almoravid.map import neighbors_via
+                    if (not is_besieged(state, lord_id)
+                            and lord.cylinder.kind == "locale"
+                            and state.meta.actions_remaining >= 1):
+                        seats = _own_seats(state, lord_id)
+                        here = lord.cylinder.locale_id
+                        # Supply options: at-Seat or 1-hop Road to Seat.
+                        for s in seats:
+                            if s == here:
+                                out.append({"type": "cmd_supply",
+                                            "side": active,
+                                            "source_seat": s})
+                            elif (s in neighbors_via(here, "road")
+                                  and (lord.assets.get("mule", 0) > 0
+                                       or lord.assets.get("cart", 0) > 0)):
+                                # Pre-check route-blocking from
+                                # _route_blocked_by_enemy via inline
+                                # check to match handler. Pattern 9
+                                # mirror.
+                                from almoravid.campaign import _route_blocked_by_enemy
+                                if not _route_blocked_by_enemy(state, [s], active):
+                                    out.append({"type": "cmd_supply",
+                                                "side": active,
+                                                "source_seat": s})
+                        # Tax: at own Seat, not Besieged. Uses entire card.
+                        if here in seats:
+                            out.append({"type": "cmd_tax", "side": active})
+                except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                    pass
             out.append({"type": "end_card", "side": active})
         return out
 

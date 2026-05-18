@@ -487,6 +487,209 @@ def _h_cmd_march(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
+
+# ---------------------------------------------------------------------------
+# 4.6 Supply (Phase 5b)
+# ---------------------------------------------------------------------------
+
+
+def _own_seats(state, lord_id: str) -> list[str]:
+    """Locale ids that are printed Seats for this Lord (from static data)."""
+    from almoravid.static_data import load_lords
+    return list(load_lords()["lords"][lord_id].get("seats", []))
+
+
+def _route_blocked_by_enemy(state, route: list[str], side) -> bool:
+    """Per rule 4.6.1: route may not include a Locale with an Enemy
+    Stronghold or Lord, unless that Enemy is Besieged or Bypassed.
+
+    Phase 5b simplification: an Enemy Stronghold is any Locale whose
+    territory is unfriendly to `side` per is_friendly_locale, and an
+    Enemy Lord is any opposing-side Lord physically present. Bypassed
+    /Besieged exemptions consult effective.is_besieged / is_bypassed.
+    """
+    from almoravid.effective import is_besieged, is_bypassed, is_friendly_locale
+    other = "muslim" if side == "christian" else "christian"
+    for locale_id in route:
+        # Enemy Lord present unless Besieged/Bypassed
+        for lord in state.lords.values():
+            if (lord.side == other and lord.cylinder.kind == "locale"
+                    and lord.cylinder.locale_id == locale_id):
+                if not (is_besieged(state, lord.id) or is_bypassed(state, lord.id)):
+                    return True
+        # Enemy Stronghold (Locale not Friendly to active side and has Stronghold)
+        loc = state.locales[locale_id]
+        if loc.base_type != "region" and not is_friendly_locale(state, locale_id, side):
+            # An Enemy Stronghold is exempt only if Besieged or Bypassed by us
+            if not ((side == "christian" and (loc.siege_yellow > 0 or loc.bypass_yellow))
+                    or (side == "muslim" and (loc.siege_green > 0 or loc.bypass_green))):
+                return True
+    return False
+
+
+def _h_cmd_supply(state, action):
+    """4.6 Supply: 1 action. Active Lord (not Besieged) supplies from
+    one or more of his own Seats. For each Seat used as Source:
+    +1 Provender on the Lord's mat.
+
+    Phase 5b implements two cases:
+      (a) Lord at his own Seat: trivial +1 Prov, no Transport needed
+          (rule 4.6.1 'Lord at his Seat needs no Transport for that Seat').
+      (b) Lord adjacent to a free own Seat via Road: 1 Cart or Mule
+          consumed for the intervening Way; +1 Prov.
+
+    Multi-hop routes (2+ Ways) are deferred — they require a graph-
+    search planner. Q-001 candidate if/when the agent needs them
+    before they're implemented.
+    """
+    from almoravid.effective import is_besieged
+    from almoravid.map import neighbors_via
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord — reveal a card first",
+             code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} is not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord cannot Supply (4.2.1 / 4.6)",
+             code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale",
+             code="not_on_map")
+    _require(state.meta.actions_remaining >= 1,
+             "Supply costs 1 action; none remaining",
+             code="not_enough_actions")
+
+    seats = _own_seats(state, lord_id)
+    _require(seats, f"{lord_id} has no printed Seats; Supply impossible",
+             code="no_own_seat")
+
+    here = lord.cylinder.locale_id
+    seats_at_here = [s for s in seats if s == here]
+    seats_adjacent_road = []
+    for s in seats:
+        if s == here:
+            continue
+        # Phase 5b: only 1-hop Road routes (no Pass routes — Cart can't
+        # cross Pass with Prov anyway; 4.6.1 doesn't forbid Mule on Pass
+        # but the simplified route check is Road-only for now).
+        if s in neighbors_via(here, "road"):
+            seats_adjacent_road.append(s)
+
+    used_seat = action.get("source_seat")
+    if used_seat is None:
+        # Default: prefer at-here Seat, else first adjacent Road Seat.
+        if seats_at_here:
+            used_seat = seats_at_here[0]
+        elif seats_adjacent_road:
+            used_seat = seats_adjacent_road[0]
+        else:
+            raise IllegalAction(
+                f"{lord_id} has no Supply-reachable Seat in Phase 5b "
+                f"(at-here or 1-hop Road). Multi-hop routes are Q-001 work.",
+                code="no_supply_route",
+            )
+    _require(used_seat in seats,
+             f"{used_seat} is not an own Seat for {lord_id}",
+             code="bad_seat")
+
+    transport_consumed = None
+    if used_seat == here:
+        # At own Seat — no Transport (rule 4.6.1).
+        pass
+    elif used_seat in seats_adjacent_road:
+        # Route blocking check (1-hop route is just [used_seat]).
+        if _route_blocked_by_enemy(state, [used_seat], side):
+            raise IllegalAction(
+                f"Supply route via {used_seat} blocked by Enemy "
+                f"Stronghold or Lord (4.6.1)",
+                code="route_blocked",
+            )
+        # Need 1 Cart or Mule for the intervening Way.
+        has_cart = lord.assets.get("cart", 0) > 0
+        has_mule = lord.assets.get("mule", 0) > 0
+        # Phase 5b: prefer Mule (lighter, won't be needed for Pass anyway).
+        if has_mule:
+            transport_consumed = "mule"
+        elif has_cart:
+            transport_consumed = "cart"
+        else:
+            raise IllegalAction(
+                "Supply route needs 1 Cart or Mule for the intervening Way "
+                "(4.6.1)",
+                code="no_transport",
+            )
+        # Note: Transport is DEDICATED to the route for this Supply
+        # action, not consumed permanently. Phase 5b doesn't model the
+        # Dedicate / restore cycle; left intact on the mat.
+    else:
+        raise IllegalAction(
+            f"Seat {used_seat} not reachable from {here} in Phase 5b",
+            code="no_supply_route",
+        )
+
+    # Apply: +1 Provender (cap at 8 per Pattern 12 / rule 1.7.3).
+    new_prov = min(8, lord.assets.get("prov", 0) + 1)
+    lord.assets["prov"] = new_prov
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{side} {lord_id} Supplies from {used_seat} (+1 Prov -> {new_prov})"
+            + (f" via {transport_consumed}" if transport_consumed else " (at-Seat)"))
+    return {"source_seat": used_seat, "transport": transport_consumed,
+            "prov_after": new_prov,
+            "actions_remaining": state.meta.actions_remaining}
+
+
+# ---------------------------------------------------------------------------
+# 4.7.3 Tax (Phase 5b)
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_tax(state, action):
+    """4.7.3 Tax: end-of-card action. Lord at his own Seat (and not
+    Besieged) adds 1 Coin to his mat. Uses the ENTIRE Command card —
+    consumes all remaining actions.
+    """
+    from almoravid.effective import is_besieged
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord cannot Tax (4.7.3)",
+             code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale",
+             code="not_on_map")
+    here = lord.cylinder.locale_id
+    seats = _own_seats(state, lord_id)
+    _require(here in seats,
+             f"Tax requires Lord at own Seat; {lord_id} is at {here} "
+             f"(seats: {seats})",
+             code="not_at_own_seat")
+
+    new_coin = min(8, lord.assets.get("coin", 0) + 1)
+    lord.assets["coin"] = new_coin
+    # Tax consumes the entire card.
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {lord_id} Taxes at {here} (+1 Coin -> {new_coin}); "
+            f"card spent ({consumed} actions consumed)")
+    return {"coin_after": new_coin, "actions_consumed": consumed}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -495,5 +698,7 @@ CAMPAIGN_HANDLERS = {
     "end_card": _h_end_card,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
+    "cmd_supply": _h_cmd_supply,
+    "cmd_tax": _h_cmd_tax,
     "end_campaign": _h_end_campaign,
 }
