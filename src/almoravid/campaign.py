@@ -910,6 +910,85 @@ def _h_cmd_ravage(state, action):
 
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 4.5.1 Surrender + 1.3.1 / 1.4.4 Conquest (Phase 5i)
+# ---------------------------------------------------------------------------
+
+
+def _ravaged_count_in_taifa_for_side(state, locale_id: str, side) -> int:
+    """Count Ravaged markers of `side`'s color in the Taifa containing
+    locale_id. Used by Surrender (4.5.1) — die rolls cancel if <=
+    siege_markers + ravaged_markers_of_besieging_side.
+    """
+    loc = state.locales[locale_id]
+    taifa = state.taifas.get(loc.territory)
+    if taifa is None:
+        return 0
+    color = "yellow" if side == "christian" else "green"
+    return sum(
+        1 for lid in taifa.locale_ids
+        if state.locales[lid].ravaged == color
+    )
+
+
+def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
+    """Apply Conquest of a Stronghold (rule 1.4.4, 4.5.1 Surrender,
+    4.5.2 Storm victory, 4.5.3 Sally retreat).
+
+    Effects:
+      - Place Conquered or Jihad markers per Taifa status (per Quick
+        Reference Table 4 — see Phase 5l for the full Adjust Status
+        cascade).
+      - Remove Siege markers there.
+      - Adjust VP (1.3.1: 1 VP per Conquered; 1/2 VP per Jihad).
+      - Phase 5i baseline ignores Taifa-status-transition cascades —
+        those are Phase 5l Adjust Status work.
+
+    Returns dict with marker counts placed and VP delta.
+    """
+    from almoravid.static_data import load_strongholds
+    loc = state.locales[locale_id]
+    if loc.base_type == "region":
+        return {"no_op": True, "reason": "region_no_stronghold"}
+    sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
+    taifa = state.taifas.get(loc.territory)
+    # Determine marker type (Quick Reference Table 4):
+    # Independent + Christian conquers: Conquered (1 VP × value)
+    # Reconquista + Muslim conquers: Jihad (1/2 VP × value)
+    # Parias + either: 1 VP / 0.5 VP per side
+    # For Phase 5i baseline, use a simplified rule:
+    #   - Christian conquers Muslim: place Conquered yellow markers
+    #   - Muslim conquers Christian: place Conquered green markers
+    #   - Muslim conquers Conquered (Reconquista) Christian Stronghold:
+    #     place Jihad markers
+    place_jihad = False
+    if conquering_side == "muslim":
+        # If the Locale shows yellow Conquered (Christian-conquered)
+        # then Muslim re-conquest places Jihad markers (rule 1.4.4).
+        if loc.conquered_markers > 0 and taifa and taifa.status == "reconquista":
+            place_jihad = True
+    if place_jihad:
+        loc.jihad_markers += sh_value
+        vp_delta = 0.5 * sh_value
+        marker = "jihad"
+    else:
+        loc.conquered_markers += sh_value
+        vp_delta = 1.0 * sh_value
+        marker = "conquered"
+    # Remove Siege markers (Conquest ends Siege).
+    if conquering_side == "christian":
+        loc.siege_yellow = 0
+        state.score.christian += vp_delta
+    else:
+        loc.siege_green = 0
+        state.score.muslim += vp_delta
+    return {"locale": locale_id, "marker": marker, "value": sh_value,
+            "vp_delta": vp_delta, "conquered_total": loc.conquered_markers,
+            "jihad_total": loc.jihad_markers}
+
+
+
 # 4.5.1 Siege (Phase 5d minimal-viable)
 # ---------------------------------------------------------------------------
 
@@ -979,6 +1058,33 @@ def _h_cmd_siege(state, action):
         setattr(loc, marker_field, current + 2)
         placed = 2
 
+    # 4.5.1 Surrender check (optional, when no Besieged Lord inside).
+    from almoravid.rng import roll_d6_n
+    surrender_result = None
+    enemy_inside = any(
+        l for l in state.lords.values()
+        if l.side != side
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here
+        and l.in_stronghold
+    )
+    do_surrender = action.get("surrender", True) and not enemy_inside
+    if do_surrender:
+        from almoravid.static_data import load_strongholds
+        sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
+        dice = roll_d6_n(state, sh_value)
+        threshold = (getattr(loc, marker_field)
+                     + _ravaged_count_in_taifa_for_side(state, here, side))
+        cancellations = sum(1 for d in dice if d <= threshold)
+        if cancellations == sh_value:
+            # Surrender succeeds — Conquest
+            conq_result = _conquer_stronghold(state, here, side)
+            surrender_result = {"dice": dice, "threshold": threshold,
+                                "succeeded": True, "conquest": conq_result}
+        else:
+            surrender_result = {"dice": dice, "threshold": threshold,
+                                "succeeded": False}
+
     # End-of-card: consume all remaining actions (SoP end_card_action).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -987,10 +1093,13 @@ def _h_cmd_siege(state, action):
             f" (total {getattr(loc, marker_field)})"
             + (f"; Siegeworks (capacity {capacity}, "
                f"{lords_here_our_side} lords here)" if siegeworks else "")
+            + (f"; Surrender check: {surrender_result}"
+               if surrender_result else "")
             + f"; card spent ({consumed} actions)")
     return {"locale": here, "color": color, "placed": placed,
             "total_markers": getattr(loc, marker_field),
-            "siegeworks": siegeworks, "actions_consumed": consumed}
+            "siegeworks": siegeworks, "surrender": surrender_result,
+            "actions_consumed": consumed}
 
 
 
@@ -1175,12 +1284,20 @@ def _h_cmd_storm(state, action):
         commit_forces_after_battle(state, dfd)
     apply_aftermath(state, result)
 
+    # If attacker won the Storm, Conquer the Stronghold (4.5.2).
+    conq_result = None
+    if result.winner == side:
+        conq_result = _conquer_stronghold(state, here, side)
+
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     _record(state, action,
             f"{side} {lord_id} Storms {here}: winner={result.winner}, "
-            f"rounds={len(result.rounds)}; card spent ({consumed} actions)")
+            f"rounds={len(result.rounds)}"
+            + (f", Conquest: {conq_result}" if conq_result else "")
+            + f"; card spent ({consumed} actions)")
     return {"winner": result.winner, "rounds": len(result.rounds),
+            "conquest": conq_result,
             "actions_consumed": consumed}
 
 
