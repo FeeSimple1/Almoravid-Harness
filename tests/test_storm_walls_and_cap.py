@@ -191,3 +191,41 @@ def test_evade_does_not_apply_to_missile_hits() -> None:
         f"Bug H regression: Evade should NOT apply to Missiles; got "
         f"cancel rate {rate:.2f}"
     )
+
+
+def test_bug_j_this_levy_events_cleared_on_aftermath() -> None:
+    """Bug J (Pattern 13): hold events discard at Battle/Storm aftermath
+    per rule 4.4.5 'Discard all Hold Events used in this Battle/Storm'."""
+    from almoravid.battle import BattleResult, BattleSide, apply_aftermath
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    s.decks.this_levy_events = {"christian": ["C1", "C3"], "muslim": ["M7"]}
+    atk = BattleSide(side="christian", role="attacker",
+                     lord_ids=["alfonso"], forces={})
+    dfd = BattleSide(side="muslim", role="defender",
+                     lord_ids=["al_mutamid"], forces={})
+    r = BattleResult(engagement="battle", attacker=atk, defender=dfd,
+                     winner="christian")
+    apply_aftermath(s, r)
+    assert s.decks.this_levy_events == {}
+    assert "C1" in s.decks.discard
+    assert "C3" in s.decks.discard
+    assert "M7" in s.decks.discard
+
+
+def test_bug_k_pending_draw_cleared_at_arts_of_war_end() -> None:
+    """Bug K (Pattern 13): pending_draw cleared when both sides ratify
+    the arts_of_war step (transition to pay step)."""
+    from almoravid.actions import apply_action
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    apply_action(s, {"type": "begin_levy"})
+    apply_action(s, {"type": "aow_shuffle", "side": "christian"})
+    apply_action(s, {"type": "aow_draw", "side": "christian", "n": 3})
+    assert len(s.decks.pending_draw["christian"]) == 3
+    # Both sides pass arts_of_war
+    apply_action(s, {"type": "pass_step", "side": "christian"})
+    apply_action(s, {"type": "pass_step", "side": "muslim"})
+    # Now in pay step; pending_draw cleared
+    assert s.meta.levy_step == "pay"
+    assert s.decks.pending_draw == {}

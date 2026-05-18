@@ -446,18 +446,20 @@ def apply_aftermath(
 ) -> None:
     """Battle aftermath (rule 4.4.5).
 
-    Phase 5e applies the minimum-viable aftermath:
+    Phase 5e baseline + Bug J fix (Pattern 13 audit):
       - Mark all participating Lords Moved/Fought.
       - Restore winner's routed_units back to forces (rule 4.4.3
         'winner doesn't suffer Losses' — SMOKE-098/099 in Nevsky).
         Pattern 2: this restore must fire for the winner regardless
         of which side won.
+      - Discard all 'Hold' Events used in this Battle/Storm per rule
+        4.4.5 — bug-fix J: this_levy_events bucket was accumulating
+        forever; events now move to decks.discard at aftermath. Both
+        sides' buckets clear (the cards triggered for this engagement
+        regardless of which side held them).
       - Loser keeps routed_units in routed (they're 'Losses' that
         need Service-shift / permanent removal in real play; full
         implementation lands with the Service mutators).
-
-    Discard of 'hold' events and Spoils transfer are wired in Phase
-    5j (events) / 5i (Spoils with Conquest mechanics).
     """
     for lord_id in result.attacker.lord_ids + result.defender.lord_ids:
         if lord_id in state.lords:
@@ -469,6 +471,11 @@ def apply_aftermath(
         _restore_routed_to_forces(state, result.attacker)
     elif result.winner == result.defender.side:
         _restore_routed_to_forces(state, result.defender)
+
+    # Bug J (Pattern 13): clear this_levy_events; discard the held cards.
+    for side_key, cards in list(state.decks.this_levy_events.items()):
+        state.decks.discard.extend(cards)
+    state.decks.this_levy_events = {}
 
 
 def _restore_routed_to_forces(state: GameState, side: BattleSide) -> None:

@@ -138,6 +138,15 @@ def _advance_step_if_both_done(state: GameState) -> None:
         return
     idx = LEVY_STEPS.index(current)
     if idx + 1 < len(LEVY_STEPS):
+        # Bug K (Pattern 13): when transitioning OUT of arts_of_war,
+        # clear pending_draw — Phase 5j punted on per-card resolution
+        # of drawn cards, so they accumulate forever unless we clear.
+        # Treating Phase 5j leftover pending_draw cards as discard
+        # is the conservative choice.
+        if current == "arts_of_war":
+            for side_key, cards in list(state.decks.pending_draw.items()):
+                state.decks.discard.extend(cards)
+            state.decks.pending_draw = {}
         state.meta.levy_step = LEVY_STEPS[idx + 1]
         state.meta.active_player = ACTOR_ORDER[0]
     else:
