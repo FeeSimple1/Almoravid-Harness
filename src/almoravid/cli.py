@@ -62,6 +62,29 @@ def do(state_file: Path, action: str) -> None:
     raise NotImplementedError("Phase 2: actions.py")
 
 
+
+@app.command(name="view")
+def view(scenario: str, mode: str = "summary", focus_target: str = "") -> None:
+    """Render a fresh GameState from a scenario.
+
+    mode: 'summary' (default), 'verbose', or 'focus' (requires --focus-target).
+    """
+    from almoravid.render import render_focus, render_summary, render_verbose
+    state = load_scenario(scenario)
+    if mode == "summary":
+        typer.echo(render_summary(state))
+    elif mode == "verbose":
+        typer.echo(render_verbose(state))
+    elif mode == "focus":
+        if not focus_target:
+            typer.echo("--focus-target required for mode=focus", err=True)
+            raise typer.Exit(1)
+        typer.echo(render_focus(state, focus_target))
+    else:
+        typer.echo(f"Unknown mode: {mode}. Use summary | verbose | focus.", err=True)
+        raise typer.Exit(1)
+
+
 @app.command(name="generate-schema")
 def generate_schema() -> None:
     from almoravid.state import GameState
