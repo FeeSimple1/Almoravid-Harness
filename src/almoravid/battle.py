@@ -416,6 +416,39 @@ def _resolve_step(
 
     rows = build_strike_rows(state, actor, context=context)
     raw, by_kind = _step_hits(rows, step_type, unit_class)
+
+    # Per-card combat-event bonuses (Phase 6 / deferred-fix structural
+    # hook). Each effect inspects state.decks.this_levy_events for the
+    # relevant side and adjusts raw/by_kind.
+    #
+    # C1 / M1 Hills: 'Defending side's Slingers are x1.5 and other
+    # Missiles are x1 (not x1/2)' per AoW reference. Implementation:
+    # for the defending-actor missile step, add +0.5 Hits per Missile
+    # unit on actor's side.
+    if step_type == "missile":
+        hills_id = ("C1" if actor.side == "christian" else "M1")
+        held = state.decks.this_levy_events.get(actor.side, [])
+        if hills_id in held and actor.role == "defender":
+            bonus = 0.0
+            for r in rows:
+                if r.kind in ("missiles", "crossbows", "bowmen",
+                              "slingers", "javelins"):
+                    bonus += 0.5 * r.count
+            raw += bonus
+            # Distribute the bonus across kinds proportional to their
+            # existing contributions so per-kind allocation still works.
+            current_missile_total = sum(
+                v for k, v in by_kind.items()
+                if k in ("missiles", "crossbows", "bowmen",
+                         "slingers", "javelins")
+            )
+            if current_missile_total > 0:
+                for k in list(by_kind.keys()):
+                    if k in ("missiles", "crossbows", "bowmen",
+                             "slingers", "javelins"):
+                        share = bonus * by_kind[k] / current_missile_total
+                        by_kind[k] = by_kind[k] + share
+
     rounded = math.ceil(raw)
 
     # Bug E (Pattern 9): Storm 6-Melee cap per Lord per Round.

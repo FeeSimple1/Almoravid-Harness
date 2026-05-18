@@ -226,3 +226,74 @@ def test_multi_lord_battle_aggregates_forces() -> None:
         for lid in christian_at_sahagun
     )
     assert final_total == initial_total
+
+
+def test_hills_boosts_defender_missile_hits() -> None:
+    """Per-card effect: when defender holds C1/M1 Hills in this_levy_events,
+    their missile-step Hits get a +0.5/unit bonus."""
+    from almoravid.battle import BattleSide, _resolve_step
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    atk = BattleSide(side="christian", role="attacker",
+                     lord_ids=["alfonso"], forces={"knights": 0})  # no missile
+    # Defender with 4 Militia + C4 Arqueros (Bowmen capability x1/2)
+    dfd = BattleSide(side="muslim", role="defender",
+                     lord_ids=["al_mutamid"],
+                     forces={"militia": 4},
+                     capabilities_in_play=["C4"])
+    # Baseline: no Hills, defender missile step
+    s.decks.this_levy_events = {}
+    res_no = _resolve_step(s, "1.a", "defender", "missile", None,
+                            atk, dfd, context="battle")
+    # 4 Militia bowmen x1/2 = 2 raw. Rounded = 2.
+    assert res_no.rounded_hits == 2
+
+    # With M1 Hills active on defender side
+    dfd2 = BattleSide(side="muslim", role="defender",
+                      lord_ids=["al_mutamid"],
+                      forces={"militia": 4},
+                      capabilities_in_play=["C4"])
+    s.decks.this_levy_events = {"muslim": ["M1"]}
+    res_hills = _resolve_step(s, "1.a", "defender", "missile", None,
+                               atk, dfd2, context="battle")
+    # 4 Militia bowmen + 0.5 * 4 = 2 + 2 = 4 raw. Rounded = 4.
+    assert res_hills.rounded_hits == 4, (
+        f"Hills should boost +0.5 per Missile unit: expected 4, "
+        f"got {res_hills.rounded_hits}"
+    )
+
+
+def test_hills_does_not_boost_attacker() -> None:
+    """Hills is Defending-only per AoW reference."""
+    from almoravid.battle import BattleSide, _resolve_step
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    atk = BattleSide(side="muslim", role="attacker",
+                     lord_ids=["al_mutamid"],
+                     forces={"militia": 4},
+                     capabilities_in_play=["C4"])
+    dfd = BattleSide(side="christian", role="defender",
+                     lord_ids=["alfonso"], forces={})
+    # M1 Hills on attacker side (not legal per text, but verify code
+    # rejects boost when role is attacker).
+    s.decks.this_levy_events = {"muslim": ["M1"]}
+    res = _resolve_step(s, "1.b", "attacker", "missile", None,
+                        atk, dfd, context="battle")
+    assert res.rounded_hits == 2  # No bonus — attacker doesn't get Hills
+
+
+def test_hills_does_not_boost_melee() -> None:
+    """Hills is a missile-only buff."""
+    from almoravid.battle import BattleSide, _resolve_step
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    atk = BattleSide(side="christian", role="attacker",
+                     lord_ids=["alfonso"], forces={})
+    dfd = BattleSide(side="muslim", role="defender",
+                     lord_ids=["al_mutamid"],
+                     forces={"sergeants": 2})  # Melee x1
+    s.decks.this_levy_events = {"muslim": ["M1"]}
+    res = _resolve_step(s, "2.a", "defender", "melee", "horse",
+                        atk, dfd, context="battle")
+    # 2 Sergeants x1 = 2 melee Hits. No Hills bonus on Melee.
+    assert res.rounded_hits == 2
