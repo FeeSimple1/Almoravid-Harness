@@ -53,13 +53,35 @@ def new_game(scenario: str, seed: int = 0) -> None:
 
 
 @app.command(name="legal-moves")
-def legal_moves(state_file: Path) -> None:
-    raise NotImplementedError("Phase 2: legal_moves.py")
+def legal_moves_cmd(scenario: str) -> None:
+    """List currently-legal actions for a fresh GameState built from scenario."""
+    from almoravid.legal_moves import legal_moves
+    state = load_scenario(scenario)
+    for m in legal_moves(state):
+        typer.echo(json.dumps(m, sort_keys=True))
 
 
 @app.command()
-def do(state_file: Path, action: str) -> None:
-    raise NotImplementedError("Phase 2: actions.py")
+def do(scenario: str, action_json: str) -> None:
+    """Apply one action to a fresh GameState built from scenario.
+
+    action_json is a JSON-encoded action dict, e.g.:
+        almoravid do scenario_a_toledo_beset '{"type":"begin_levy"}'
+    """
+    from almoravid.actions import IllegalAction, apply_action
+    state = load_scenario(scenario)
+    action = json.loads(action_json)
+    try:
+        result = apply_action(state, action)
+    except IllegalAction as e:
+        typer.echo(f"IllegalAction({e.code}): {e}", err=True)
+        raise typer.Exit(1)
+    typer.echo(json.dumps({
+        "result": result,
+        "phase": state.meta.phase,
+        "levy_step": state.meta.levy_step,
+        "active_player": state.meta.active_player,
+    }, indent=2))
 
 
 
