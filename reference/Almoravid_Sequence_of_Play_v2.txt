@@ -1,0 +1,751 @@
+# =============================================================================
+# ALMORAVID — SEQUENCE OF PLAY (machine-readable)
+# Source: Player Aid Foldout v2, page 1 ("Sequence of Play")
+# Reconciled with: Living Rules (AlmoravidRulesofPlayLIVINGRULES1) and
+#                  Official Errata 15Feb2023.
+# Precedence (high to low): errata > living_rules > player_aid
+# Format: YAML 1.2
+# =============================================================================
+
+schema_version: "1.0"
+
+meta:
+  document_type: sequence_of_play
+  precedence_order: [errata, living_rules, player_aid]
+  conventions:
+    rule_ref: "Section number from AlmoravidRulesofPlayLIVINGRULES1."
+    errata_ref: "Page reference within Almoravid Official Errata 15Feb2023."
+    actor_order: "List of sides acting in order. Default Christian, then Muslim."
+    when: "Trigger condition (string predicate, free-form for now)."
+    requires: "List of preconditions; ALL must hold unless any_of: is used."
+    optional: "true means the actor may skip; false means mandatory."
+
+# ----- Shared definitions used by phases below -----
+
+constants:
+  sides: [christian, muslim]
+  default_actor_order: [christian, muslim]
+  seasons:
+    spring: { command_cards: 7, end_of_season_effects: [grow] }
+    summer: { command_cards: 8, end_of_season_effects: [harvest] }
+    autumn: { command_cards: 7, end_of_season_effects: [] }
+
+definitions:
+  ready_lord:
+    rule_ref: "3.4.1"
+    text: "Cylinder in a 40-Days box at or left of the Levy marker."
+  free_seat:
+    rule_ref: "3.4.1"
+    errata_ref: "p.12 PROCEDURE bullet 1"
+    text: "A Seat that is neither Enemy nor has any Enemy Lord present."
+  unbesieged:
+    rule_ref: "4.3.5"
+    text: "Lord without a Siege marker on him; may be Bypassed."
+  friendly_locale:
+    rule_ref: "1.3.1"
+    text_summary:
+      territory:
+        - "Reconquista Taifa or Kingdom is Christian."
+        - "Parias Taifa is Neutral."
+        - "Independent Taifa is Muslim."
+      locale_or_stronghold:
+        - "Conquered or Seat marker is that side's."
+        - "Jihad is Muslim."
+        - "Otherwise per Territory."
+  laden:
+    rule_ref: "4.3.2"
+    text: >
+      A Lord is Laden if Cart or Mule carries two Provender (incl. shared, 1.5.2),
+      or Cart carries any Provender over a Pass, or moving any Loot.
+  greed:
+    rule_ref: "1.7.2"
+    text: >
+      Discard Assets only to: March Laden, March Unladen, Avoid Battle, Retreat,
+      Feed (Mules excess only, 4.8.1), or per Wastage (4.9.4).
+  feed_consumption:
+    rule_ref: "4.8.1"
+    formula: "ceil((units + mules) / 6)  Provender or Loot per Lord"
+
+# ----- Top-level phase tree -----
+
+phases:
+
+  # -------------------------------------------------------------------------
+  - id: setup
+    name: "Setup"
+    rule_refs: ["2.1", "6.0"]
+    when: "scenario start"
+    procedure_ref: "Per scenario."
+
+  # -------------------------------------------------------------------------
+  - id: turn_cycle
+    name: "40 Days"
+    rule_ref: "2.2"
+    repeat_until:
+      any_of:
+        - condition: "scenario_final_40_days_complete"
+          rule_ref: "4.9.1"
+        - condition: "campaign_victory_triggered"
+          rule_ref: "5.2"
+    note_winter:
+      rule_ref: "6.3"
+      text: "Winter turns follow special rules; see 6.3 — not detailed here."
+
+    sub_phases:
+
+      # ---------------------------------------------------------------------
+      - id: levy
+        name: "Levy"
+        rule_ref: "3.0"
+        scenario_f_only_check:
+          when: "scenario == F and levy_box in [5, 6] (Autumn 1085)"
+          rule_ref: "6.2"
+          action: "check_curias"
+
+        steps:
+
+          # -----------------------------------------------------------------
+          - id: arts_of_war
+            rule_ref: "3.1"
+            actor_order: [christian, muslim]
+            procedure:
+              - shuffle: arts_of_war_deck
+              - draw_count: 2
+              - implement:
+                  if_first_levy:
+                    use: capabilities  # bottom half of card
+                    rule_ref: "1.9.1"
+                  else:
+                    use: events        # top half of card
+                    rule_ref: "3.1.3"
+
+          # -----------------------------------------------------------------
+          - id: pay
+            rule_ref: "3.2"
+            optional: true
+            actor_order: [christian, muslim]
+            options:
+
+              - id: pay_with_loot
+                rule_ref: "3.2.2"
+                requires:
+                  - "lord_at_friendly_locale"
+                  - "locale_free_of_siege"
+                allows_bypassed: true
+                effect: "shift Service of one Lord at that Locale 1 box right per Loot spent"
+                applies_to_vassals_if_advanced_rule: true  # 3.4.2
+
+              - id: pay_with_coin_own_or_local
+                rule_ref: "3.2.1"
+                requires: ["coin_on_paying_lord_mat"]
+                effect: >
+                  Shift Service 1 box right per Coin spent for: paying Lord, OR
+                  another Lord at same Locale.
+
+              - id: pay_with_coin_from_taifas_box
+                rule_ref: "3.2.1"
+                requires: ["coin_in_taifas_box", "target_is_muslim_lord", "target_unbesieged"]
+                allows_bypassed: true
+                effect: "shift any Unbesieged Muslim Lord's Service 1 box right per Coin"
+
+          # -----------------------------------------------------------------
+          - id: disband
+            rule_ref: "3.3"
+            actor_order: [christian, muslim]
+            applies_to: ["lords", "vassals_if_advanced_rule_3_4_2"]
+
+            sub_steps:
+
+              - id: beyond_service_limit
+                rule_ref: "3.3.1"
+                errata_ref: "p.12 line 2 — insert 'or Campaign' before 'marker'"
+                when: "lord.service_marker.box < current_levy_or_campaign_marker.box"
+                action: "permanently_remove_lord"
+                returns_to_pool: ["forces", "assets"]
+                returns_to_deck: ["this_lord_capability_cards"]
+                removes_from_game: ["cylinders", "mat", "seat_markers", "service_markers", "special_vassal_markers"]
+
+              - id: at_service_limit
+                rule_ref: "3.3.2"
+                errata_ref: "p.12 bullet 1 — insert 'if Levy, or next box if Campaign (4.8.2),' after 'current box'"
+                when: "lord.service_marker.box == current_levy_or_campaign_marker.box"
+                action: "disband_to_calendar"
+                placement:
+                  if_phase_is_levy:
+                    formula: "current_box + service_rating"
+                  if_phase_is_campaign:
+                    formula: "next_box + service_rating"
+                even_if_besieged: true
+                returns_to_pool: ["forces", "assets"]
+                discards_at_lord_mat: ["all_cards"]
+                sets_aside: ["mat", "service_markers"]
+                removes_from_map: ["seat_markers"]
+
+              - id: parias_trigger
+                rule_ref: "1.4.3"
+                when: "disbanding lord is Independent Taifa Lord"
+                effects:
+                  - "Adjust Taifa to Parias"
+                  - "Award Parias Coin (Service-equivalent total) to Christians"
+                  - "Award 1 VP to Christians (5.1)"
+
+          # -----------------------------------------------------------------
+          - id: muster
+            rule_ref: "3.4"
+            actor_order: [christian, muslim]
+            requires_for_acting_lord:
+              - "lord_at_friendly_locale"
+              - "locale_unbesieged"   # Bypassed OK
+              - "lord_began_segment_at_this_locale"  # errata: replaced 'take actions' with 'participate'
+            errata_note: "Important box: replace 'take actions' with 'participate' (15Feb2023 p.12)"
+            cost_per_action: "1 point of Lordship rating"
+
+            options:
+
+              - id: levy_lord_to_muster
+                rule_ref: "3.4.1"
+                tag: "[a] roll Fealty"
+                requires:
+                  - "target_lord.has_fealty_rating"
+                  - "target_lord.is_ready"
+                  - "target_has_free_seat"  # see definitions.free_seat
+                procedure:
+                  - "Roll 1d6"
+                  - "On roll <= target_lord.fealty: Muster"
+                  - "On failure: may retry with additional Lordship actions"
+                muster_placement:
+                  cylinder_at: "free_seat"
+                  service_marker_at: "current_box + service_rating"
+                taifa_status_adjustment:
+                  rule_ref: "1.4.3"
+                  when: "target_lord is Taifa Lord"
+                  effect: "adjust Taifa to Independent"
+
+              - id: levy_vassal_forces
+                rule_ref: "3.4.2"
+                tag: "[b] Muster Ready Vassals"
+                requires: ["vassal_marker_face_up_in_lord_assets_section"]
+                effect: "slide Vassal marker into Forces section; place Vassal Forces"
+
+              - id: levy_transport
+                rule_ref: "3.4.3"
+                tag: "[c] add Transport"
+                effect: "add 1 Cart or 1 Mule to acting Lord's mat"
+                free_replacement_of_serf: true
+
+              - id: levy_capability
+                rule_ref: "3.4.4"
+                tag: "[d] add Capability"
+                effect: "obtain a Capability (Arts of War card bottom half) for Lord or side"
+                limit_per_lord: "max 2 'This Lord' Capabilities at a time"
+
+            advanced_vassal_service:
+              rule_ref: "3.4.2"
+              effect: "flip face-down Vassal markers up to Ready after Vassal Muster done"
+
+          # -----------------------------------------------------------------
+          - id: call_to_arms
+            rule_ref: "3.5"
+            optional: true
+            actor_order: [christian, muslim]
+            skip_if_scenario_in: [A, B]
+            scenario_skip_ref: "6.1"
+            note: "A side must have any required Coin, free Seat, or Jihad to choose an option."
+
+            christian_options:
+
+              - id: reconcile_with_rodrigo
+                rule_ref: "3.5.1"
+                tag: "[a]"
+                requires:
+                  any_of:
+                    - "rodrigo_al_sayyid_on_map"
+                    - "any_christian_lord_permanently_removed (3.3.1, 4.4.4, 4.5.2)"
+                effects:
+                  - "Add to Taifas box: 1 VP plus 1 VP per box Rodrigo's Service is ahead of Levy (green Conquered marker, 1VP)"
+                  - "Disband Rodrigo al-Sayyid; set aside green cylinder and Seat"
+                  - "Place yellow Rodrigo Campeador cylinder on Calendar 2 boxes ahead of current Levy"
+
+              - id: employ_rodrigo
+                rule_ref: "3.5.1"
+                tag: "[b] Pay 2 Coin"
+                requires:
+                  - "rodrigo_campeador_is_ready"
+                cost:
+                  amount: 2
+                  type: coin
+                  source: "any Unbesieged Christian Lords"
+                procedure:
+                  - "Place yellow Rodrigo Seat marker at any Christian-Friendly Stronghold free of Siege"
+                  - "Auto-Muster Rodrigo Campeador there"
+
+              - id: call_for_crusade
+                rule_ref: "3.5.1"
+                tag: "[c] Muster Eudes"
+                requires:
+                  - "eudes_is_ready"
+                  - "pamplona_is_christian_friendly"
+                  - "pamplona_free_of_siege"
+                procedure:
+                  - "Auto-Muster Eudes at Pamplona"
+                muslim_response:
+                  rule_ref: "1.4.4"
+                  optional: true
+                  effect: "Muslims may add 1 Jihad marker (if 1.4.4 conditions met)"
+                note: "Eudes Readies only by scenario setup or via Invite the Almoravids (3.5.2)."
+
+            muslim_options:
+
+              - id: employ_rodrigo_al_sayyid
+                rule_ref: "3.5.2"
+                tag: "[a] Pay 3 Coin"
+                requires:
+                  - "rodrigo_al_sayyid_is_ready"
+                cost:
+                  amount: 3
+                  type: coin
+                  source: "Taifas box and/or any Unbesieged Muslim Lords' mats"
+                procedure:
+                  - "Place green Rodrigo Seat marker at any Muslim-Friendly Stronghold free of Siege"
+                  - "Auto-Muster Rodrigo al-Sayyid there"
+
+              - id: invite_the_almoravids
+                rule_ref: "3.5.2"
+                tag: "[b] Muster Yusuf or Sir"
+                requires:
+                  - "yusuf_or_sir_is_ready"
+                procedure:
+                  - "Place that Lord's single Seat marker at Algeciras"
+                  - fallback_if_algeciras_unavailable:
+                      condition: "Algeciras not Muslim-Friendly OR Besieged"
+                      action: "Use nearest Port that is Muslim-Friendly and free of Siege"
+                  - "Auto-Muster that Lord at the placed Seat"
+                  - eudes_followup:
+                      condition: "Eudes not already on Calendar or Mustered"
+                      action: "Place Eudes cylinder on Calendar 2 boxes ahead"
+                note: "Use double-Seat marker if Al-Yazirat Al-Hadra in play (1.9.1)."
+
+              - id: uphold_the_dynasties
+                rule_ref: "3.5.2"
+                tag: "[c]"
+                requires:
+                  - "yusuf_is_ready"
+                  - "sir_is_ready"
+                procedure:
+                  - "Shift both Yusuf and Sir cylinders to box one right of current Levy"
+                  - "Add 1 green 1VP Conquered marker to Taifas box"
+                  - "Add 1 Jihad marker to map (if able per 1.4.4)"
+                  - "Adjust Victory"
+
+              - id: call_upon_an_emir
+                rule_ref: "3.5.2"
+                tag: "[d]"
+                requires:
+                  - "yusuf_at_taifa_lords_seat"
+                  - "that_seat_neither_enemy_nor_besieged"
+                effect:
+                  choice:
+                    - "Auto-Muster that Taifa Lord from any Calendar box (no Fealty roll), OR"
+                    - "Shift that Taifa Lord's Service 2 boxes right"
+
+          # -----------------------------------------------------------------
+          - id: discard_this_levy_events
+            rule_ref: "3.5.3"
+            effect: "Both sides discard Events applying only to 'This Levy'"
+
+      # ---------------------------------------------------------------------
+      - id: campaign
+        name: "Campaign"
+        rule_ref: "4.0"
+
+        prep:
+
+          - id: flip_to_campaign
+            rule_ref: "2.2.2"
+
+          - id: capability_discard
+            rule_ref: "4.0"
+            actor_order: [christian, muslim]
+            effect: >
+              Each side discards Capabilities (NOT 'This Lord' Capabilities) in
+              excess of its number of Mustered Lords.
+            ambiguity_note_player_aid: >
+              Player aid says only "Discard Capabilities in excess of Lords" without
+              the 'This Lord' exclusion; rules clarify the exclusion.
+
+        steps:
+
+          # -----------------------------------------------------------------
+          - id: plan
+            rule_ref: "4.1"
+            actor_order: [christian, muslim]
+            substeps:
+
+              - id: build_plan_stack
+                rule_ref: "4.1.1"
+                cards_per_season:
+                  spring: 7
+                  summer: 8
+                  autumn: 7
+                fill_with_pass_cards_if_short: true
+
+              - id: arrange_stack_facedown
+                rule_ref: "4.1.2"
+                immutable_after_built: true
+
+              - id: designate_lieutenants
+                rule_ref: "4.1.3"
+                optional: true
+                effect: "Stack one Lord cylinder atop another at same Locale"
+                restrictions:
+                  - "Marshal cannot be Lieutenant or Lower Lord"
+                  - "Lieutenant has at most one Lower Lord"
+
+              - id: dinars
+                rule_ref: "4.1.4"
+                optional: true
+                actor: muslim
+                requires_per_lord:
+                  - "is_taifa_lord (not Yusuf, Sir, Rodrigo)"
+                  - "is_unbesieged"
+                effect: "Deposit any Coin from Lord's mat into Taifas box"
+
+          # -----------------------------------------------------------------
+          - id: command_loop
+            rule_ref: "4.2"
+            loop_description: >
+              Christian then Muslim alternate revealing top Command card and
+              Activating that Lord, until both Plan stacks exhausted.
+
+            per_card_procedure:
+
+              - id: reveal
+                action: "flip top Command card of acting side's Plan"
+
+              - id: pass_check
+                rule_ref: "4.2.3"
+                pass_when:
+                  any_of:
+                    - "card is Pass card"
+                    - "card belongs to a Lower Lord (4.1.3)"
+                    - "card_owner.lord not on map"
+                pass_effect: "side does nothing; alternate to other side"
+                campaign_end_when:
+                  condition: "neither side has cards remaining in Plan"
+                  rule_ref: "4.9"
+
+              - id: actions
+                rule_ref: "4.3-4.7"
+                action_count: "up to lord.command_rating (1.5.3)"
+                besieged_lord_restriction:
+                  rule_ref: "4.2.1"
+                  allowed_only:
+                    - sally       # 4.5.3
+                    - forage_at_gardens  # 4.7.1, City or Fortress only
+                    - pass        # 4.7.4
+                same_action_repeatable: true
+                see_command_menu: command_actions
+
+              - id: feed_pay_disband
+                rule_ref: "4.8"
+
+                substeps:
+
+                  - id: feed
+                    rule_ref: "4.8.1"
+                    actor_order: [christian, muslim]
+                    applies_to: "Lords marked Moved/Fought"
+                    consumption_formula: "ceil((units + mules) / 6) Provender or Loot per Lord"
+                    procedure:
+                      - "Each Lord Feeds own Forces from own mat first"
+                      - "Then Share (1.5.2) with same-Locale Lords short on Provender/Loot"
+                    unfed_penalty:
+                      condition: "Lord received less than required"
+                      effect: "shift Service marker [and Vassals if advanced rule] 1 box left"
+                    greed_note:
+                      rule_ref: "1.7.2"
+                      text: "May discard Mules in excess of Feed need (only)."
+
+                  - id: pay
+                    rule_ref: "3.2"
+                    optional: true
+                    actor_order: [christian, muslim]
+                    same_options_as: levy.pay.options
+
+                  - id: disband_check
+                    rule_ref: "3.3"
+                    actor_order: [christian, muslim]
+                    applies_to: "all Lords"
+                    same_options_as: levy.disband.sub_steps
+
+                  - id: remove_moved_fought_markers
+                    rule_ref: "4.8.3"
+
+          # -----------------------------------------------------------------
+          - id: end_campaign
+            rule_ref: "4.9"
+            ordered_steps:
+
+              - id: game_end_check
+                rule_ref: "4.9.1"
+                when: "this was final 40 Days of scenario"
+                effect: "End game; highest VP wins (5.3)"
+
+              - id: grow
+                rule_ref: "4.9.2"
+                when: "end of second 40 Days of Spring"
+                actor_order: [christian, muslim]
+                effect: "Each side reduces Enemy Ravage markers on map to 1/2 (round up); adjust VP"
+
+              - id: harvest
+                rule_ref: "4.9.2"
+                when: "end of second 40 Days of Summer"
+                effect: "Each Lord reduces Carts and Mules each to 1/2 (round up)"
+
+              - id: repairs
+                rule_ref: "4.9.3"
+                when: "not Winter"
+                effect: "Remove 1 Siege marker from each Locale that has 3 or 4 Siege markers"
+
+              - id: wastage
+                rule_ref: "4.9.4"
+                actor_order: [christian, muslim]
+                effect: >
+                  Discard 1 Asset OR 1 'This Lord' Capability card from each
+                  Mustered Lord with more than one of any Asset type or more
+                  than one 'This Lord' card.
+                clarification: "Player aid says 'card'; rules specify 'This Lord' Capability card."
+
+              - id: discard_arts_of_war
+                rule_ref: "4.9.5"
+                actor_order: [christian, muslim]
+                optional: true
+                effect: "Discard any Arts of War cards desired"
+
+              - id: reset
+                rule_ref: "4.9.5"
+                ordered_actions:
+                  - "Unstack Lieutenants and Lower Lords (4.1.3)"
+                  - "Advance Campaign marker to next 40-Days box"
+                  - "Flip marker to Levy (2.2.2)"
+
+# =============================================================================
+# COMMAND ACTIONS — referenced by phases.turn_cycle.campaign.command_loop.actions
+# =============================================================================
+
+command_actions:
+
+  - id: march
+    rule_refs: ["4.3", "4.3.3", "4.3.4", "4.3.5"]
+    starts_card_if_began_siege_or_battled: true   # ends card if so
+    actions_used:
+      unladen: 1
+      laden: 2
+    requires:
+      - "lord_unbesieged"
+    procedure:
+      - "Move to adjacent Locale via single Way"
+      - "Marshal may take group (4.3.1)"
+      - "Lieutenant brings Lower Lord (4.1.3)"
+    enemy_response:
+      rule_ref: "4.3.4"
+      ordered_options:
+        - id: avoid_battle
+          condition: "inactive lord may move to adjacent Locale"
+          requires: ["unladen", "way_not_used_by_enemy_approach", "destination_no_unbesieged_enemy_lord"]
+        - id: withdraw
+          condition: "inactive lord enters Friendly Stronghold there"
+          limit: "up to Siege Capacity (1.3.1)"
+        - id: stand_battle
+          condition: "neither avoided nor withdrew"
+          effect: "conduct Battle (4.4) immediately"
+    stronghold_stop_rule:
+      rule_ref: "4.3.5"
+      condition: "March stops at Unbesieged/Unbypassed Enemy Stronghold"
+      mandatory_choice: [besiege, bypass]
+    encamp_option:
+      rule_ref: "4.3.6"
+      when: "Bypassing Lord"
+      cost: "1 March action (ignore Laden)"
+      effect: "replace all Bypass markers with 1 Siege marker; ends actions on this card"
+    bypass_stronghold_summary:
+      rule_ref: "4.3.5"
+      during_march: "Stop; add actions"
+      before_march: "Remove Bypass marker; depart"
+      may_march_to_replace_bypass_with_siege: true
+      adalides_or_war_drums_card_exception:
+        rule_ref: "1.9.1"
+        effect: "May March on past Enemy Lord without stopping"
+
+  - id: siege
+    rule_ref: "4.5.1"
+    end_card_action: true            # uses entire card
+    requires:
+      - "lord_is_besieging"
+    affected_lords: "ALL Lords there"
+    moved_fought_marks: "all Lords of both sides at Locale"
+
+    surrender_check:
+      optional: true
+      requires:
+        - "no_besieged_lords_inside"
+      procedure:
+        - "Roll dice equal to Stronghold VP (1, 2, or 3 dice)"
+        - "Need each die <= (siege_markers + ravaged_markers_of_besieging_side)"
+        - max_siege_markers: 4
+        - max_ravaged_markers_factored: 1
+      on_success:
+        ordered_effects:
+          - "Remove all Siege markers there"
+          - rule_ref: "4.5.1 errata p.20 bullet 2"
+            text: "Place or remove Conquered, Jihad, and/or Seat marker(s) per Stronghold type and Territory (1.3.1, 1.4.3)"
+          - "Ravaged Land: flip Conquering side's Ravaged marker if any (4.7.2)"
+          - "Adjust Taifa status (1.4) AFTER placing/removing victory markers"
+        no_spoils: true
+
+    siegeworks_check:
+      optional: true
+      when: "Stronghold did not Surrender (or didn't roll)"
+      requires:
+        - "besieging_lords_count >= stronghold_capacity"
+      effect: "Add 1 Siege marker, max 4"
+
+  - id: storm
+    rule_ref: "4.5.2"
+    end_card_action: true   # any Battle/Storm ends card actions, 4.4.5
+    requires:
+      - "lord_outside_besieged_stronghold"
+    affected_lords: "ALL Lords there at end (Moved/Fought)"
+    procedure_ref: battle_and_storm.storm_procedure
+
+  - id: sally
+    rule_ref: "4.5.3"
+    end_card_action: true
+    requires:
+      - "lord_is_besieged"
+    affected_lords: "ALL Besieged Lords there Attack"
+    procedure_ref: battle_and_storm.sally_procedure
+    on_attacker_loss:
+      effect: "Sallying Lords Withdraw back inside; reduce Siege markers to 1 (Raid)"
+
+  - id: supply
+    rule_ref: "4.6"
+    actions_used: 1
+    requires:
+      - "lord_unbesieged"
+      - "supply_route_to_own_seat (4.6.1)"
+    procedure:
+      - "Select Supply Route(s) and dedicate Transport for each Seat used"
+      - "Add 1 Provender per Seat used as Source"
+    supply_route_constraints:
+      rule_ref: "4.6.1"
+      list:
+        - "Active Lord to his Seat(s)"
+        - "Route may not include Locale with Enemy Stronghold or Lord, unless that Enemy is Besieged or Bypassed"
+        - "1 Cart or Mule (own or Shared) required per intervening Way"
+        - "Lord at his Seat needs no Transport for that Seat"
+
+  - id: forage
+    rule_ref: "4.7.1"
+    actions_used: 1
+    requires:
+      any_of:
+        - "locale_unravaged AND lord_unbesieged"
+        - "locale_is_friendly_city_or_fortress (Gardens)"
+    procedure:
+      - if_friendly_stronghold:
+          rule_ref: "4.7.1"
+          effect: "Auto-add 1 Provender (incl. when Besieged in City/Fortress, even if Ravaged — Gardens)"
+      - else:
+          effect: "Roll 1d6: 1-3 add 1 Provender; 4-6 nothing"
+    player_aid_clarification:
+      issue: >
+        Player aid Supply Routes box bullet "Lord Besieged in City/Fortress
+        may use his Seat there (Gardens)" appears misplaced — Besieged Lord
+        cannot use Supply (4.2.1). The reference is to Forage Gardens
+        (4.7.1), not Supply (4.6).
+
+  - id: ravage
+    rule_ref: "4.7.2"
+    actions_used: 1
+    requires:
+      - "lord_unbesieged"
+      - "locale_is_enemy"
+      - "locale_not_already_ravaged_by_acting_side"
+    effect:
+      - "Place that side's Ravaged marker (1/2 VP); adjust VP"
+      - rustling:
+          rule_ref: "4.7.2"
+          if_stronghold: "Add 1 Loot AND 1 Provender to Ravaging Lord"
+          if_region:    "Add 1 Loot to Ravaging Lord"
+      - enforcing_parias:
+          rule_ref: "4.7.2"
+          condition: "this is the 1st, 3rd, 5th, ... Christian (yellow) Ravage marker in the Taifa"
+          effect: >
+            Shift that Taifa's Lord (not Yusuf/Sir/Rodrigo) Service 1 box left
+            (Vassals also if advanced rule, 3.4.2)
+
+  - id: tax
+    rule_ref: "4.7.3"
+    end_card_action: true
+    requires:
+      - "lord_unbesieged"
+      - "lord_at_own_seat"
+    effect: "Add 1 Coin to Taxing Lord's mat"
+
+  - id: pass
+    rule_ref: "4.7.4"
+    actions_used: "any (skips remaining)"
+    requires: ["any_lord_even_besieged"]
+    effect: "Do nothing"
+
+# =============================================================================
+# CAMPAIGN VICTORY (immediate) and END-OF-SCENARIO VICTORY
+# =============================================================================
+
+victory:
+
+  campaign_victory:
+    rule_ref: "5.2"
+    when: "during Campaign, a side has no Mustered Lords on map"
+    effect: "Other side wins immediately, regardless of VP"
+
+  end_of_scenario:
+    rule_refs: ["5.1", "5.3"]
+    if_no_immediate_winner: "Higher VP wins; tie = draw"
+    vp_sources:
+      - source: conquered_marker
+        value_per: 1
+        rule_refs: ["1.3.1", "1.8", "4.5.1", "4.5.2"]
+        includes_taifas_box: true
+      - source: ravaged_marker
+        value_per: 0.5
+        rule_ref: "4.7.2"
+      - source: jihad_marker
+        value_per: 0.5
+        side: muslim
+        rule_ref: "1.4.4"
+      - source: reconquista_taifa
+        value_per: 3
+        side: christian
+        rule_ref: "1.4.1"
+      - source: parias_taifa
+        value_per: 1
+        side: christian
+        rule_ref: "1.4.1"
+      - source: cathedral_seat_marker
+        value_per: 1
+        side: christian
+
+# =============================================================================
+# JIHAD ADDITION RULES (used by various actions; consolidated here)
+# =============================================================================
+
+add_jihad_rules:
+  rule_ref: "1.4.4"
+  conditions_all_required:
+    - "Stronghold is in Reconquista or Parias Taifa (not Kingdom or Independent Taifa)"
+    - "Locale is a Stronghold (not a Region)"
+    - "Locale has no Christian Conquered marker"
+    - "Locale has no Christian Seat marker"
+    - "If a Christian Lord is at the Locale, he must be Besieging or Bypassing the Stronghold"

@@ -1,0 +1,242 @@
+Taifa Politics - Reference (1.4)
+
+Territory:
+(g3els 1:4)
+
+Allegian
+(3D
+
+Conditions
+(1.4.1)
+
+ 
+
+rare
+qd. AQ ey
+
+Stronghold
+onquest
+34,144)
+Add Jihad? :
+(1.4.4, 1.9.1)
+
+  
+  
+
+   
+ 
+ 
+
+be @’
+
+ 
+ 
+ 
+  
+ 
+ 
+
+  
+ 
+ 
+
+BP Ee eroeteCoets
+
+ 
+
+  
+ 
+ 
+ 
+
+  
+
+ 
+
+ 
+
+ 
+
+  
+
+ 
+
+ 
+
+ 
+
+ 
+
+, ~Christian Lord only if Siege/Bypass
+
+ 
+
+Neutral Christian Christian
+Unc All Cities & Seats ae
+City or Seat Conquered Tha’ None
+See ee = { vit
+No Lord on map Yee
+ae =
+1VP Christian 3VP Christian None
+(VP if Sevilla) (OVP if Sevilla)
+[# it i Muslim Muslim A
+Ta Neale ad x value ~ x value 4
+‘ At Stronghold:
+‘Yes - No Christian Conquered/Seat marker No
+
+ 
+
+Taifa Lords:
+
+we.
+
+Adjust Status (1.4.3)
+Independent to Parias
+
+ 
+
+Christians add Coin equal to
+Service of Disbanded Taifa Lord ;
+
+Ge5=1))
+
+ 
+
+ 
+  
+
+co Wala
+
+= * ‘ |
+We i
++ Oye ' ‘
+
+Independent to Reconquista
+
+Flip all yellow Ravaged in Taifa to green
+
+ 
+
+ 
+
+     
+
+“MuslimiLords at Muslim Strongholds thet :
+would go Neutral add Jihad (Conquer them) la
+
+ 
+
+   
+  
+  
+ 
+ 
+  
+ 
+  
+  
+
+Muslim Lords at Muslim Strongholds that
+| would go Christian add Jihad
+
+ 
+
+Christien Lords at Muslin Strongholds that
+would go Neutral either remove Siege/Bypass
+
+OR add Jihad (markers equal to value), AQ
+
+Christian Lords at Muslim Strongholds that
+go Christian remove Siege/Bypass
+
+ 
+
+Parias to Reconquista
+
+Flip all yellow Ravaged in Taifa to green
+
+ 
+
+Muslim Lords at Neutral Strongholds that -
+would go Christian add Jihad
+
+ 
+
+Reconquista to Parias
+
+ 
+
+that ee Neutral congue a Ras
+
+ 
+
+~ Muslim Lords at Christian Strongholds that
+would go Neutral either remove Siege/Bypass
+OR add Christian Conquered (equal to value)
+   
+
+_— % Leon B zs
+Gear Map \ Des | vise = fh Sie Christian
+Iberta circa 1085 } A) IN de = sf
+— | : ous png j as : a Sancho Lords
+=—— Eudes
+“Lérida
+
+Christian Alfonso
+Lords
+
+Alvar Fanez
+
+   
+
+Gas ‘
+
+e Leon. - a 4 7S ALM
+
+Garcia Ordonez : RS
+= Zaragoza ©
+Pedro Anstirez SNe : a
+
+ 
+
+a = Al-Mustain
+Ie}
+Tokers
+: Valencia Abu Bakr
+d Toledo a Ti Muslim
+Badajoz : qi Lérida ier] Taifa
+Al-Mutawakkil Valencia MA Lords
+ei ™S52 oz
+: -@ poner or
+Cordoba i, ; Muslim
+Al-Mutamid ins eR Rodrigo Lord
+i Sevilla ; ;
+; lee 2] Sevilla (5) A v
+
+EL Cid Campeador
+
+a Granada -
+Abd Allah ——= i a = & 2
+
+en Granada” = x al-Sayyid
+
+ 
+
+ 
+
+Taifa Of a:
+
+Reconquista
+Seats Targets
+
+“O ~—— Le . 4 :
+
+ 
+
+ 
+
+’ Muslim
+Lords
+
+ 
+

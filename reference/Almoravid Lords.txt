@@ -1,0 +1,777 @@
+================================================================
+ALMORAVID — LORD REFERENCE  (v4, with Scenario F notes and
+                              Call to Arms reference)
+================================================================
+ 
+Ratings key:
+  Fealty   — Die-roll range to Muster (— = no Fealty, Call to Arms only)
+  Service  — 40-Days boxes ahead on Calendar at Muster/Disband
+  Lordship — Levy actions per Muster segment
+  Command  — Actions per Command card during Campaign
+ 
+Seats key:
+  "Seats" lists the printed pennants on the map for that Lord.
+  These count for Muster (3.4.1), Supply (4.6.1), Tax (4.7.3),
+  Call Upon an Emir (3.5.2), and — for the six Muslim Taifa
+  Lords only — Reconquista targets (1.4.1).
+  Yusuf, Sir, and Rodrigo are NOT Taifa Lords; their Seats
+  do not count toward Reconquista targets even though printed.
+ 
+Scenario F additions (Reconquista and Riposte, full-length):
+  Several entries below carry "SCENARIO F:" notes covering
+  Curias (6.2), Winter Disband (6.3.1), and Spring Muster
+  (6.3.3). These rules apply only in Scenario F, and only
+  to specific Lords. See the Scenario Adjustments document
+  for setup-level items (starting Coin, Capability cards
+  pre-assigned to mats, Ruined Land Parias Coin formula).
+ 
+ 
+================================================================
+MUSLIM LORDS  (9)
+================================================================
+ 
+----------------------------------------------------------------
+[1] AL-MUSTAIN II
+----------------------------------------------------------------
+  Full name:  Ahmad ibn Yusuf ibn Hud
+  Title:      Emir of Zaragoza
+  Taifa:      Zaragoza
+  Seats:      Zaragoza  (Reconquista target)
+  Ratings:    Fealty 4 / Service 4 / Lordship 1 / Command 2
+  Forces:     1 Sergeant, 1 Light Horse, 1 Man-at-Arms, 1 Militia
+  Assets:     1 Cart, 1 Mule, 2 Coin
+  Vassals:
+    1. Huesca                          — 1 Sergeant (svc 2)
+    2. Tudela                          — 1 Sergeant (svc 2)
+    3. Al-Malik, Emir of Albarracin    — 1 Light Horse (svc 1)
+    4. Abd Allah, Emir of Alpuente     — 1 Light Horse (svc 1)
+                                         (NOTE: not the same person
+                                         as Lord [3] Abd Allah of
+                                         Granada — same name,
+                                         different historical figure)
+ 
+----------------------------------------------------------------
+[2] ABU BAKR
+----------------------------------------------------------------
+  Full name:  Abu Bakr Muhammad ibn Abd al-Aziz ibn al-Mansur
+              ibn Abi Amir
+  Title:      Emir of Valencia
+  Taifa:      Valencia
+  Seats:      Valencia  (Reconquista target)
+  Ratings:    Fealty 2 / Service 4 / Lordship 1 / Command 2
+  Forces:     1 Sergeant, 1 Light Horse, 1 Man-at-Arms, 1 Militia
+  Assets:     1 Cart, 1 Mule, 2 Coin
+  Vassals:
+    1. Jativa                          — 1 Militia (svc 2)
+ 
+----------------------------------------------------------------
+[3] ABD ALLAH
+----------------------------------------------------------------
+  Full name:  Abu Muhammad Abd Allah ibn Buluggin ibn Badis
+              ibn Habus ibn Maksan ibn Ziri Manad al-Sinhayi
+  Title:      Emir of Granada
+  Taifa:      Granada  (ethnic Berber Zirid dynasty)
+  Seats:      Granada  (Reconquista target)
+  Ratings:    Fealty 3 / Service 4 / Lordship 1 / Command 3
+  Forces:     2 Light Horse, 3 Militia
+  Assets:     2 Carts, 1 Mule, 2 Coin
+  Vassals:
+    1. Muqatil al-Birzali el Royo      — 1 Sergeant (svc 2)
+    2. Al-Mutasim, Emir of Almeria     — 1 Light Horse (svc 1)
+    3. Tamim, Emir of Malaga           — 1 Militia (svc 1)
+ 
+----------------------------------------------------------------
+[4] AL-MUTAWAKKIL
+----------------------------------------------------------------
+  Full name:  Umar al-Mutawakkil ala Allah ibn Muhammad
+              ibn Abd Allah ibn al-Aftas
+  Title:      Emir of Badajoz
+  Taifa:      Badajoz  (Berber Aftasid dynasty)
+  Seats:      Badajoz  (Reconquista target)
+  Ratings:    Fealty 3 / Service 4 / Lordship 1 / Command 2
+  Forces:     2 Light Horse, 3 Militia
+  Assets:     1 Cart, 1 Mule, 2 Coin
+  Vassals:
+    1. Evora                           — 1 Militia (svc 2)
+    2. Lisboa                          — 1 Light Horse (svc 2)
+ 
+----------------------------------------------------------------
+[5] AL-MUTAMID
+----------------------------------------------------------------
+  Full name:  Muhammad ibn Abbad al-Mutamid
+  Title:      Emir of Sevilla  (the "Poet King")
+  Taifa:      Sevilla  (his realm includes Cordoba historically)
+  Seats:      Sevilla AND Cordoba — TWO printed pennants on the
+              map (uniquely among all Lords). Both are
+              Reconquista targets (along with Murcia, the
+              Sevilla Taifa's third City).
+  Ratings:    Fealty 5 / Service 6 / Lordship 2 / Command 3
+  Forces:     1 Sergeant, 1 Light Horse, 1 Man-at-Arms, 2 Militia
+  Assets:     2 Carts, 1 Mule, 3 Coin
+  Vassals:
+    1. Abdullah ibn Abbad              — 1 Sergeant (svc 2)
+    2. Ibn Rashiq of Murcia            — 1 Militia + 1 Man-at-Arms (svc 2)
+    3. Al-Radi ibn Abbad of Algeciras  — 1 Light Horse (svc 2)
+  Notes:      Most powerful Taifa Lord. Longest Service (6 vs 4),
+              highest Fealty, most Coin. Rallied the taifas to
+              invite the Almoravids ("rather a camel-driver in
+              Africa than a swineherd in Castilla").
+ 
+----------------------------------------------------------------
+[6] AL-MUNDIR
+----------------------------------------------------------------
+  Full name:  Al-Mundir ibn Ahmad ibn Hud
+  Title:      Emir of Lerida  (al-Mustain's uncle)
+  Taifa:      Lerida
+  Seats:      Lerida  (Reconquista target — the only non-City
+              Reconquista target in the game; Lerida is a
+              Fortress)
+  Ratings:    Fealty 4 / Service 4 / Lordship 1 / Command 3
+  Forces:     1 Sergeant, 1 Man-at-Arms, 1 Militia
+  Assets:     1 Cart, 1 Mule, 2 Coin
+  Vassals:
+    1. Denia                           — 1 Light Horse (svc 2)
+    2. Tortosa                         — 1 Sergeant (svc 2)
+ 
+----------------------------------------------------------------
+[7] YUSUF
+----------------------------------------------------------------
+  Full name:  Yusuf ibn Tashufin
+  Title:      Emir al-Murabitin  (mat title; historically also
+              proclaimed himself Emir al-Muslimin)
+  Faction:    Almoravids  (Berber Lamtuna / Sanhaja)
+  Status:     MARSHAL (gold ring) — gets 4 Command cards
+  Seats:      Algeciras (single printed banner). With the
+              AL-YAZIRAT AL-HADRA capability in play, also
+              gains a doubled Seat marker at Algeciras. If
+              Algeciras is unfriendly or Besieged at Muster,
+              uses the nearest Friendly siege-free Port.
+              NOT a Reconquista target — Yusuf is not a
+              Taifa Lord (rule 1.4.1 only counts Taifa Lord
+              Seats for Reconquista status).
+  Ratings:    Fealty — / Service 4 / Lordship 2 / Command 2
+  Forces:     2 Sergeants, 4 African Horse, 8 African Foot, 2 Militia
+  Assets:     1 Mule
+  Vassals:    None
+  Notes:      Musters only via Call to Arms ("Invite the
+              Almoravids"). Cannot be Levied via Fealty roll.
+ 
+----------------------------------------------------------------
+[8] SIR
+----------------------------------------------------------------
+  Full name:  Sir (Syr / Sayr) ibn Abi Bakr
+  Title:      Lamtuna Chieftain
+  Faction:    Almoravids  (Yusuf's cousin and brother-in-law)
+  Seats:      Algeciras (single printed banner — same Stronghold
+              as Yusuf; both have pennants there). Same
+              Al-Yazirat al-Hadra doubled-marker structure as
+              Yusuf, same fallback to nearest Friendly Port.
+              NOT a Reconquista target (same reasoning as Yusuf).
+  Ratings:    Fealty — / Service 4 / Lordship 1 / Command 2
+  Forces:     6 African Horse, 6 African Foot, 4 Militia
+  Assets:     1 Mule
+  Vassals:    None
+  Notes:      Musters only via Call to Arms. Historically the
+              Almoravid general who conquered most of the southern
+              taifas; rumored to have surpassed even Yusuf in skill.
+ 
+----------------------------------------------------------------
+[9] RODRIGO al-SAYYID  (Muslim-side)
+----------------------------------------------------------------
+  Full name:  Rodrigo Diaz de Vivar
+  Title:      al-Sayyid  ("the Lord")
+  Cylinder:   GREEN
+  Seats:      None printed on the map. Has a two-sided Seat
+              marker (al-Sayyid green / Campeador yellow) placed
+              when employed. Not a Reconquista target.
+  Ratings:    Fealty — / Service 2 / Lordship 2 / Command 4
+  Forces:     1 Knight, 1 Sergeant, 1 Light Horse,
+              1 Man-at-Arms, 1 Militia, 1 Serf
+  Assets:     1 Cart
+  Vassals:    None
+  Notes:      Musters via Call to Arms ("Employ Rodrigo" — costs
+              3 Coin from Taifas box / Muslim Lord mats). Same
+              forces/ratings as Christian-side Rodrigo Campeador;
+              only the side and price of employment differ.
+  SCENARIO F: Winter Disband (6.3.1) — if Disbanding either
+              Rodrigo, place his cylinder at Calendar box 9
+              (not on his mat), even if Beyond Service.
+ 
+ 
+================================================================
+CHRISTIAN LORDS  (7)
+================================================================
+ 
+----------------------------------------------------------------
+[1] ALFONSO VI
+----------------------------------------------------------------
+  Title:      King of Leon
+  Status:     MARSHAL (gold ring) — gets 4 Command cards
+  Seats:      Leon AND Burgos — TWO printed pennants on the map.
+              At Burgos, Alfonso's pennant shares the Stronghold
+              with Alvar Fanez's pennant (Burgos has both).
+  Ratings:    Fealty 6 / Service 4 / Lordship 3 / Command 4
+  Forces:     1 Knight, 1 Man-at-Arms, 1 Serf
+  Assets:     1 Cart, 1 Mule, 3 Coin, 2 Provender
+  Vassals:
+    1. Froila Bermudez                 — 1 Knight + 1 Sergeant
+                                         + 1 Man-at-Arms (svc 2)
+    2. Vela Ovequez                    — 1 Sergeant + 1 Militia (svc 1)
+  Special:    CATHEDRALS reminder on mat with two printed 1VP
+              markers — exclusive Capability allowing Alfonso at
+              a Conquered City to place a Cathedral Seat marker
+              (acts as both Seat and +1 VP; triggers +1 Jihad to
+              Muslims when placed). Up to two such markers exist.
+  SCENARIO F: Spring Muster (6.3.3) — if Alfonso Musters during
+              the Winter→Spring sequence, he does so at León if
+              possible (León takes priority over Burgos as his
+              free-Seat tiebreaker).
+              Cathedrals capability — may not place Seats until
+              Muster of Yusuf or Sir.
+ 
+----------------------------------------------------------------
+[2] ALVAR FANEZ
+----------------------------------------------------------------
+  Title:      King's Captain
+  Seats:      Burgos (shared Stronghold with Alfonso —
+              both have printed pennants there).
+  Ratings:    Fealty 5 / Service 4 / Lordship 2 / Command 4
+  Forces:     1 Knight, 1 Sergeant, 1 Man-at-Arms, 1 Serf
+  Assets:     1 Cart, 1 Provender
+  Vassals:
+    1. Pelayo Pelaez                   — 1 Sergeant + 1 Militia (svc 1)
+    2. Fernando Diaz                   — 1 Knight + 1 Sergeant
+                                         + 1 Man-at-Arms (svc 2)
+  Notes:      Highest Command rating among non-Marshals (tied
+              with Rodrigo). Eligible for Alferez capability
+              (spend Command to become / stop being a Lieutenant).
+ 
+----------------------------------------------------------------
+[3] GARCIA ORDONEZ
+----------------------------------------------------------------
+  Title:      Count of Najera et Calahorra
+  Seats:      Najera
+  Ratings:    Fealty 4 / Service 4 / Lordship 2 / Command 2
+  Forces:     1 Knight, 1 Sergeant, 1 Light Horse, 1 Man-at-Arms, 1 Serf
+  Assets:     1 Cart, 1 Mule, 1 Coin, 2 Provender
+  Vassals:
+    1. Gomez Gonzalez                  — 1 Sergeant + 1 Militia (svc 1)
+    2. Gonzalo Nunez                   — 1 Knight + 1 Sergeant
+                                         + 1 Man-at-Arms (svc 2)
+  Notes:      Famous historical rival of El Cid (the beard-pulling
+              incident at Cabra, 1079).
+  SCENARIO F: Curias Sequence (6.2.2, per errata) — if García
+              Ordóñez is on map when Curias trigger, Disband him
+              to the Calendar (3.3.2). Same rule applies to
+              Pedro Ansúrez.
+ 
+----------------------------------------------------------------
+[4] PEDRO ANSUREZ
+----------------------------------------------------------------
+  Title:      Count of Carrion et Saldana
+  Seats:      Simancas
+  Ratings:    Fealty 4 / Service 4 / Lordship 2 / Command 2
+  Forces:     1 Knight, 1 Sergeant, 1 Light Horse, 1 Man-at-Arms, 1 Serf
+  Assets:     1 Cart, 1 Mule, 1 Coin, 2 Provender
+  Vassals:
+    1. Martin Flainez                  — 1 Knight + 1 Sergeant
+                                         + 1 Man-at-Arms (svc 2)
+    2. Martin Alfonsez                 — 1 Sergeant + 1 Man-at-Arms (svc 1)
+  Notes:      Head of the Banu Gomez line. Alfonso's lifelong
+              friend (raised together under Pedro's father).
+  SCENARIO F: Curias Sequence (6.2.2, per errata) — if Pedro
+              Ansúrez is on map when Curias trigger, Disband him
+              to the Calendar (3.3.2). Same rule applies to
+              García Ordóñez.
+ 
+----------------------------------------------------------------
+[5] SANCHO I
+----------------------------------------------------------------
+  Full name:  Sancho Ramirez
+  Title:      King of Aragon et Pamplona
+  Seats:      Jaca  (despite his title including Pamplona,
+              his printed pennant is at Jaca — the Aragonese
+              capital. Pamplona's pennant belongs to Eudes.)
+  Ratings:    Fealty 3 / Service 3 / Lordship 2 / Command 3
+  Forces:     1 Knight, 1 Man-at-Arms, 1 Serf
+  Assets:     1 Mule, 1 Coin, 1 Provender
+  Vassals:
+    1. Garcia, Bishop of Jaca          — 1 Man-at-Arms (svc 2)
+    2. Armengol IV of Urgell           — 1 Knight + 1 Man-at-Arms (svc 1)
+  Notes:      Made Aragon a papal vassal in 1068 — eligible for
+              POPE GREGORY capability. Died storming Huesca (1094).
+ 
+----------------------------------------------------------------
+[6] EUDES
+----------------------------------------------------------------
+  Full name:  Eudes I (also Odo), "the Red"
+  Title:      Duke of Burgundy
+  Seats:      Pamplona  (Eudes is a Burgundian crusader given
+              Pamplona as his entry point into Iberia).
+  Faction:    Christian (Burgundian crusader)
+  Ratings:    Fealty — / Service 2 / Lordship 2 / Command 2
+  Forces:     2 Knights, 1 Man-at-Arms
+  Assets:     2 Carts
+  Vassals:
+    1. Raymond of Toulouse             — 1 Knight (svc 2)
+    2. Guillaume of Melun              — 1 Knight (svc 2)
+    3. Raymond of Amous                — 1 Man-at-Arms (svc 2)
+    4. Henri of Chalon                 — 1 Man-at-Arms (svc 2)
+  Notes:      Musters only via Call to Arms ("Call for Crusade"
+              if Eudes Ready and Pamplona Christian-Friendly and
+              free of Siege). INDULGENCES and SONG OF ROLAND
+              Events force him (if Unbesieged on map) to Muster
+              all his Ready Vassals immediately for no actions.
+ 
+----------------------------------------------------------------
+[7] RODRIGO CAMPEADOR  (Christian-side)
+----------------------------------------------------------------
+  Full name:  Rodrigo Diaz de Vivar
+  Title:      El Cid Campeador
+  Cylinder:   YELLOW
+  Seats:      None printed on the map. Has a two-sided Seat
+              marker (Campeador yellow / al-Sayyid green) placed
+              when employed.
+  Ratings:    Fealty — / Service 2 / Lordship 2 / Command 4
+  Forces:     1 Knight, 1 Sergeant, 1 Light Horse,
+              1 Man-at-Arms, 1 Militia, 1 Serf
+  Assets:     1 Cart
+  Vassals:    None
+  Notes:      Musters via Call to Arms ("Employ Rodrigo" — costs
+              2 Coin from Christian Lord mats; or "Reconcile with
+              Rodrigo" at VP cost if he was Muslim-side / a
+              Christian Lord was permanently removed). Same
+              forces/ratings as Muslim-side al-Sayyid; only the
+              side and employment cost differ.
+  SCENARIO F: Winter Disband (6.3.1) — if Disbanding either
+              Rodrigo, place his cylinder at Calendar box 9
+              (not on his mat), even if Beyond Service.
+ 
+ 
+================================================================
+SPECIAL VASSALS  (Christian-side only)
+================================================================
+ 
+Special Vassals (1.5.4, 3.4.2) enter play via Arts of War cards
+rather than starting on a Lord's mat. They have no Service
+Rating — ignore the printed numerals on the markers. Combat
+loss of their units leaves the Vassal marker in place; it does
+not Disband the Vassal.
+ 
+Advanced Rule exemption (3.4.2): Bishops and Crusaders are
+NEVER tracked on the Calendar, even when the Vassal Service
+advanced rule is in use. Their markers stay on the Lord's mat
+and are removed only when the Lord Disbands or per card text
+(e.g., Bishoprics discarded → all Bishops removed from play).
+ 
+Fonsadera (C23): exchanges Ready non-Bishop Vassals only.
+Bishops cannot be exchanged for Coin or Transport.
+ 
+----------------------------------------------------------------
+CRUSADERS  (2 markers)
+----------------------------------------------------------------
+  Marker 1:   French Crusaders                — 2 Knights
+              Available to: any Christian Lord
+  Marker 2:   French Crusaders                — 2 Knights
+              Available to: any Christian Lord
+ 
+  Entry:      Indulgences (Event C11) or Song of Roland
+              (Event C12). Each event immediately and
+              unavoidably Musters one available Crusaders
+              marker (with its 2 Knights) onto any one
+              Unbesieged Christian Lord. The Lord's Locale
+              does not matter. No Levy actions required;
+              cannot be declined.
+ 
+  Eudes rider: Each of the two events ALSO forces Eudes,
+              if on map and Unbesieged, to immediately Muster
+              all his Ready (regular) Vassals for no actions.
+ 
+----------------------------------------------------------------
+BISHOPS  (3 markers — printed names per counter art)
+----------------------------------------------------------------
+  Marker 1:   Edenoro, Bishop of Orense       — 1 Knight + 1 Militia
+              Available to: any Christian Lord EXCEPT Sancho
+  Marker 2:   Pedro, Bishop of Leon           — 1 Knight + 1 Man-at-Arms
+              Available to: any Christian Lord EXCEPT Sancho
+  Marker 3:   Vistuario, Bishop of Lugo       — 1 Knight + 1 Militia
+              Available to: any Christian Lord EXCEPT Sancho
+ 
+  Entry:      Bishoprics (Capability C22). While the card is
+              in play at the Christian board edge, the Christian
+              player may at any time place one available Bishop
+              marker as a Ready Vassal on each of up to three
+              eligible Christian Lords (not Sancho). Maximum one
+              Bishop per Lord. Bishops then Muster like any
+              other Vassal — a Levy action slides the marker
+              into the Forces section and adds the units shown.
+ 
+  Discard:    If Bishoprics is ever discarded, remove ALL
+              Bishop markers and their units from play.
+ 
+  Note:       Sancho already has a regular (non-Special)
+              Bishop Vassal printed on his mat — Garcia,
+              Bishop of Jaca (1 Man-at-Arms, svc 2). That
+              Vassal follows ordinary Vassal rules and is
+              unaffected by Bishoprics or its discard.
+ 
+ 
+================================================================
+CALL TO ARMS REFERENCE  (Rule 3.5)
+================================================================
+ 
+Call to Arms is a Levy segment that lets each side bring in
+Lords who have no Fealty rating — Yusuf, Sir, Eudes, and the
+two Rodrigos. These Lords cannot be Mustered through ordinary
+Fealty rolls (3.4.1); Call to Arms is the ONLY way they enter
+play. The Christian options (3.5.1) resolve first, then the
+Muslim options (3.5.2). Each side may take one option or pass.
+ 
+PLAY NOTE (per 6.1): Scenarios A and B skip Call to Arms
+entirely. The relevant Lords are absent in those scenarios.
+Skip section 3.5 if playing A or B.
+ 
+General requirement (3.5 footnote): To select any Call to Arms
+option, a side must possess any Coin, free Seat, or Jihad
+marker that the chosen option calls for.
+ 
+ 
+----------------------------------------------------------------
+"READY" — WHEN A CALL-TO-ARMS LORD CAN BE BROUGHT IN
+----------------------------------------------------------------
+ 
+Most options require their target Lord to be "Ready" per 3.4.1
+— meaning his cylinder is on the Calendar (at or to the left
+of the current Levy box), coat-of-arms face up, awaiting
+Muster. A cylinder that is in the box, set aside, or already
+on a Mustered Lord's mat is not Ready.
+ 
+How each Call-to-Arms Lord becomes Ready:
+ 
+  YUSUF                  — Scenario setup only.
+  SIR                    — Scenario setup only.
+  RODRIGO AL-SAYYID      — Scenario setup only (green cylinder
+   (Muslim, green)         on the Calendar).
+  RODRIGO CAMPEADOR      — Scenario setup OR via the Christian
+   (Christian, yellow)     "Reconcile with Rodrigo" option,
+                           which places his yellow cylinder on
+                           the Calendar 2 boxes ahead of the
+                           current Levy.
+  EUDES                  — Scenario setup OR triggered by the
+                           Muslim "Invite the Almoravids"
+                           option, which places Eudes' cylinder
+                           on the Calendar 2 boxes ahead. Per
+                           the rule's NOTE, those are the only
+                           two ways Eudes can become Ready.
+ 
+ 
+----------------------------------------------------------------
+3.5.1  CHRISTIAN OPTIONS  ("Campeador or Crusade?")
+----------------------------------------------------------------
+ 
+Christians act first. Take one option or pass.
+ 
+[1] RECONCILE WITH RODRIGO
+    Trigger:  Rodrigo al-Sayyid (green) is on the map, OR
+              Disband or combat has permanently removed any
+              Christian Lord (3.3.1, 4.4.4, 4.5.2).
+    Cost:     1 green 1VP Conquered marker added to the Taifas
+              box, PLUS 1VP for each Calendar box that Rodrigo
+              al-Sayyid's Service marker is ahead of the
+              current Levy (adjust Victory, 5.1).
+    Effect:   Disband Rodrigo al-Sayyid (if on map). Set aside
+              his green cylinder and Seat marker. Place Rodrigo
+              Campeador's yellow cylinder onto the Calendar
+              2 boxes ahead of the current Levy.
+    Example:  On Levy of turn 4, Rodrigo's green Service marker
+              is in box 6 → Reconcile costs 3VP (1 base + 2 for
+              the 2 boxes ahead).
+ 
+[2] EMPLOY RODRIGO  (Christian-side)
+    Trigger:  Rodrigo Campeador (yellow) is Ready.
+    Cost:     2 Coin total, paid from any Unbesieged Christian
+              Lord mats.
+    Effect:   Place the yellow Rodrigo Seat marker (from
+              wherever it currently is) at a Christian-Friendly
+              Stronghold that is free of Siege. Automatically
+              Muster Rodrigo Campeador there.
+ 
+[3] CALL FOR CRUSADE
+    Trigger:  Eudes is Ready AND Pamplona is Christian-Friendly
+              AND Pamplona is free of Siege.
+    Cost:     None for the Christian side. The Muslim player
+              may then add 1 Jihad marker to the map if able
+              (1.4.4, adjust Victory).
+    Effect:   Automatically Muster Eudes at Pamplona.
+ 
+ 
+----------------------------------------------------------------
+3.5.2  MUSLIM OPTIONS  ("al-Sayyid or al-Murabitun?")
+----------------------------------------------------------------
+ 
+Muslims act second. Take one option or pass.
+ 
+[1] EMPLOY RODRIGO  (Muslim-side)
+    Trigger:  Rodrigo al-Sayyid (green) is Ready.
+    Cost:     3 Coin total, paid from the Taifas box and/or any
+              Unbesieged Muslim Lord mats.
+    Effect:   Place the green Rodrigo Seat marker (from
+              wherever it currently is) at a Muslim-Friendly
+              Stronghold that is free of Siege. Automatically
+              Muster Rodrigo al-Sayyid there.
+ 
+[2] INVITE THE ALMORAVIDS
+    Trigger:  Yusuf OR Sir is Ready.
+    Cost:     None directly, but adds Eudes to the Christian
+              roster as Ready (see Effect).
+    Effect:   Place the single Seat marker for the chosen Lord
+              (Yusuf or Sir) at Algeciras and automatically
+              Muster him there. If Algeciras is not Muslim-
+              Friendly or is Besieged, use the nearest Port
+              that is Muslim-Friendly and free of Siege. THEN,
+              if Eudes is not already on the Calendar or
+              Mustered, place Eudes' cylinder on the Calendar
+              2 boxes ahead of the current Levy.
+    NOTE:     If AL-YAZIRAT AL-HADRA capability is in play
+              (1.9.1), use the doubled Seat marker rather than
+              the single one.
+    Ports list (for the fallback Stronghold):
+      Mediterranean: Algeciras, Málaga, Almería, Cartagena,
+                     Alicante, Denia, Valencia, Tortosa.
+      Atlantic:      Jerez, Huelva, Sevilla.
+      River:         Zaragoza, Lérida.
+ 
+[3] UPHOLD THE DYNASTIES
+    Trigger:  BOTH Yusuf AND Sir are Ready (cylinders on the
+              Calendar at or left of the current Levy box).
+    Cost:     Shift both Yusuf and Sir cylinders into the
+              40-Days box just to the right of the current
+              Levy box (delays Almoravid intervention by at
+              least one turn).
+    Effect:   Add 1 green 1VP Conquered marker to the Taifas
+              box AND 1 Jihad marker to the map (if able,
+              1.4.4; adjust Victory).
+    Read as:  The Taifas trade away one turn of Almoravid
+              availability for VP and a Jihad bump.
+ 
+[4] CALL UPON AN EMIR
+    Trigger:  Yusuf is at a Taifa Lord's Seat (1.5.1) that is
+              neither Enemy nor Besieged. The Taifa Lord at
+              that Seat is the target.
+    Cost:     None (beyond Yusuf already being on the Seat).
+    Effect:   EITHER
+              (a) Muster that Taifa Lord automatically (no
+                  Fealty roll required) from any Calendar box,
+                  OR
+              (b) Shift that Taifa Lord's Service marker right
+                  by 2 boxes.
+    Read as:  Yusuf, present at a Taifa capital, exerts direct
+              pressure — either calling that emir into the
+              field or wearing him down (Service shift).
+ 
+ 
+----------------------------------------------------------------
+3.5.3  DISCARD EVENTS
+----------------------------------------------------------------
+ 
+After both sides have resolved Call to Arms, both sides discard
+any Events applying only to "This Levy" (3.1.3). This closes
+out the Levy phase.
+ 
+ 
+----------------------------------------------------------------
+QUICK REFERENCE — ALL CALL-TO-ARMS OPTIONS
+----------------------------------------------------------------
+ 
+  Side  Option                  Trigger                              Cost                          Brings In / Effect
+  ----  ----------------------  -----------------------------------  ----------------------------  ------------------------------------
+  CHR   Reconcile w/ Rodrigo    Green Rodrigo on map OR Chr Lord     1 grn 1VP + 1VP per box       Yellow Rodrigo onto Calendar
+                                permanently removed                  ahead on Service              (2 ahead of Levy)
+  CHR   Employ Rodrigo (yel)    Yellow Rodrigo Ready                 2 Coin (Chr Lord mats)        Yellow Rodrigo Mustered at Friendly
+                                                                                                    Stronghold (his Seat marker placed)
+  CHR   Call for Crusade        Eudes Ready + Pamplona Chr-Friendly  none directly (Mus may add    Eudes Mustered at Pamplona
+                                + Pamplona free of Siege             1 Jihad marker)
+  MUS   Employ Rodrigo (grn)    Green Rodrigo Ready                  3 Coin (Taifas box + Mus      Green Rodrigo Mustered at Mus-Friendly
+                                                                     mats)                          Stronghold (his Seat marker placed)
+  MUS   Invite the Almoravids   Yusuf or Sir Ready                   none directly (Eudes →        Yusuf or Sir Mustered at Algeciras
+                                                                     Calendar +2)                   (or nearest Friendly Port)
+  MUS   Uphold the Dynasties    Yusuf AND Sir both Ready             Both cylinders shifted +1     +1 green 1VP marker; +1 Jihad marker
+                                                                     box right
+  MUS   Call upon an Emir       Yusuf at non-Enemy non-Besieged      none                          Force-Muster that Taifa Lord OR
+                                Taifa Lord Seat                                                     shift his Service +2 right
+ 
+  Sequence: All Christian options resolve before any Muslim
+  options. Each side picks at most one option per Levy.
+ 
+ 
+----------------------------------------------------------------
+SCENARIO APPLICABILITY
+----------------------------------------------------------------
+ 
+  Scenario A — No Call to Arms. Skip 3.5 entirely. Yusuf, Sir,
+               Eudes, both Rodrigos, and several other Lords
+               are explicitly Set Aside.
+ 
+  Scenario B — No Call to Arms. Skip 3.5 entirely. Eudes,
+               Yusuf, Sir, and each Rodrigo are explicitly
+               Set Aside.
+ 
+  Scenario C — Standard 3.5 applies. Yusuf, Sir, and Rodrigo
+               al-Sayyid begin on Calendar box 9 (Ready from
+               turn 1). Eudes and Rodrigo Campeador are NOT
+               on the Calendar at start; each can only enter
+               through the chains described above (Reconcile;
+               Invite the Almoravids → later Call for Crusade).
+ 
+  Scenario D — Standard 3.5 applies. Yusuf is already Mustered
+               at Algeciras at scenario start. Sir and Rodrigo
+               al-Sayyid begin on Calendar box 12 (the Levy
+               box). Eudes begins on Calendar box 13. Rodrigo
+               Campeador is not initially Ready (Reconcile
+               only).
+ 
+  Scenario E — Standard 3.5 applies. Same Ready set as C:
+               Yusuf, Sir, and Rodrigo al-Sayyid on Calendar
+               box 9. Eudes and Rodrigo Campeador are not
+               initially Ready.
+ 
+  Scenario F — Standard 3.5 applies. Rodrigo al-Sayyid begins
+               on Calendar box 1; Yusuf and Sir on Calendar
+               box 9. Eudes and Rodrigo Campeador are not
+               initially Ready.
+ 
+ 
+----------------------------------------------------------------
+RELATED MECHANICS  (cross-references)
+----------------------------------------------------------------
+ 
+- "Call upon an Emir" (3.5.2 option [4]) is one of the few
+  in-game ways to bypass the Fealty roll for a Taifa Lord.
+  Cards or Events that mention "Call Upon an Emir" refer to
+  this option.
+ 
+- INDULGENCES (Event C11) and SONG OF ROLAND (Event C12) sit
+  outside Call to Arms but interact with Eudes — each forces
+  Eudes (if on map and Unbesieged) to immediately Muster all
+  his Ready Vassals for no actions, and forces the Christians
+  to Muster a Crusaders Special Vassal marker. See SPECIAL
+  VASSALS section above.
+ 
+- AL-YAZIRAT AL-HADRA (capability, 1.9.1) doubles Yusuf's and
+  Sir's Algeciras Seat — when Inviting the Almoravids, use
+  the double-Seat marker if this capability is in play.
+ 
+- Eudes-via-Invite-the-Almoravids: this places Eudes on the
+  Calendar but does NOT immediately Muster him. The Christians
+  must still execute "Call for Crusade" on a later turn to
+  bring Eudes into play (and only if Pamplona is then
+  Christian-Friendly and free of Siege).
+ 
+- Both Rodrigos share forces, ratings, Vassals, and Command
+  cards (the same physical Lord, employed by different sides).
+  Only one Rodrigo is on the map at a time. Reconcile is the
+  only way to switch him from Muslim service to Christian
+  service mid-game.
+ 
+DESIGN NOTE (3.5): The VP added in Call to Arms represent the
+prestige cost for King Alfonso to reverse his exile of Rodrigo,
+or the dynastic security that the emirs sustain by delaying
+Yusuf's intervention.
+ 
+ 
+================================================================
+QUICK SUMMARY TABLES
+================================================================
+ 
+MUSLIM LORDS — RATINGS
+                          Fealty  Service  Lordship  Command
+  Al-Mustain II            4       4        1         2
+  Abu Bakr                 2       4        1         2
+  Abd Allah                3       4        1         3
+  Al-Mutawakkil            3       4        1         2
+  Al-Mutamid               5       6        2         3
+  Al-Mundir                4       4        1         3
+  Yusuf  (Marshal)         —       4        2         2
+  Sir                      —       4        1         2
+  Rodrigo al-Sayyid        —       2        2         4
+ 
+CHRISTIAN LORDS — RATINGS
+                          Fealty  Service  Lordship  Command
+  Alfonso VI  (Marshal)    6       4        3         4
+  Alvar Fanez              5       4        2         4
+  Garcia Ordonez           4       4        2         2
+  Pedro Ansurez            4       4        2         2
+  Sancho I                 3       3        2         3
+  Eudes                    —       2        2         2
+  Rodrigo Campeador        —       2        2         4
+ 
+ 
+PRINTED SEATS — QUICK LOOKUP
+  Stronghold     Lord(s)                  Reconquista Target?
+  Leon           Alfonso                  No (Christian Kingdom)
+  Burgos         Alfonso, Alvar Fanez     No (Christian Kingdom)
+  Najera         Garcia Ordonez           No (Christian Kingdom)
+  Simancas       Pedro Ansurez            No (Christian Kingdom)
+  Jaca           Sancho                   No (Christian Kingdom)
+  Pamplona       Eudes                    No (Christian Kingdom)
+  Zaragoza       Al-Mustain               YES (City + Taifa Lord Seat)
+  Lerida         Al-Mundir                YES (Taifa Lord Seat,
+                                               only non-City target)
+  Valencia       Abu Bakr                 YES (City + Taifa Lord Seat)
+  Badajoz        Al-Mutawakkil            YES (City + Taifa Lord Seat)
+  Sevilla        Al-Mutamid               YES (City + Taifa Lord Seat)
+  Cordoba        Al-Mutamid               YES (City + Taifa Lord Seat)
+  Granada        Abd Allah                YES (City + Taifa Lord Seat)
+  Algeciras      Yusuf, Sir               No (not Taifa Lords)
+ 
+ 
+================================================================
+NOTES
+================================================================
+ 
+- Marshals (Alfonso, Yusuf): 4 Command cards instead of 3; can
+  lead a Marching Group of multiple Lords; cannot be a Lower
+  Lord under a Lieutenant.
+ 
+- Call-to-Arms Lords (no Fealty rating): Yusuf, Sir, Eudes,
+  both Rodrigos. They Muster only via the special Call to Arms
+  procedure, never via a Fealty roll. See CALL TO ARMS
+  REFERENCE above for the full procedure.
+ 
+- The six Taifa Lords are: al-Mustain, Abu Bakr, Abd Allah,
+  al-Mutawakkil, al-Mutamid, al-Mundir. Cards/effects targeting
+  "Taifa" pennants apply to these six. Yusuf, Sir, and the two
+  Rodrigos are NOT Taifa Lords and not affected by Taifa pennant
+  cards/effects.
+ 
+- "Abd Allah" / "Abdullah" are the same Arabic name (Abd Allah,
+  "servant of God"); the game uses different romanizations
+  per the convention each historical figure typically appears
+  under in scholarship. The Lord [3] Abd Allah of Granada is a
+  different person from al-Mustain's Vassal "Abd Allah, Emir
+  of Alpuente" — they share a name only.
+ 
+- Reconquista target rule (1.4.1): A Taifa flips to Reconquista
+  status when ALL of its Cities AND all of its Taifa Lord
+  printed Seats are Christian-Conquered. Yusuf's and Sir's
+  Algeciras Seats do NOT count toward Sevilla Taifa Reconquista
+  even though they are printed pennants — they are not Taifa
+  Lords. Authoritative indicator: red cross-on-disc symbols
+  printed on the map.
+ 
+- Sevilla is special: 3x VP value at every Taifa status (3 VP
+  Parias / 9 VP Reconquista vs. 1 VP / 3 VP for other Taifas).
+  This is reflected on the map by Sevilla Taifa having 3
+  status-tracking boxes instead of 1.
+ 
+- Toledo Taifa has no Taifa Lord — historically, al-Qadir was
+  too weak and subservient to Alfonso to be modeled. Toledo
+  Taifa can therefore never be Independent; it is always either
+  Parias or Reconquista.
+ 
+================================================================
+END OF REFERENCE
+================================================================
+ 
+
+ 

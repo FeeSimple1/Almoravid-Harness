@@ -1,0 +1,304 @@
+Gfaseseazesss Forces (1.6, 4.4.2) ear
+
+  
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+Type Strikes Protection| Notes
+ae : ee. Armored 3
+Knights x2 q a A If MesNADA OR HAsHAM: Command +1
+Gi xl 2 Q : . If CantApor: Round 1>Melee +1
+; A d
+Sergeants ! Sete If HAsHAM: Command +1
+YO a x1 1 3
+2 If CantApor: Round 1>Melee +1
+©
+: Unarmored Missiles—Javelins: All of that Lord in any 1 Round
+ir African ir Round Ee y, 1 (mark); x1 in Battle [x Storm] ry
+Horse ® x 1 dg x7? ae Piede If HAsHam: Command +1 a7
+2 1-2 Evade vs Battle Melee only
+i ,* Unarmored *Missiles by Capability— If Javelins:
+sete i * a a x 1 Any 1 Round (mark); x1 in Battle [x Storm]
+orse ANY ;
+J Renn “4 AS... ae If HAsHAM: Command +1 Bz
+x1* ao x 1-3 p> if ANDALUSIANS: Evade 1-3 vs Battle Melee
+Men-at-Arms _ Armored Missiles by Garrison or Capability—
+a x1 1-3 If Crossbows: Armor -1; 3 select target
+x
+x* in -\| es a If eee ee +1vs Horse Melee
+und (mar
+a African By ape Missiles — Bowmen
+2 Foot Kun AJx1|@p* Gi
+Hay Foot x x 1 ee If SPEARWALL: Armor +1 vs Horse Melee NEI
+: 1 Round (mark)
+Militia — Ae: 0 x *Missiles by Garrison or Capability— | —
+Ye a a Unarmored If Crossbows: Armor -1;@=select target as
+ae MW X72 da 1 If Javelins: All of that Lord in any 1 Round (mark)
+\ x1* 3 BY is If Javelins or Slingers: x1 in Battle [x% in Storm]
+rf x* 1 * Missiles by Capability—
+Serfs ae ee xy Gia issiles by Capability Ze
+Be ed S (asta ) If Javelins: All of that Lord in any 1 Round (mark)
+Y x1* ye x1 in Battle [x¥% in Storm]
+
+ 
+
+  
+
+ 
+
+ 
+
+\
+~<Cfareeaaaa Strongholds (1.3.1, 4.5) 9
+Surrender
+: Val *
+Bik Walls| Garrisons 4:52) | Dice | If Conquered Sites
+S23! oe (3) woe [<]
+(4.7.1) / i a, 3 Pl
+Capacity 1-4 iv) x% a
+Fortress ? (r3] ais =;
+
+| +
+o
+
+Town
+
+a
+
+Castle
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+1-4
+
+1-4
+
+  
+
+ 
+
+ 
+
+ne
+
+1-4 ye
+
+as
+na?
+
+X@/25
+
+x2 a)
+X@/is
+
+ 
+
+  
+
+ 
+
+ 
+
+* Jihad % VP instead of Conquered 1VP if Muslim Conquest in Taifa (1.4.4) ** Coin, Loot, Prov if Sacked (4.5.2; not Surrendered, 4.5.1).
+
+Saas Battle & Storm exz=we====—_QS-
+
+Steps
+Array Lords
+
+ 
+
+Battle Procedure (4.4.1-4.4.5)/
+
+Active Attacking Lord Front center, then any one each
+left/right, others Reserves. Defenders center then
+Play Events | left/right, opposing each Attacker as able. (See also Sally,
+Relief Sally.) Attackers then Defenders play Events.
+
+ 
+
+ral ew) Storm Procedure (4.5. 2) Fis r
+
+Array as for Battle but only Active Attacking Lord and
+
+any one Defender in Front; rest in Reserve. SP
+
+ 
+
+ 
+ 
+ 
+ 
+ 
+
+Concede Field? Attacker then Defender may @
+
+declare this Round as last, enemy Pursuit. |.
+Reserve Lords advance into any empty Front. Prin A
+Attacker then Defender: Left or right to empty center.
+
+Front Lords with no enemy opposite: Flank closest.
+
+Defender: place Garrison (see Strongholds).
+Attacker: place Siegeworks as Walls.
+Concede? If after Round 1, Attacker may end Storm
+now as the loser.
+Reposition? If after Round 1, Attacker then ‘Defender
+“May § advance one Reserve Lord to add to Front Lords, -
+
+up to Capacity of Stronghold (@, e or ©).
+
+ 
+
+ 
+
+  
+ 
+
+1. Missiles: a. Defenders 1. a.b.
+
+Zs Mele:
+
+   
+ 
+
+/ \BZ. y, oa +: ‘Missiles: a. Defenders 7 \Qr
+b. Attackers KK AW/ c _ b. Attackers — eee y
+_a. Defending Horse oy
+
+| | 2. Melee: a. All Stronghold Deanaane ;
+b. Attacking Horse _, € : Javelins _ b. All Attackers ~
+c. Defending Foot 2: a-b. Be
+
+d. Attacking Foot > edi Cv 0
+
+    
+      
+
+ 
+
+ 
+
+_ Each unit causes 1%, 1, or 2 Hits—see Forces table. Total all (opposite, Flanks, Garrison) and round up.
+
+ 
+
+Roll any Walls. Battle: Lord opposite/Flanking/Flanked takes Hits (owner selects which first).
+Owner assigns Hits to units. Roll 1 Protection per Hit (failure Routs unit).
+
+9 Storm: Attacking Armored take Hits first. Garrison takes Hits before Defending Lords.
+
+ 
+
+Protection
+
+   
+
+Walls: Targeted side rolls 1 die per Hit; each roll within range cancels 1 Hit.
+
+Armor: Unit absorbing Hit rolls; within range absorbs 1 Hit without Rout.
+
+Evade: Roll as for Armor (above) but not if Missile Hit or during Storm.
+
+Unarmored: If no Armor or Evade (and not Serf), roll of "1" absorbs Hit without Rout.
+
+ 
+
+ 
+
+ 
+
+Routed units immediately slide back on mat; Routed Garrison and Serf units are removed.
+Routed units may not Strike or absorb Hits.
+
+When all of a Lord’s units Rout, the Lord Routes aineietly take him off the Arey,
+
+ 
+
+New Round?
+
+ 
+
+Tf all Lords of a side Routed or it Conceded the Field,
+that side loses the Battle. ‘
+If not, begin new Round at Concede?/Reposition above.
+
+If all Attackers or Defenders Routed, that side loses.
+If not and Rounds so far = Siege markers, Attacker loses.
+Otherwise, new Round with Concede?/Reposition.
+
+All. Lords" Routed units each oll ealed roll removes unit:
+
+—Retreated without Conceding or ‘Attacker in Storm roll as if Protech’ . oO s
+
+—Others roll against unmodified Protection (Armor, Evade, or Unarmored).
+Any Lord with hall u nits Removed is s permanently removed. ey
+
+ 
+
+‘Winer ei from tae who
+
+As in Battle 2 left), ig a a!
+_ Conquered Stronghol
+Assets per Strongholds table cy
+
+ 
+
+ 
+
+ 
+
+: “Shift that Lord's Service [and his Vassals'] left |
+by number of boxes equal to % die roll, rounded pee 3
+
+ 
+
+ 
+
+WT Set
+
+Aftermath
+
+ought
+
+ 
+
+Mark all Lords Moved/Fought.
+
+Discard any “Hold” Events used at this Battle or Storm.
+
+If Battle starts Siege, add: 1 marker; if lifts Siege, remove markers.
+If Sally Raid (4.5.3), reduce Siege to 1 marker.
+
+If Stronghold changed hands; adjust Conquered/Jihad/Ravaged/VP (1.3.1, 1.4.4, 4.5.1).
+
+Recovery: No more Rae on this Command card—go to Feed/Pay/Disband (4.8).
+
+  
+

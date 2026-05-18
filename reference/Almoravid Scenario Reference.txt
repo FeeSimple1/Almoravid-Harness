@@ -1,0 +1,295 @@
+SCENARIO A — Toledo Beset, Spring 1085
+Length: 2 turns (boxes 1–2)
+Starting VP: Christian 5, Muslim 8
+ 
+Map:
+- Parias in Toledo, Badajoz, Granada, and Lérida Taifas.
+- Alfonso, Pedro Ansúrez, and García Ordóñez at Sahagún; Sancho at Jaca.
+- Álvar Fáñez, one yellow Siege, yellow Ravaged, and three Jihad at Toledo City.
+- Al-Mutamid at Sevilla City; al-Mustain at Zaragoza City; Abu Bakr at Valencia City.
+- Yellow Ravaged at Talavera.
+- Two Jihad each at Calatrava and Uclés, one Jihad at Trujillo.
+ 
+Calendar:
+- Box 1 has Levy marker.
+- Box 3 has Scenario End and Sancho Service marker.
+- Box 4 has Alfonso, Álvar Fáñez, Pedro Ansúrez, García Ordóñez, al-Mustain, and Abu Bakr Service markers.
+- Box 5 has yellow Victory marker.
+- Box 6 has al-Mutamid Service marker.
+- Box 8 has green Victory marker.
+ 
+Taifas Box: 4 green 1VP Conquered markers.
+ 
+Mats — Christian:
+- Alfonso (BATTERING RAM)
+- Pedro Ansúrez
+- García Ordóñez
+- Álvar Fáñez (BALLESTEROS)
+- Sancho
+ 
+Mats — Muslim:
+- Al-Mutamid
+- Al-Mustain
+- Abu Bakr
+ 
+Set Aside: All Lords not named above. (Eudes, Rodrigo Campeador, Abd Allah, al-Mutawakkil, al-Mundir, Yusuf, Sir, Rodrigo al-Sayyid — left out to simplify.)
+ 
+Special Rules:
+- Events: Muslims start holding TAIFA MARRIAGE Event card.
+- No Call to Arms: Skip all Call to Arms segments (3.5) in this scenario. (Those Lords are absent.)
+ 
+PLAY NOTE: On strategy, see the rules for change in Taifa status to Reconquista (1.4).
+ 
+ 
+================================================================
+ 
+SCENARIO B — Quelling of the Tajo, Summer 1085
+Length: 2 turns (boxes 3–4)
+Starting VP: Christian 9, Muslim 8
+ 
+Map:
+- Reconquista in Toledo Taifa.
+- Parias in Badajoz, Granada, and Lérida Taifas.
+- At Toledo City — Alfonso, Álvar Fáñez, three yellow Conquered, and one green Ravaged.
+- Three Jihad at Calatrava, two Jihad each at Trujillo and Uclés.
+- Al-Mutamid at Sevilla City; al-Mustain at Zaragoza City; Abu Bakr at Valencia City.
+ 
+Calendar:
+- Box 3 has Levy marker; Pedro Ansúrez, García Ordóñez, Sancho, al-Mutawakkil, Abd Allah, and al-Mundir cylinders.
+- Box 5 has Scenario End and al-Mustain and Abu Bakr Service markers.
+- Box 6 has Alfonso, Álvar Fáñez, and al-Mutamid Service markers.
+- Box 8 has green Victory marker.
+- Box 9 has yellow Victory marker.
+ 
+Taifas Box: 4 green Conquered 1VP markers.
+ 
+Mats — Christian:
+- Alfonso
+- Álvar Fáñez
+ 
+Mats — Muslim:
+- Al-Mutamid
+- Abu Bakr
+- Al-Mustain
+ 
+Set Aside: Eudes, Yusuf, Sir, and each Rodrigo (Christian and Muslim). (They did not take part in this campaign.)
+ 
+Special Rules:
+- Events: Muslims start holding AL-SUMAISIR Event card.
+- First Levy: Muslims may use twice their Lordship in the first Muster (3.4).
+- No Call to Arms: Skip all Call to Arms segments (3.5) in this scenario. (Those Lords are absent.)
+ 
+PLAY NOTE: This scenario adds Lords Ready for Muster (3.4.1), in the case of Taifa Lords yielding Coin and removing Parias victory points (1.4.2, 5.1). With Toledo a Reconquista Taifa, most Locales there are Christian Friendly (1.3.1, 1.4.1).
+ 
+ 
+================================================================
+ 
+SCENARIO C — Parias Wars, early 1086
+Length: 3 turns (boxes 9–11)
+Starting VP: Christian 8, Muslim 7
+ 
+Map:
+- Reconquista in Toledo Taifa.
+- Parias in Valencia Taifa.
+- Alfonso at León Town.
+- Álvar Fáñez at Burgos.
+- Sancho at Jaca.
+- Three yellow Conquered and one green Ravaged at Toledo City.
+- Yellow Ravaged at Alcaraz and Albacete.
+- Three Jihad at Calatrava, two Jihad at Játiva.
+- Al-Mutamid at Sevilla City.
+- Al-Mustain, Abd Allah, al-Mutawakkil, and al-Mundir cylinders each at that Lord's own Seat.
+ 
+Calendar:
+- Box 7 has green Victory marker.
+- Box 8 has yellow Victory marker.
+- Box 9 has Levy marker and Pedro Ansúrez, García Ordóñez, Yusuf, Sir, and Rodrigo al-Sayyid (green) cylinders.
+- Box 11 has Sancho Service marker.
+- Box 12 has Scenario End and Alfonso, Álvar Fáñez, al-Mustain, Abd Allah, al-Mutawakkil, and al-Mundir Service markers.
+- Box 14 has al-Mutamid Service marker.
+ 
+Taifas Box: 4 green Conquered 1VP markers.
+ 
+Mats — Christian:
+- Alfonso (1 Coin)
+- Sancho
+- Álvar Fáñez (GARCÍA JIMÉNEZ)
+ 
+Mats — Muslim:
+- Al-Mutamid (Coin x4)
+- Abd Allah (Coin x4)
+- Al-Mustain (Coin x4)
+- Al-Mutawakkil (Coin x4)
+- Al-Mundir (Coin x4)
+ 
+Set Aside: Abu Bakr. (His death and overthrow of his son Uthman all but ended his dynasty.)
+ 
+Special Rules:
+- Standard Call to Arms (3.5) applies.
+ 
+PLAY NOTE: This scenario adds Lords who may be Called to Arms or declined for VP (3.5).
+ 
+Note (re: Eudes / Rodrigo Campeador): Neither is on the Calendar at start and neither is in the Set Aside list. Per 3.5.1, Eudes Readies only by scenario setup or if Muslims Invite the Almoravids; Rodrigo Campeador (yellow) Readies only via "Reconcile with Rodrigo." Both are therefore in the game pool but unavailable until those triggers occur.
+ 
+ 
+================================================================
+ 
+SCENARIO D — Arrival of the Africans, mid-1086
+Length: 3 turns (boxes 12–14)
+Starting VP: Christian 11, Muslim 10
+ 
+Map:
+- Reconquista in Toledo Taifa.
+- Parias in Valencia and Lérida Taifas.
+- Three yellow Conquered, green Ravaged at Toledo City; one yellow Conquered each at Aledo and Játiva; yellow Ravaged at Alcaraz and Burriana.
+- Three Jihad at Calatrava, two Jihad at Uclés, and one each at Trujillo and Cuenca.
+- Pedro Ansúrez at Simancas.
+- García Ordóñez with Bypass at Tudela.
+- Alfonso, Sancho, and one yellow Siege on al-Mustain at Zaragoza City.
+- Álvar Fáñez at Valencia City.
+- Al-Mutamid at Sevilla City, al-Mutawakkil at Badajoz City, and Abd Allah at Granada City.
+- Yusuf cylinder and double Seat marker at Algeciras.
+- ANDALUSIANS, AL-YAZIRAT AL-HADRA, and CAMELS cards at Muslim board edge.
+ 
+Calendar:
+- Box 10 has green Victory marker.
+- Box 11 has yellow Victory marker.
+- Box 12 has Levy marker; Sir and Rodrigo al-Sayyid (green) cylinders.
+- Box 13 has Eudes cylinder.
+- Box 14 has Sancho Service marker.
+- Box 15 has Scenario End; Alfonso, Álvar Fáñez, Pedro Ansúrez, García Ordóñez, Abd Allah, al-Mutawakkil, al-Mustain, and Yusuf Service markers.
+- Box 16 has al-Mutamid Service marker and al-Mundir cylinder.
+ 
+Taifas Box: 6 green Conquered 1VP markers.
+ 
+Mats — Christian:
+- Alfonso (SIEGE TOWERS, BATTERING RAM)
+- Pedro Ansúrez
+- García Ordóñez
+- Sancho
+- Álvar Fáñez
+ 
+Mats — Muslim:
+- Yusuf (Coin x4)
+- Al-Mutamid
+- Al-Mutawakkil
+- Abd Allah
+- Al-Mustain (ARRADA, M14 RIBAT MONKS)
+ 
+Set Aside: Abu Bakr.
+ 
+Special Rules:
+- First Levy: Alfonso and al-Mustain take part in the first Muster (3.4) despite being at a Siege.
+- Standard Call to Arms (3.5) applies.
+ 
+Note (re: Rodrigo Campeador): Yellow Rodrigo is not on the Calendar and not in Set Aside. He Readies only via "Reconcile with Rodrigo" (3.5.1), which would Disband the green Rodrigo placed at Box 12.
+ 
+ 
+================================================================
+ 
+SCENARIO E — Alfonso and the Almoravids, 1086
+Length: 6 turns (boxes 9–14)
+Starting VP: Christian 8, Muslim 8
+ 
+Map:
+- Reconquista in Toledo Taifa.
+- Parias in Valencia Taifa.
+- Alfonso at León Town.
+- Álvar Fáñez at Burgos.
+- Sancho at Jaca.
+- Three yellow Conquered and one green Ravaged at Toledo City.
+- Yellow Ravaged at Alcaraz and Albacete.
+- Three Jihad at Calatrava.
+- Two Jihad each at Trujillo and Játiva.
+- Al-Mutamid at Córdoba.
+- Al-Mustain, Abd Allah, al-Mutawakkil, and al-Mundir each at that Lord's own Seat.
+ 
+Calendar:
+- Box 8 has yellow and green Victory markers.
+- Box 9 has Levy marker and Pedro Ansúrez, García Ordóñez, Yusuf, Sir, and Rodrigo al-Sayyid (green) cylinders.
+- Box 10 has al-Mutawakkil Service marker.
+- Box 11 has Sancho and Abd Allah Service markers.
+- Box 12 has Alfonso, Álvar Fáñez, and al-Mustain Service markers.
+- Box 13 has al-Mundir Service marker.
+- Box 14 has al-Mutamid Service marker.
+- Box 15 has Scenario End marker.
+ 
+Taifas Box: 4 green Conquered 1VP markers.
+ 
+Mats — Christian:
+- Alfonso (1 Coin)
+- Sancho
+- Álvar Fáñez (GARCÍA JIMÉNEZ)
+ 
+Mats — Muslim:
+- Al-Mutamid (Coin x4)
+- Al-Mutawakkil (Coin x4)
+- Abd Allah (Coin x4)
+- Al-Mustain (Coin x4)
+- Al-Mundir (Coin x4)
+ 
+Set Aside: Abu Bakr.
+ 
+Special Rules:
+- Ruined Land: Parias Coin (1.4.3) awards Coin equal to Service less the number of Ravaged markers (of either side) in the Taifa.
+- Standard Call to Arms (3.5) applies.
+ 
+Note (re: Eudes / Rodrigo Campeador): Same situation as Scenario C — neither is on the Calendar at start and neither is set aside. Each Readies only through Call to Arms triggers per 3.5.1.
+ 
+ 
+================================================================
+ 
+SCENARIO F — Reconquista and Riposte, 1085–1086
+Length: Up to 14 turns (boxes 1–14), with Winter Sequence in boxes 7–8 and possible Curias-driven skip from Autumn (box 5 or 6) to Winter (box 7). Without Curias firing: full 14 turns. With Curias firing in box 5: 12 turns. With Curias firing in box 6: 13 turns.
+Starting VP: Christian 7, Muslim 10
+ 
+Map:
+- Parias in Toledo, Badajoz, Granada, Valencia, Zaragoza, and Lérida Taifas.
+- Alfonso, Pedro Ansúrez, and García Ordóñez at Sahagún.
+- Álvar Fáñez, one yellow Siege, yellow Ravaged, and three Jihad markers at Toledo City.
+- Al-Mutamid at Sevilla City.
+- Yellow Ravaged at Talavera.
+- Two Jihad markers each at Calatrava and Uclés.
+- One Jihad marker at Trujillo.
+ 
+Calendar:
+- Box 1 has Levy marker and Sancho, Abu Bakr, al-Mustain, al-Mundir, al-Mutawakkil, Abd Allah, and Rodrigo al-Sayyid (green) cylinders.
+- Box 4 has Alfonso, Álvar Fáñez, Pedro Ansúrez, and García Ordóñez Service markers.
+- Box 6 has al-Mutamid Service marker.
+- Box 7 has yellow Victory marker.
+- Box 9 has Yusuf and Sir cylinders.
+- Box 10 has green Victory marker.
+- Box 15 has Scenario End marker.
+ 
+Taifas Box: 6 green Conquered 1VP markers.
+ 
+Mats — Christian:
+- Alfonso
+- Pedro Ansúrez
+- García Ordóñez
+- Álvar Fáñez
+ 
+Mats — Muslim:
+- Al-Mutamid
+ 
+Set Aside: (none listed)
+ 
+Special Rules:
+- Events: Muslims start holding TAIFA MARRIAGE Event card.
+- Capabilities: CATHEDRALS may not place Seats until Muster of Yusuf or Sir.
+- Ruined Land: Parias Coin (1.4.3) awards Coin equal to Service less the number of Ravaged markers (of either side) in the Taifa.
+- 1085–1086 Sequence: Apply 6.2 Curias and 6.3 Winter rules to the scenario's first Autumn and Winter, respectively. (See "Curias / Winter Procedure" below.)
+- 6.3.5 Arts of War: In the first Spring Levy (box 9), draw Capabilities instead of Events (3.1).
+- Standard Call to Arms (3.5) applies.
+ 
+Curias / Winter Procedure (Scenario F only):
+ 
+6.2 Curias — Check at start of first Autumn Levy (box 5); if not triggered, check again at start of second Autumn Levy (box 6).
+- Curias condition: Locales (not the Taifas Box) have more total yellow (Christian) Conquered + Ravaged markers than green (Muslim) Conquered + Ravaged + Jihad markers (not VP).
+- If condition met, Christians MUST: place a Curias marker in the current Levy's box (and a second in box 6 if firing in box 5); remove one 1VP Conquered from the Taifas Box per Curias marker placed (adjust Victory); advance Levy marker to box 7 (skip 1 or 2 boxes); shift Service markers of Beyond-Service Lords (in box 6 or lower) to box 7; if Pedro Ansúrez and/or García Ordóñez are on map, Disband them to the Calendar (3.3.2); proceed with Winter sequence.
+ 
+6.3 Winter — Boxes 7 and 8 use Winter Disband / Winter Siege / Spring Muster / Plowing instead of normal Levy/Campaign.
+- 6.3.1 Winter Disband (box 7): Pay Lords; remove any Beyond Service (exception: Rodrigo). All remaining Mustered Lords except those at Sieges Disband as if at Service limit, modified: clear each mat and place each cylinder on his mat (not Calendar); Disbanding Taifa Lords put all Coin from their mats into the Taifas Box (do not adjust Taifa status or award Parias Coin); if Disbanding either Rodrigo, place his cylinder at Calendar box 9 (not on mat) even if Beyond Service. Then discard all board-edge Capabilities.
+- 6.3.2 Winter Siege (boxes 7 and 8): Each Besieging Lord may take one Supply or Ravage action; each Lord at a Siege Locale Feeds; then Christian, then Muslim, may Pay Lords at Siege and must Disband Lords at Siege Locales at or beyond Service limit.
+- 6.3.3 Spring Muster (end of box 8): Christian Lords who Disbanded to mats automatically Muster — place cylinders at free Seats, Service markers ahead the normal number of boxes, prepare mats anew. If Alfonso Musters, he does so at León if possible. Lords with no free Seat do not Muster; place cylinder ahead on Calendar as if Disbanded this turn. Then Muslim Lords who Disbanded to mats and have a free Seat automatically Muster the same way; Taifa Lords with no free Seat go on the Calendar per 3.3.2 and adjust Taifa status (including any award of Parias Coin).
+- 6.3.4 Plowing (end of box 8): Each Lord at a Siege reduces Carts and Mules each to ½ (round up).

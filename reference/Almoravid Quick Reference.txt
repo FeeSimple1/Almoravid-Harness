@@ -1,0 +1,292 @@
+================================================================
+ALMORAVID — QUICK REFERENCE TABLES
+================================================================
+Five lookup tables synthesizing rules content that the rulebook
+spreads across multiple sections. Everything else from the
+foldout (Sequence of Play, Battle/Storm procedures, sidebars)
+is in the rulebook in equivalent form and not reproduced here.
+ 
+ERRATA (15Feb2023): The foldout's Forces & Strongholds Crossbows
+icons should show "−1 vs Armor." The v2 foldout already shows
+this; the tables below include it explicitly.
+ 
+ 
+================================================================
+TABLE 1 — FORCES  (rules 1.6, 4.4.2, 4.5.2)
+================================================================
+ 
+Each unit lists Strikes in four categories:
+  Strikes               — always-available Battle Strikes
+  Strikes by Capability — only if Lord has the matching Arts of
+                          War capability card (Battle context)
+  Strikes by Garrison   — automatic when defending in Storm; only
+                          Men-at-Arms and Militia get these
+  Storm Strikes         — what the unit Strikes at during a Storm
+                          action (4.5.2), combining all sources
+ 
+STORM RULE (4.5.2): A unit Strikes in Storm using its Battle
+values, EXCEPT Javelins and Slingers reduce x1 → x1/2 in Storm
+(the only general reduction the rules specify). When a unit's
+Battle Melee differs from its Storm Melee (e.g., Knights), that
+difference is shown explicitly on the foldout.
+ 
+Notes column lists Arts of War cards (by number) that modify the
+unit beyond Strikes (Protection or Lord-rating effects).
+Card-number suffixes: (Cap) = bottom-half capability,
+                      (Evt) = top-half event.
+ 
+HORSE
+-----
+Knights — silver
+  Strikes:               Melee x2
+  Strikes by Capability: —
+  Strikes by Garrison:   —
+  Storm Strikes:         Melee x1
+  Protection:            Armored 1-4
+  Notes (cards):         C8 Cantador (Evt): +1 Hit Round 1 Melee.
+                         C11/C12 Mesnada (Cap) or M11/M21 Hasham
+                          (Cap): Lord's Command +1.
+ 
+Sergeants — steel
+  Strikes:               Melee x1
+  Strikes by Capability: —
+  Strikes by Garrison:   —
+  Storm Strikes:         Melee x1
+  Protection:            Armored 1-3
+  Notes (cards):         C8 Cantador (Evt): +1 Hit Round 1 Melee.
+                         M11/M21 Hasham (Cap): Lord's Command +1.
+ 
+African Horse — blue
+  Strikes:               Javelins x1, any 1 Round (mark);
+                         Melee x1/2
+  Strikes by Capability: —
+  Strikes by Garrison:   —
+  Storm Strikes:         Javelins x1/2 (per 4.5.2);
+                         Melee x1/2
+  Protection:            Unarmored 1 / Evade 1-2 (Melee only)
+  Notes (cards):         M11/M21 Hasham (Cap): Lord's Command +1.
+ 
+Light Horse — brown
+  Strikes:               Melee x1/2
+  Strikes by Capability: Missiles x1/2 — C4/C5 Arqueros (Cap),
+                          M4/M5 Alrama (Cap)  [Bowmen]
+                         Javelins x1, any 1 Round, mark —
+                          C7 Jabalinas (Cap), M3/M6 Harbah (Cap)
+  Strikes by Garrison:   —
+  Storm Strikes:         Melee x1/2;
+                         Missiles x1/2 (with Bowmen Cap);
+                         Javelins x1/2 (per 4.5.2; with
+                          Javelins Cap)
+  Protection:            Unarmored 1
+  Notes (cards):         M10 Andalusians (Cap): Evade 1-3 vs
+                          Battle Melee.
+                         M11/M21 Hasham (Cap): Lord's Command +1.
+ 
+FOOT
+----
+Men-at-Arms — steel
+  Strikes:               Melee x1
+  Strikes by Capability: Crossbows: Missiles x1/2, −1 vs Armor,
+                          firing side selects target —
+                          C2 Ballesteros (Cap), M2 Aqqara (Cap)
+                         Bowmen: Missiles x1/2 — C4/C5 Arqueros
+                          (Cap), M4/M5 Alrama (Cap)
+  Strikes by Garrison:   Crossbows: Missiles x1/2, −1 vs Armor,
+                          firing side selects target (auto)
+  Storm Strikes:         Melee x1;
+                         Missiles x1/2 (with Cap or Garrison)
+  Protection:            Armored 1-3
+  Notes (cards):         M7 Spear Wall (Evt): Armor +1 vs Horse
+                          Melee, 1 Round (mark).
+ 
+African Foot — blue
+  Strikes:               Missiles x1/2 (Bowmen);
+                         Melee x1
+  Strikes by Capability: —
+  Strikes by Garrison:   —
+  Storm Strikes:         Missiles x1/2;
+                         Melee x1
+  Protection:            Armored 1-2
+  Notes (cards):         M7 Spear Wall (Evt): Armor +1 vs Horse
+                          Melee, 1 Round (mark).
+ 
+Militia — brown
+  Strikes:               Melee x1/2
+  Strikes by Capability: Crossbows: Missiles x1/2, −1 vs Armor,
+                          firing side selects target —
+                          C2 Ballesteros (Cap), M2 Aqqara (Cap)
+                         Bowmen: Missiles x1/2 — C4/C5 Arqueros
+                          (Cap), M4/M5 Alrama (Cap)
+                         Javelins: x1, any 1 Round, mark —
+                          C7 Jabalinas (Cap), M3/M6 Harbah (Cap)
+                         Slingers: x1 (max 3 Militia per Lord) —
+                          C9 Slingers (Cap), M7 Slingers (Cap)
+  Strikes by Garrison:   Bowmen: Missiles x1/2 (regular Bowmen;
+                          NO −1 vs Armor, NO target selection)
+  Storm Strikes:         Melee x1/2;
+                         Crossbows/Bowmen x1/2 (with Cap or
+                          Garrison);
+                         Javelins x1/2 (per 4.5.2; with Cap);
+                         Slingers x1/2 (per 4.5.2; with Cap)
+  Protection:            Unarmored 1
+  Notes (cards):         —
+ 
+Serfs — tan
+  Strikes:               Melee x1/2
+  Strikes by Capability: Bowmen: Missiles x1/2 — C4/C5 Arqueros
+                          (Cap), M4/M5 Alrama (Cap)
+                         Javelins: x1, any 1 Round, mark —
+                          C7 Jabalinas (Cap), M3/M6 Harbah (Cap)
+  Strikes by Garrison:   —
+  Storm Strikes:         Melee x1/2;
+                         Bowmen x1/2 (with Cap);
+                         Javelins x1/2 (per 4.5.2; with Cap)
+  Protection:            Unarmored X (auto-remove on Hit)
+  Notes (cards):         —
+ 
+OTHER CARD EFFECTS NOT LISTED ABOVE
+  Several Events affect missile values across the board — e.g.,
+  C1/M1 Hills (boost Slingers and other Missiles when Defending).
+  See the Arts of War reference for the full list.
+ 
+ 
+================================================================
+TABLE 2 — STRONGHOLDS  (rules 1.3.1, 4.5)
+================================================================
+ 
+Garrison units strike at x1/2 (the standard missile rate).
+Garrison Men-at-Arms with Crossbows: −1 vs Armor; the firing
+side selects which enemy unit takes the Hit.
+ 
+Type     | Cap | Val | Walls | Garrison                          | Surr  | Spoils*
+---------+-----+-----+-------+-----------------------------------+-------+--------------------
+City     |  3  |  3  |  1-4  | 3 Men-at-Arms (Crossbows)         | 3 dc  | Conquered marker;
+(Gardens)|     |     |       |   + 3 Militia (Bowmen)            |       |  Coin x2, Loot x2,
+         |     |     |       |                                   |       |  Prov x4
+---------+-----+-----+-------+-----------------------------------+-------+--------------------
+Fortress |  2  |  2  |  1-4  | 3 Men-at-Arms (Crossbows)         | 2 dc  | Conquered marker;
+(Gardens)|     |     |       |   + 1 Militia (Bowmen)            |       |  Coin, Loot, Prov x3
+---------+-----+-----+-------+-----------------------------------+-------+--------------------
+Town     |  2  |  1  |  1-4  | 2 Men-at-Arms (Crossbows)         | 1 die | Conquered marker;
+         |     |     |       |   + 1 Militia (Bowmen)            |       |  Coin, Prov x2
+---------+-----+-----+-------+-----------------------------------+-------+--------------------
+Castle   |  1  |  1  |  1-4  | 1 Man-at-Arms (Crossbows)         | 1 die | Conquered marker;
+         |     |     |       |   + 1 Militia (Bowmen)            |       |  Coin, Prov
+ 
+  * Cap (Capacity, 4.5.1): Lords needed for Siegeworks;
+    also Capacity for Reposition during Storm.
+  * Val (Stronghold Value, 1.3.1): number of Conquered or
+    Jihad markers placed on Conquest. Each Conquered marker
+    is 1 VP; each Jihad marker is 1/2 VP. Also = Surrender
+    dice rolled (4.5.1).
+  * Walls 1-4: Targeted side rolls 1 die per Hit; each roll
+    within range (1-4) cancels 1 Hit.
+  * Cities and Fortresses have Gardens (4.7.1).
+  * Spoils shown only if Sacked (4.5.2); not awarded if
+    Surrendered (4.5.1).
+  * Garrison Militia are regular Bowmen — they do NOT get
+    the −1 vs Armor or target-selection benefits that
+    Garrison Men-at-Arms with Crossbows have.
+ 
+ 
+================================================================
+TABLE 3 — COMMANDS  (rules 4.2 - 4.7)
+================================================================
+ 
+Sharing: Any Assets among Lords at same Locale (1.5.2).
+Besieged Lord may only Sally, Forage (Gardens), or Pass.
+ 
+Action  | Requirements                       | Rule
+--------+------------------------------------+-------
+March   | Two actions if Laden               | 4.3
+Siege   | Besieging Lord; uses entire card   | 4.5
+Storm   | Besieging Lord                     | 4.5.2
+Sally   | Besieged Lord                      | 4.5.3
+Supply  | Route to own Seat(s)               | 4.6.1
+Forage  | Unravaged Locale, or Friendly      | 4.7.1
+        |  Fortress/City (Besieged: F/C only)|
+Ravage  | Enemy Locale, not Ravaged          | 4.7.2
+Tax     | At own Seat; uses entire card      | 4.7.3
+Pass    | Any Lord, even Besieged            | 4.7.4
+ 
+ 
+================================================================
+TABLE 4 — TAIFA POLITICS  (rule 1.4)
+================================================================
+ 
+                       INDEPENDENT     PARIAS             RECONQUISTA        KINGDOMS
+                                                                             (Aragón, León)
+---------------------+---------------+------------------+------------------+-------------
+Allegiance           | Muslim        | Neutral          | Christian        | Christian
+(1.3.1, 1.4.2)       |               |                  |                  |
+---------------------+---------------+------------------+------------------+-------------
+Conditions           | Unconquered   | Unconquered      | All Cities &     | None
+(1.4.1)              |  City or Seat;|  City or Seat;   |  Seats           |
+                     | Taifa Lord    | No Taifa Lord    |  Conquered       |
+                     |  on map       |  on map          |                  |
+---------------------+---------------+------------------+------------------+-------------
+Victory Points       | None          | 1 VP Christian   | 3 VP Christian   | None
+(1.4.2, 5.1)         |               | (3 VP Sevilla)   | (9 VP Sevilla)   |
+---------------------+---------------+------------------+------------------+-------------
+Stronghold Conquest  | 1 VP          | 1 VP Christian / | 1/2 VP Muslim    | 1 VP Muslim
+(1.3.1, 1.4.4)       |  Christian    |  1/2 VP Muslim   |  x value         |  x value
+                     |  x value      |  x value         |                  |
+---------------------+---------------+------------------+------------------+-------------
+Add Jihad?           | No            | Yes — at         | Yes — at         | No
+(1.4.4, 1.9.1)       |               |  Stronghold:     |  Stronghold:     |
+                     |               | - No Christian   | - No Christian   |
+                     |               |   Conquered/     |   Conquered/     |
+                     |               |   Seat marker    |   Seat marker    |
+                     |               | - Christian Lord | - Christian Lord |
+                     |               |   only if Siege/ |   only if Siege/ |
+                     |               |   Bypass         |   Bypass         |
+ 
+ 
+================================================================
+TABLE 5 — ADJUST STATUS  (rule 1.4.3)
+================================================================
+ 
+INDEPENDENT → PARIAS
+  - Christians add Coin equal to Service of Disbanded Taifa Lord.
+  - Muslim Lord at Muslim Stronghold that would go Neutral:
+    add Jihad (Conquer them).
+  - Christian Lord at Muslim Stronghold that would go Neutral:
+    either remove Siege/Bypass OR add Jihad (markers = value).
+ 
+INDEPENDENT → RECONQUISTA
+  - Flip all yellow Ravaged in Taifa to green.
+  - Muslim Lord at Muslim Stronghold that would go Christian:
+    add Jihad.
+  - Christian Lord at Muslim Stronghold that goes Christian:
+    remove Siege/Bypass.
+ 
+PARIAS → INDEPENDENT
+  - Flip all green Ravaged in Taifa to yellow.
+  - Christian Lord at Neutral Stronghold that would go Muslim:
+    Conquer them.
+ 
+PARIAS → RECONQUISTA
+  - Flip all yellow Ravaged in Taifa to green.
+  - Muslim Lord at Neutral Stronghold that would go Christian:
+    add Jihad.
+ 
+RECONQUISTA → INDEPENDENT
+  - Flip all green Ravaged in Taifa to yellow.
+  - Christian Lord at Christian Stronghold that would go Muslim:
+    Conquer them.
+  - Muslim Lord at Christian Stronghold that goes Muslim:
+    remove Siege/Bypass.
+ 
+RECONQUISTA → PARIAS
+  - Christian Lord at Christian Stronghold that would go Neutral:
+    Conquer them.
+  - Muslim Lord at Christian Stronghold that would go Neutral:
+    either remove Siege/Bypass OR add Christian Conquered
+    (equal to value).
+ 
+ 
+================================================================
+END
+================================================================
+ 
+

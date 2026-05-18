@@ -1,0 +1,576 @@
+================================================================
+ALMORAVID — STRATEGIC NOTES
+Status: PLAYER HEURISTICS, not rules
+Precedence: errata > rules > references > THIS FILE
+================================================================
+
+These are observations from played scenarios and from published
+testers' replays and player commentary, recorded for faster
+decision-making in future play. They are NOT rules, NOT errata,
+and NOT authoritative. Where a heuristic appears to conflict
+with rules or scenario-specific conditions, the rules and
+scenario text govern. Treat each note as "consider this" rather
+than "do this."
+
+The notes assume normal play. Bidding, Hidden Mats, Vassal
+Service advanced rule, and unusual Capability mixes can
+invalidate any of them.
+
+Sources cited in [brackets]:
+  [BB]   = Almoravid Background Book strategy section
+  [MC1]  = Mío Cid Testers' Replay Part I (Dreher/Campbell, InsideGMT)
+  [MC2]  = Mío Cid Testers' Replay Part II
+  [MC3]  = Mío Cid Testers' Replay Part III
+  [SR]   = Reconquista and Riposte Full Scenario Replay
+            (Correia/Campbell/Ruhnke, InsideGMT)
+  [REV]  = Player reviews (TWBG, Ellis-Gorman, etc.)
+  [PLAY] = Direct play observations from this project
+
+================================================================
+SECTION 1 — TIMING & CALENDAR
+================================================================
+
+1.1  GROW REDUCES YELLOW AND GREEN RAVAGE MARKERS BY HALF AT
+     END OF SPRING'S SECOND 40 DAYS. [PLAY]
+     Consider: Ravage commands placed in Spring 1 or Spring 2
+     lose roughly half their VP to Grow. Ravages placed in
+     Summer or Autumn keep their full value (Grow only fires
+     at end of Spring). In short scenarios that end before the
+     next Spring, Autumn Ravages are worth their face value.
+     Caveat: Enforcing Parias Service shifts happen at
+     placement and aren't reversed by Grow.
+
+1.2  HARVEST CUTS CARTS AND MULES IN HALF AT END OF SUMMER'S
+     SECOND 40 DAYS. [PLAY]
+     Consider: A Lord with 1 Cart + 1 Mule entering Harvest
+     keeps both (ceil(1/2)=1 each). Stockpiling Transport
+     before Harvest is wasted; Levying replacements after
+     Harvest costs Lordship actions but preserves them.
+
+1.3  WASTAGE TRIGGERS ON "MORE THAN ONE OF ANY ASSET TYPE OR
+     CAPABILITY CARD" BUT REMOVES ONLY ONE ITEM PER LORD. [PLAY]
+     Consider: A Lord stockpiling 6 Provender loses 1 to
+     Wastage but the rest survive. The penalty is small per
+     turn and easily managed by spreading Assets across Lords.
+
+1.4  DISBAND DURING CAMPAIGN PLACES CYLINDER AT NEXT_BOX +
+     SERVICE, NOT CURRENT_BOX + SERVICE (errata p.12). [PLAY]
+     Consider: A Lord pushed Beyond Service mid-Campaign is
+     PERMANENTLY REMOVED. A Lord exactly at Service Limit
+     mid-Campaign Disbands forward. The distinction is
+     critical — Beyond Service means cylinder, mat, Seat
+     markers all out of the game.
+
+1.5  "EVERY SHIFT IN SERVICE LIMIT BECOMES MORE AND MORE
+     IMPORTANT" LATE IN A SCENARIO. [SR]
+     Consider: A Service shift one box left during Spring is
+     usually recoverable; the same shift in late Autumn often
+     means permanent loss. Plan Pay Coin reserves around the
+     final two turns rather than spreading them evenly.
+
+1.6  SPRING IS FOR TRANSPORT AND POSITIONING; SUMMER AND
+     AUTUMN ARE FOR VASSALS AND OBJECTIVES. [MC3, John Campbell]
+     Consider: "In spring you should go heavy on Transport and
+     move Lords near to the areas of operations you want them
+     in. In Spring and Summer, go for Vassals and push on your
+     goals." Capabilities and Vassals lose value if there's no
+     time left to use them.
+
+================================================================
+SECTION 2 — LOGISTICS & FEED
+================================================================
+
+2.1  FEED CONSUMPTION SCALES IN STEPS OF 6. [PLAY]
+     Consider: A Lord with 6 mouths Feeds for 1 Provender; 7
+     mouths Feeds for 2. Mustering one extra Vassal can double
+     a Lord's Feed cost if it crosses the 6/7 threshold.
+     Counting mouths before Mustering Vassals avoids surprises.
+
+2.2  MULES COUNT AS MOUTHS; CARTS DO NOT. [PLAY]
+     Consider: A "spare" Mule levied for Transport is also a
+     Feed obligation. Carts have no Feed cost but are Laden on
+     Passes if carrying Provender. The choice between Cart and
+     Mule is route-dependent.
+
+2.3  TORMES, SOMOSIERRA, AND OTHER PASS-ONLY CHOKEPOINTS
+     PUNISH CARTS. [PLAY]
+     Consider: Any route through a Pass-only Locale doubles
+     March cost for a Cart with Provender. Mules are not
+     Laden by Cart-on-Pass rules but ARE Laden if carrying 2+
+     Provender. Discarding Cart contents before a Pass (rule
+     1.7.2 Greed) is sometimes the cheapest move.
+
+2.4  GARDENS AT FRIENDLY CITIES AND FORTRESSES AUTO-FORAGE.
+     [PLAY]
+     Consider: A Lord at his Seat or any Friendly City/
+     Fortress with no commands can stockpile 1 Provender per
+     action with no roll. Two Lords stacked at a Garden
+     Stronghold both auto-Forage independently.
+
+2.5  PAY CANNOT BRIDGE LOCALES (rule 3.2.1). [PLAY]
+     Consider: A Lord stranded with 0 Coin and a Service
+     marker about to expire cannot be saved by Coin on a
+     distant ally's mat. Christians can plan stacking; Muslims
+     can use the Taifas Box to Pay any Unbesieged Muslim Lord.
+
+2.6  TAIFAS BOX COIN CANNOT PAY A BESIEGED LORD. [MC3, errata]
+     Consider: Once a Muslim Lord is Besieged inside, Taifas
+     Box Coin doesn't reach him. The change brings Almoravid
+     in line with Nevsky's restriction. Fund Lords from the
+     box BEFORE the Christian noose tightens.
+
+2.7  "MAXING OUT" TROOPS CREATES MOBILITY DEBT. [BB]
+     Consider: A fully Mustered Lord with all Vassals can need
+     three Provender per Feed, requiring proximity to a Seat
+     with adequate Transport. The choice is between a tough
+     fixed garrison and a mobile small army. Don't max out
+     Lords you intend to send raiding.
+
+2.8  YUSUF STARTS WITH ONLY ONE MULE — HE CANNOT MARCH ON
+     ARRIVAL. [MC2]
+     Consider: To get Yusuf's massive army moving in his first
+     turn, Pay him with Coin from the Taifas Box and have a
+     nearby Taifa Lord Share Transport. Planning for Yusuf to
+     act independently the turn he arrives is unrealistic.
+
+================================================================
+SECTION 3 — CARDS & CAPABILITIES
+================================================================
+
+3.1  TAX CONSUMES THE ENTIRE CARD REGARDLESS OF COMMAND
+     RATING. [PLAY]
+     Consider: Capabilities that boost Command (Hasham,
+     Mesnada, +1 to Lord) provide no benefit on Tax cards.
+     Tax produces 1 Coin per card invested.
+
+3.2  THE ARTS OF WAR DECK IS A "FACE-UP MENU OF SPECIAL
+     POWERS" FOR CAPABILITY LEVY. [REV, There Will Be Games]
+     Consider: First Levy of a scenario draws Capabilities at
+     random (3.1.2). Subsequent Levies draw Events (3.1.3). A
+     Lordship action during Muster (3.4.4) lets a Lord SELECT
+     a Capability from the deck. Do not treat the deck as a
+     surprise mechanism — players know its contents and
+     should plan around them.
+
+3.3  TWO "THIS LORD" CAPABILITIES IS THE PER-LORD MAXIMUM
+     (rule 3.4.4). [PLAY]
+     Consider: A Lord at the cap can't Levy more "This Lord"
+     cards. Wastage at End Campaign discards one item from any
+     Lord with multiple of any type — that includes "more than
+     one This Lord card" by literal reading. In practice,
+     plan around Wastage by accepting the loss or by spreading
+     "This Lord" cards across multiple Lords.
+
+3.4  BISHOPRICS IS A +6-UNITS / +6-MOUTHS TRADE OVER THREE
+     LORDS. [PLAY]
+     Consider: Each Bishop Vassal brings 2 units (1 Knight +
+     1 M-at-A or Militia). Three Bishops = 6 units total. The
+     same three Lords gain 6 mouths in their Feed cycle. In
+     long scenarios the combat power justifies the logistics
+     cost; in 3-turn scenarios the mouths often outweigh the
+     unit value.
+
+3.5  UPHOLD THE DYNASTIES DELIVERS 1.5 VP PER LEVY WITH NO
+     COMMITMENT (3.5.2 option [c]). [PLAY, MC2]
+     Consider: While both Yusuf and Sir are Ready, the Muslim
+     side gets +1 Conquered + 1 Jihad per Levy by declining
+     them. Three Levies of Uphold = 4.5 VP, often the spine of
+     Muslim victory in short scenarios. The cost is delaying
+     Almoravid arrival — usually fine if Christians aren't
+     pressing decisive Sieges. Phil Dreher (tester) noted he
+     "could have comfortably just deferred them for the
+     remainder of the game" in an aggressive Christian
+     pressure scenario.
+
+3.6  CALLING ONE ALMORAVID LOCKS IN UPHOLD-FOREGO. [MC2]
+     Consider: "Once one of the Almoravids has mustered you
+     are no longer eligible to earn points for deferring
+     them." Call them in only when you have a concrete plan
+     for their immediate use; otherwise the lost VP from
+     deferral compounds.
+
+3.7  AL-QADIR (Christian Event C20) REMOVES 2 JIHAD FROM A
+     RECONQUISTA OR PARIAS TAIFA WITHOUT MUSLIM LORDS. [PLAY]
+     Consider: Saves 1 Muslim VP at no cost. Toledo Taifa
+     (Reconquista, no Muslim Lords) is the natural target;
+     Calatrava with stacked Jihad is the highest-value
+     individual Stronghold. NOTE [MC2]: Removing all Jihad
+     from Toledo CITY itself can be a mistake — a Neutral
+     Toledo cannot be Conquered, blocking Reconquista status
+     gains. Leave at least one Jihad on Toledo City if you
+     intend to retake it.
+
+3.8  CATHEDRALS COMES WITH A JIHAD RIDER. [PLAY]
+     Consider: Placing a Cathedral Seat marker yields +1
+     Christian VP but lets Muslims add 1 Jihad of their
+     choosing (worth 0.5 VP). Net +0.5 VP for Christian. The
+     Seat marker is also a Friendly Locale anchor, which can
+     enable Muster from Conquered Cities.
+
+3.9  M14 DEVALUATION (Event side) HALVES CHRISTIAN COIN
+     PER LOCALE, ROUND UP. [PLAY]
+     Consider: Stacking Christian Lords at one Locale
+     concentrates the loss (2 Coin + 1 Coin at same Locale →
+     reduce to 2 = lose 1 Coin); spreading spreads it.
+     Spending Coin on Pay before Devaluation can land is the
+     cleanest hedge.
+
+3.10 LEÓN Y CASTILLA IS A RECURRING SERVICE-DRAIN ON
+     CHRISTIAN COUNTS. [MC1]
+     Consider: This Muslim Event shifts the Service of one of
+     four named Christian Lords (Pedro, García, Álvar,
+     Rodrigo Campeador) and bans Muster of/by them this Levy.
+     Phil Dreher noted "this card always comes up." Plan
+     Christian Pay reserves to absorb at least one such hit
+     per scenario; expect two in Scenario F.
+
+3.11 BATTERING RAM AND BALLESTEROS ARE SCENARIO-DEFINING
+     CHRISTIAN CAPABILITIES. [BB, MC1]
+     Consider: "Expect a full seven-to-eight cards with
+     Battering Rams to take down a City" without them, the
+     Siege math becomes prohibitive. If Cities are on the
+     target list, prioritize Battering Ram via early
+     Capability Levy.
+
+3.12 CABALGADAS / AL-GARRADA RAID-AT-RANGE IS CARDED. [MC2]
+     Consider: Costs 1 Provender and the entire Command card,
+     ravaging a Locale up to 2 Ways distant. Useful for El Cid
+     and other high-Command Lords, but expensive enough that
+     it's better as a "finish" play late in a turn rather than
+     a routine action.
+
+================================================================
+SECTION 4 — MOVEMENT & POSITIONING
+================================================================
+
+4.1  A BYPASSED STRONGHOLD IS NOT A BESIEGED STRONGHOLD. [PLAY]
+     Consider: A Lord who Withdraws into a Stronghold while
+     Enemy Bypasses outside is NOT Besieged. He retains full
+     Command options — March out, Sortie, Forage, Tax — that
+     a Besieged Lord lacks. Sally specifically requires
+     Besieged status (Siege markers placed).
+
+4.2  ENCAMP COSTS A FULL CARD AND ENDS ITS ACTIONS. [PLAY]
+     Consider: To Storm a Bypassed Stronghold, the Christian
+     must first Encamp (1 March action, replaces all Bypass
+     with 1 Siege marker, ends card) and then Storm on a
+     LATER card. Two cards minimum for Bypass-to-Storm.
+
+4.3  STORM WITH 0 SIEGE MARKERS ENDS AFTER 0 ROUNDS. [PLAY]
+     Consider: Rule 4.5.2 — Storm ends when Rounds completed
+     equal Siege markers. Storm without prior Siege
+     accomplishes nothing. Encamp first or Siege first.
+
+4.4  A LORD AT AN ENEMY LOCALE CANNOT MUSTER. [PLAY]
+     Consider: Bypass status doesn't make a Locale Friendly.
+     Muster (3.4) requires Friendly Locale. A raiding Lord
+     deep in Enemy Taifa cannot Levy Vassals or Capabilities
+     until he returns to Friendly Territory.
+
+4.5  RAVAGE ENFORCING PARIAS SHIFTS ON ODD-NUMBERED RAVAGE
+     PER TAIFA, NOT PER LOCALE. [PLAY]
+     Consider: The 1st, 3rd, 5th… Christian Ravage marker
+     placed in a single Taifa each shifts that Taifa Lord's
+     Service 1 box left. Rapidly raiding the same Taifa
+     stacks pressure on its Lord. Spreading Ravages across
+     multiple Taifas dilutes the effect but covers more
+     ground.
+
+4.6  WHEN A BESIEGER IS REMOVED, SIEGE MARKERS COME OFF
+     (rule 4.3.5). [PLAY]
+     Consider: A single Besieger who hits Beyond Service mid-
+     Siege loses both himself and all Siege markers placed.
+     Stack at least one supporting Lord before risking long
+     Sieges, even if Capacity doesn't strictly require it.
+
+4.7  NEVER LEAVE A SIEGE LORD ALONE — THE COUNTER-ATTACK IS
+     THE STANDARD MUSLIM PLAY. [MC3, John Campbell]
+     Consider: Campbell explicitly cites his loss of Toledo
+     Siegeworks to al-Mutamid's counter-attack: "Calamity
+     ensues when al-Mutamid strikes and drives Pedro from the
+     Siege." Always station two Lords at any non-trivial
+     Siege, ideally with at least one able to Battle if
+     Sallied or relieved.
+
+4.8  RAVAGE-THEN-SIEGE BENEFITS THE BESIEGER, BUT FLIPS ON
+     CONQUEST. [BB]
+     Consider: Ravaging a Locale you'll Besiege gives +1 each
+     to Surrender odds (your Ravage marker counts) and adds
+     Provender/Loot from Rustling. But once you Conquer, the
+     Ravage flips to ½ VP for the Enemy. Net VP swing is
+     usually still positive for the Besieger; the calculus
+     changes if Conquest is uncertain.
+
+4.9  RAVAGE-AND-PIN IS THE PROVEN MUSLIM CONTAINMENT.
+     [SR, BB]
+     Consider: When the Christian Lord can't be defeated in
+     the field, Bypass him and Ravage his retreat path. This
+     was used to isolate García Ordóñez in Lérida Taifa
+     during Scenario F testing — Jaca-Huesca corridor blocked
+     by Jihad and Sieges, García's path home blocked.
+
+4.10 GUADALQUIVIR IS TAIFA-LORDS-ONLY; AFRICAN FLEET IS
+     UNIVERSAL. [MC2]
+     Consider: The Guadalquivir Capability allows long-range
+     Port-to-Port movement but only for Taifa Lords. The same
+     card's Event side (African Fleet) allows the same for any
+     Lord including Yusuf and Sir. Holding the Event for
+     Yusuf's arrival is often more valuable than playing the
+     Capability early.
+
+================================================================
+SECTION 5 — VICTORY MATH
+================================================================
+
+5.1  STRONGHOLD CONQUEST DICE SCALE WITH VP VALUE. [PLAY]
+     Castle/Town: 1 die ≤ Siege+Ravaged.
+     Fortress:    2 dice, all must pass.
+     City:        3 dice, all must pass.
+     Consider: Cities and Fortresses rarely Surrender —
+     Storming is usually the realistic path. Castles/Towns
+     can fall to Surrender with 2-3 Siege markers and patience.
+
+5.2  CONQUERING A STRONGHOLD MOVES MARKERS BUT ALSO FLIPS
+     RAVAGE. [PLAY]
+     Consider: A Christian Conquering a previously Muslim-
+     Ravaged Locale flips that ½ VP from green to yellow —
+     net 1 VP swing per flipped Ravage in addition to the
+     Conquered marker.
+
+5.3  RECONQUISTA TAIFA = 3 VP. PARIAS TAIFA = 1 VP. [PLAY]
+     Consider: A Taifa shift from Independent to Parias is +1
+     Christian. From Parias to Reconquista is +2 more (3-1).
+     Reconquista requires Conquering all printed Taifa Lord
+     Seats (and the Taifa's Cities, where applicable). One
+     unconquered Seat keeps the Taifa at most at Parias.
+
+5.4  JIHAD MARKERS ARE INDIVIDUALLY 0.5 VP BUT COMPOUND. [PLAY]
+     Consider: A Stronghold with 4 Jihad markers is worth 2 VP
+     to the Muslim side AND makes the Locale Muslim-Friendly,
+     which can make it eligible for further Muslim activity.
+     Christians clearing a single Locale's stacked Jihad
+     (Conquest, Al-Qadir) reclaims the VP at once.
+
+5.5  RETAKING TOLEDO IS A 6-VP SWING. [SR]
+     Consider: Yusuf retaking Toledo City converted: -3 yellow
+     Conquered (replaced with Jihad), +0.5 each Jihad placed,
+     -2 Reconquista (Toledo back to Parias = -3 reverting to
+     +1), and flipped Ravage credit = ~6 VP total swing. This
+     is the single most decisive moment available to the
+     Muslim side in Scenario F. Any Christian plan for Toledo
+     must consider how to defend it after taking it.
+
+5.6  WITHOUT TOLEDO OR EQUIVALENT, "ALL IS FOR NAUGHT."
+     [MC3, John Campbell]
+     Consider: Final board states with strong armies, ravaged
+     enemy lands, and expanded borders can still lose if no
+     City-tier prize was secured. Ravage VP and Conquered
+     markers compound to a point — beyond it, only Reconquista
+     or Cathedrals deliver winning margins.
+
+================================================================
+SECTION 6 — SCENARIO-SPECIFIC OBSERVATIONS
+================================================================
+
+6.1  SCENARIO C (PARIAS WARS) FAVORS THE MUSLIM DEFENSIVE
+     POSTURE BY ABOUT 0.5–1 VP. [PLAY]
+     Consider: Three Levies of Uphold the Dynasties (4.5 VP)
+     plus stable Taifa boundaries usually outpace Christian
+     raiding, especially with Spring Grow halving early
+     Ravages. Christian needs either an early decisive Storm
+     (rare with starting forces) or Autumn-weighted raiding
+     (impossible — scenario ends at start of Summer). Bidding
+     for sides is appropriate if balance matters.
+
+6.2  IN SHORT SCENARIOS, MUSLIM LORDSHIP 1 IS BINDING. [PLAY]
+     Consider: With one Levy action per Lord and no Capability
+     to spend on, Muslims default to "Muster one Vassal."
+     This is fine — Muslim Lords are typically defending
+     Seats, where extra Vassals help Storm defense without
+     extending campaigns.
+
+6.3  ALFONSO'S STARTING FORCES (1 Knight + 1 M-at-A + 1 Serf)
+     ARE THIN. [PLAY]
+     Consider: Don't expect Alfonso to anchor Battles alone
+     until he Musters Froila Bermudez (3 units) and ideally
+     Vela Ovequez (2 units). Until then he's a Marshal
+     coordinating a small household.
+
+6.4  SANCHO'S RAID-AND-RETURN PATTERN IS RELIABLE. [PLAY]
+     Consider: Jaca → Pamplona → Calahorra → Tudela is a 3-
+     action raid axis. Sancho's modest Force size is a
+     liability in Battle but ideal for Bypass-Ravage cycles
+     in Independent Zaragoza. Ravage VP from Sancho often
+     decides ½-VP scenarios.
+
+6.5  SCENARIO F: TOLEDO CAN FALL ON TURN 1 WITH BATTERING
+     RAM AND LUCK. [SR]
+     Consider: The full scenario opens with Alfonso and three
+     lords already Besieging Toledo. A Battering Ram
+     Capability and a fortunate Surrender roll can take the
+     City in two Siege actions. Christian opening play should
+     prioritize this — it converts the turn-1 1-VP Parias
+     marker to a 3-VP Reconquista plus 3 VP in Conquered
+     markers, swinging 5+ VP immediately.
+
+6.6  SCENARIO F MUSLIM EARLY-GAME IS DEFENSIVE BANKING. [BB]
+     Consider: "Early Campaigns are going to be tough on the
+     Muslims as Alfonso VI and his loyal Lords will run around
+     Ravaging and Sieging." The right play is often to let an
+     overrun Taifa Lord Disband and pay Parias rather than
+     fight a losing field battle. Allowing one Taifa to fall
+     while banking Coin in the Taifas Box for an explosive
+     Almoravid arrival is a documented tester strategy.
+
+6.7  TAIFA MARRIAGE EXTENDS A LORD'S SERVICE BY 1 BOX. [MC1]
+     Consider: A Hold Event the Muslims can use to save a
+     Taifa Lord on the verge of Disband. Holding Taifa
+     Marriage through a quiet stretch lets it cover the
+     critical late-Autumn Service crunch.
+
+================================================================
+SECTION 7 — LORD-SPECIFIC NOTES
+================================================================
+
+7.1  AL-MUTAMID IS THE MUSLIM SPEARPOINT. [Geography article,
+     BB]
+     Consider: "Without the Taifa of Sevilla and its
+     militarily capable Lord as a spearpoint, the Muslim
+     player will be hard-pressed to stem the Christian tide
+     — even once the Almoravid army appears on the scene."
+     Al-Mutamid's Service of 6 (vs 4 for other Taifa Lords)
+     means he can stay in the field through long campaigns.
+     Protect him; lose him and the Muslim defense collapses.
+
+7.2  EL CID IS HIGH-RISK / HIGH-REWARD. [BB]
+     Consider: "Employ him as soon as I can afford it
+     operationally. El Cid is high-risk/high-reward in the
+     sense that you may hire him and then have an Event pull
+     him away. Personally, however, I think the rewards
+     usually outweigh the risks." The Christian player can
+     also Reconcile with him to deny him to the Muslim side
+     even at VP cost — permanent Lord-denial is often worth
+     2 VP.
+
+7.3  EL CID CAN STORM WITH JUST HIS STARTING SIX UNITS. [BB]
+     Consider: For tempo, El Cid can move and fight without
+     any Vassal Muster. His Command of 4 makes him the
+     long-range raid specialist via Cabalgadas. Saving him
+     "lean" preserves Lordship for other Lords.
+
+7.4  PEDRO ANSÚREZ IS ALFONSO'S LIFELONG FRIEND BUT
+     STRUCTURALLY VULNERABLE. [SR]
+     Consider: Pedro at Simancas is far from his expected
+     theater of operations (Toledo, Zaragoza). He's the
+     classic "second Christian Lord" stuck supplying or
+     raiding the periphery. Keep him paired with another Lord
+     whenever possible — solo Pedro has been documented
+     repeatedly as the Muslim counter-raid target.
+
+7.5  GARCÍA ORDÓÑEZ IS THE EAST-FRONT RAIDER. [SR]
+     Consider: García's Seat at Nájera positions him for raids
+     into Zaragoza and Lérida Taifas. His Command of 2 limits
+     campaign depth, but as a Lieutenant under Alférez (C15)
+     he can ride with another Lord for combined operations.
+
+7.6  YUSUF NEEDS TRANSPORT BEFORE HE CAN CAMPAIGN. [MC2]
+     Consider: Starting with 1 Mule and a 14-unit army, Yusuf
+     can't Feed and March on his arrival turn. Plan for either
+     a Pay-to-Move sequence or a Levy of Carts via Lordship
+     before sending him north. The DAWUD IBN AISHA + AL-
+     YAZIRAT AL-HADRA combination (3 Provender per Supply via
+     double Seat) is the documented Yusuf supply strategy.
+
+================================================================
+SECTION 8 — PROCEDURAL TRAPS & PRE-COMMIT CHECKS
+================================================================
+
+8.1  Before Mustering a Vassal, count post-Muster mouths and
+     Provender on hand. Crossing a Feed threshold mid-Campaign
+     starves Lords.
+
+8.2  Before March, confirm Laden status by counting Provender,
+     Loot, and Cart/Mule load relative to Way type.
+
+8.3  Before Approach, confirm whether the Defender will
+     Withdraw or Stand. Withdrawal forces Bypass/Siege choice
+     and ends the March action.
+
+8.4  Before Encamp, confirm support is en route. A solo
+     Encamp without follow-up Siege/Storm cards wastes the
+     conversion.
+
+8.5  Before End Campaign, count surviving Ravage markers and
+     project Grow/Harvest losses. Adjust Plan stacks to time
+     Ravages favorably.
+
+8.6  Before Pay during Levy, identify which Lords need Coin
+     and whether Coin-bearing Lords are at the same Locale.
+     Re-stacking happens during Campaign March, not Levy.
+
+8.7  Before Call to Arms, check whether Reconcile/Crusade/
+     Reconcile-with-al-Sayyid options have triggers met. The
+     "decline" reward (Uphold the Dynasties) is the Muslim
+     default; the Christian "decline" yields no VP.
+
+8.8  Before Storming, confirm Siege markers placed. Storm
+     Round count = Siege marker count. Zero markers, zero
+     rounds, no effect.
+
+8.9  Before removing Jihad from a Toledo City target, confirm
+     Conquest plans. A Neutral Toledo cannot be Conquered.
+     [MC2]
+
+8.10 Before Inviting an Almoravid, plan his first turn's
+     supply. Yusuf or Sir on the map without Coin or Transport
+     is a wasted Call to Arms. [MC2]
+
+================================================================
+SECTION 9 — META-OBSERVATIONS ON PLAY STYLE
+================================================================
+
+9.1  "TRYING TO PUT TOO MANY BALLS IN THE AIR IS A SUREFIRE
+     WAY TO DROP ALL OF THEM." [MC3, John Campbell]
+     Consider: Almoravid rewards focused offensives over broad
+     pressure. Two armies committed to one objective beat four
+     armies splitting four ways.
+
+9.2  "EVERY LOSS IS DEFINITIVE, AND EVERY VICTORY COUNTS
+     DOUBLE." [SR]
+     Consider: Late-scenario play should weight conservatism.
+     Refusing Battle to preserve Lords in the final two turns
+     is often correct even when offensively favored.
+
+9.3  FIELD BATTLES ARE RARE AND DECISIVE. [REV, MC3]
+     Consider: "Many 40-day periods will not see any battles
+     at all." A Battle commits both sides' Forces; Avoiding
+     Battle costs Assets but preserves the army. Only Battle
+     when you have decisive advantage in numbers, Capabilities,
+     or held Events.
+
+9.4  CASTLES ARE TIME SINKS. [REV]
+     Consider: "Castles can take a truly staggering amount of
+     time, luck and/or bodies to overcome." Avoid Castle
+     Sieges unless they are scenario-critical. Towns and
+     Fortresses are usually better targets per action invested.
+
+9.5  IF YOU CAN'T DEFEND A TAIFA, LET IT GO. [BB]
+     Consider: "It can be a good choice if you cannot defend
+     a Taifa to let that Taifa Lord Disband, go Parias and pay
+     tribute, lest all the Locales there get Ravaged."
+     Conceding a Taifa swap (Independent → Parias = +1 VP
+     Christian, but stops the bleeding) sometimes preserves
+     more than fighting for it.
+
+9.6  CONSIDER HIDDEN MATS AND VASSAL SERVICE ADVANCED RULES.
+     [BB]
+     Consider: "Playing with advanced Service markers and
+     hidden mats really ups the game, and, honestly, I don't
+     know if I myself would play it any other way." These
+     change strategy substantially — Service shifts hit
+     Vassals as well, and opponent Capabilities become hidden
+     until used. Advanced play is more historically textured.
+
+================================================================
+END OF FILE
+================================================================

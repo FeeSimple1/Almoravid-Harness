@@ -1,0 +1,60 @@
+ALMORAVID Official Errata    15Feb2023
+ 
+ 
+Rules of Play – Scenario Balance Adjustments
+ 
+Page 26, Scenario A Mats: Muslims, delete sentence "Muslim Lords start with zero Coin (not x2 or x3)." Special Rules: Replace rule "First Levy: Álvar Fáñez …." with "Events: Muslims start holding TAIFA MARRIAGE Event card."
+ 
+Page 26, Scenario B Map: delete last bullet about FUEROS and SISNANDO DAVÍDEZ. Mats: Muslims, delete sentence "Muslim Lords start with zero Coin …." Special Rules: add "Events: Muslims start holding AL-SUMAISIR Event card" and "First Levy: Muslims may use twice their Lordship in the first Muster (3.4)."
+ 
+Page 29, Scenario C Mats: Christians, after "Alfonso" insert "with just one Coin." Muslims, replace "just one Coin (not x2 or x3)" with "Coin x4".
+ 
+Page 29, Scenario D Map: Last bullet after "HADRA" insert "and ANDALUSIANS and CAMELS cards". Mats: Muslims, after "Yusuf" insert "with [BLUE: Coin x4]"; after "ARRADA" add "and M14 RIBAT MONKS card"; delete "Each Taifa Lord starts with just one [BLUE: Coin]."
+ 
+Page 32, Scenario E Mats: Christians, after "Alfonso" insert "with just one Coin." Muslims, add at end "each with Coin x4". Special Rules: add "Ruined Land: Parias Coin (1.4.3) awards Coin equal to Service less the number of Ravaged markers (of either side) in the Taifa."
+ 
+Page 32, Scenario F Mats: Christians, delete "with BATTERING RAM card" and "with BALLESTEROS card." Muslims, delete "with zero Coin". Special Rules: add "Capabilities: CATHEDRALS may not place Seats until Muster of Yusuf or Sir." And add "Ruined Land: Parias Coin (1.4.3) awards Coin equal to Service less the number of Ravaged markers (of either side) in the Taifa."
+ 
+Page 34, Scenario F: 6.2.2 Curias Sequence, line 2, replace "may opt" with "must" and delete "to". [BLUE: Insert new bullet after bullet 3, "•If Pedro Ansúrez and/or García Ordóñez are on map, Disband them to the Calendar (3.3.2)."] 6.2.3 No Curias, delete "or the Christian … this turn". [BLUE: 6.3.1 Winter Disband, bullet 2, after "Taifa Lords," insert "put all Coin from their mats into the Taifas box;".] 6.3.3 Spring Muster, delete entire first bullet beginning "Shuffle together …." [BLUE: Add "6.3.5 Arts of War. In the first Spring Levy (box 9), draw Capabilities instead of Events (3.1)."]
+ 
+ 
+Rules of Play – Corrections
+ 
+The cover page should say "Rules of Play".
+ 
+Page 5, 1.4.2 Characteristics delete the word "Territory" from each of the three bullets. 1.4.3 HOSTAGE POPULACE, insert "4.5.1," before "no Spoils" and "flip Ravaged," before "adjust Victory".
+ 
+Page 6, upper left, third bullet (of 1.4.4) delete "Territory".
+ 
+Page 12, 3.3.1 Beyond Service Limit line 2 and 3.3.2 At Service Limit line 2: insert "or Campaign" before "marker". 3.3.2 bullet 1: after "current box" insert "if Levy, or next box if Campaign (4.8.2),".
+ 
+Page 12, 3.4 Muster "Important" box line 2, replace "take actions" with "participate" (i.e., even Muster for no actions, such as with COUNT OF BARCELONA, must otherwise comply with 3.4).
+ 
+Page 12, 3.4.1 Levy Lords to Muster PROCEDURE, 1st bullet to "Place that Lord's cylinder at one of his Seats that is neither Enemy nor has any Enemy Lord present."
+ 
+Page 17, 4.4 Battle, line 3: replace "under Siege or Bypassed" with "inside a Stronghold".
+ 
+Page 20, 4.5.1 Siege SURRENDER, 2nd bullet to:
+• Place or remove Conquered, Jihad, and/or Seat marker(s) there per Stronghold type and Territory (1.3.1 Conquering, 1.4.3).
+ 
+Page 28, Scenario C setup illustration should show al-Mundir's cylinder (not Abu Bakr's) at Lérida.
+ 
+Page 30, Scenario D illustration should show 1 Jihad marker (not Ravaged) at Trujillo. Yusuf double-Seat marker should be on nearby Seat diamond.
+ 
+Page 36, delete "Trade Route" entry.
+ 
+ 
+Background Book
+ 
+Page 6, map illustration should show a Reconquista marker (not Conquered) replacing Parias.
+ 
+Page 52, C1. BATTERING RAM Tips, first sentence replace "affects the Enemy's Stronghold Walls" with "may reroll a die".
+ 
+Page 57, M8. AHMAD IBN RUMAYLA Tips, at the end add "or al-Mutamid".
+ 
+Page 63, M15. SAQALIBAH Tips, lines 3-4 replace "pay for" with "Muster", delete sentence that begins "Sharing …".
+ 
+ 
+Foldout: Forces & Strongholds tables are missing "-1" (against Armor) in the Crossbows icons.
+ 
+Command Cards: Yusuf's title is incorrect.

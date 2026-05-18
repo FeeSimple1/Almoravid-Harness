@@ -1,0 +1,531 @@
+ALMORAVID — ARTS OF WAR (Card Reference)
+Extracted from the Background Book, pp. 47–64. History sections omitted.
+Errata applied to C1, M8, and M15 Tips.
+ 
+This section details each side's Arts of War Events and Capabilities with their texts, the Lords they affect, and tips on implementing them. The back of the booklet lists all Arts of War cards at a glance.
+ 
+ 
+================================================================
+CHRISTIAN EVENTS (top half of card)
+================================================================
+ 
+C1. Hills
+Hold: May play if Defending in Battle – Christians' Slingers are x1½ and their other Missiles are x1 (not x½)
+Lords. All Christians.
+Tips. Play Hills at the outset of Battle (4.4.1 Events), not in Storm and only if Defending. It increases the Hits from all of your side's Slingers, Bowmen, and Crossbowmen throughout that Battle. It does not affect Javelins, which are already x1, nor does it affect Melee.
+ 
+C2. Camp Attack
+Hold: May play in Battle – Round 1, take 2 Assets from each Enemy Lord there as Spoils, then remove 2 more Assets from each
+Lords. All Muslims.
+Tips. Play Camp Attack at the outset of Battle (4.4.1 Events), not Storm. Take and remove Enemy Assets as specified on the card at any one time during Round 1, distributing taken Assets among Friendly Lords at the Battle (4.4.3) even if Conceding the Field. See also Capability #C25 El Cid.
+ 
+C3. Swollen River
+Hold: Play to block March on a Command card OR to block Avoid Battle
+Lords. All Muslims.
+Tips. Play of Swollen River after an enemy Lord begins a March Command blocks any March by him for the rest of his current Command card; he may use the cancelled March action(s) for other Commands. Play after an enemy Defender declares Avoid Battle instead results in Battle; any discard of Assets to Avoid Battle does not occur. Swollen River cannot block Withdrawal into a Stronghold. See also Capability #C25 El Cid.
+ 
+C4. Arid Terrain
+Hold: May play as Muslims March – Unless Muslims discard Camels, they immediately Feed 2 Marching Lords
+Lords. Any Muslims.
+Tips. Play Arid Terrain at any time from just before to just after an Enemy Lord undertakes a March action, including from Bypass (4.3.6). That Lord or any two Lords Marching as a group (4.3.1) immediately Feed, including expenditure of Assets and shifts if necessary (4.8.1). Neither Pay nor Disband occurs until the end of the card, as usual (4.8.2). If the Muslims have Capability #M16 Camels, they may discard that card to avoid these effects of Arid Terrain, which is also discarded.
+ 
+C5. Drought
+Unless Muslims discard Camels, they immediately Feed 2 of their Lords not at Friendly Gardens or Seat
+Lords. Any Muslims.
+Tips. When a side draws Drought, the other side immediately to the degree able selects any two of its own Lords on the map who are not at Gardens (Fortress or City) or any Seat Friendly (not Neutral or Enemy) to that side. Those two Lords immediately Feed, including expenditure of Assets and shifts if necessary (4.8.1). Neither Pay nor Disband occurs until those segments of Levy (3.2, 3.3). If the Muslims have Capability #M16 Camels, they may discard that card to instead discard Drought without effect.
+ 
+C6. Surprise
+Hold: May play upon March to Enemy Stronghold where no Lord – Place 2 Siege there, then Storm with Walls –1
+Lords. Any Christians.
+Tips. Marching Lord(s) must enter an Enemy Stronghold Locale where neither Enemy nor Friendly Lords already. Place two Siege markers instead of the usual one (4.3.5). Immediate Storm for at least one Round is mandatory, costing no actions. Walls –1 means treat Walls 1-4 as Walls 1-3. Siegeworks with two markers will count as Walls 1-2 for the Attackers (4.5.2). See also Capability #C25 El Cid.
+ 
+C7. Baggage Parapet
+Hold: May play in Battle
+Cancel Muslim Camp Attack
+If Christians Retreat, pay 1 Asset per Lord to skip Spoils and Service shift
+Lords. Any Christians.
+Tips. Play Baggage Parapet at the outset of Battle (4.4.1 Events) Attack or Defense, not Storm. If the Christians play Baggage Parapet first, Muslims may not play #M2 Camp Attack in that Battle; if Christians play Baggage Parapet after Muslims play Camp Attack, discard Camp Attack without effect. See also Capability #C25 El Cid.
+ 
+C8. Cantador
+Hold: May play on a Lord in Battle or Storm
+Round 1, up to 4 of his Knights AND Sergeants Melee Strike +1
+Lords. Any Christian.
+Tips. Play Cantador at the outset of Battle or Storm Attack or Defense (4.4.1 Events). Slide the card under the top edge of a Christian Lord's mat while in effect. Up to four of that Lord's Knights and Sergeants units when Striking in Melee during Round 1 cause one added Hit—three Hits each for Knights in Battle or two Hits each in Storm or for Sergeants. Missiles and Hits against Christians are unaffected. After Round 1, discard the card. See also Capability #C25 El Cid.
+ 
+C9. Betrayal of Terms
+Hold: Play upon Surrender to take Spoils as if Sack, OR take double and Muslims add 1 Jihad
+Lords. Any Christians.
+Tips. Play Betrayal of Terms only at the moment that a Muslim Stronghold Surrenders per 4.5.1 (not in a Sack after Storm, 4.5.2). The Christian player immediately opts to receive either the Spoils shown on the Strongholds table for that Stronghold type or twice that amount of Spoils. If twice the amount, the Muslim player then immediately adds one Jihad marker to the map per 1.4.4, if able.
+ 
+C10. Devaluation
+Muslims reduce their Coin among Taifas box and Lords to ⅔ of the total (rounded up)
+Lords. All Muslims.
+Tips. Count up all Coin among Muslim Lords plus those in the Taifas box. The Muslim player must immediately remove Coin from Muslim mats and/or the box until the sum is ⅔ of the original total, rounded up. For example, if the Taifas box has four Coin and just one Muslim Lord has one Coin, the Muslim player would select and remove any one Coin.
+ 
+C11. Indulgences
+An Unbesieged Christian Lord immediately Musters 1 Crusader
+Eudes, if Unbesieged, immediately Musters all Ready Vassals
+Lords. Any Christian, Eudes.
+Tips. See 3.4.2 ARTS OF WAR. If a Crusader Service marker is available (not already Mustered), immediately add it with two Knights units to any one Mustered Unbesieged Christian Lord's Forces area. If Eudes is on the map and Unbesieged, all his Ready Vassals (if any) immediately Muster. These Musters cost no actions and may not be declined. Do not put Crusaders on the Calendar even if using the Vassal Service advanced rule 3.4.2: they are immune to Vassal Service limits.
+ 
+C12. Song of Roland
+An Unbesieged Christian Lord immediately Musters 1 Crusader
+Eudes, if Unbesieged, immediately Musters all Ready Vassals
+Lords. Any Christian, Eudes.
+Tips. See Event #C11 Indulgences, above. Although the two Events have different titles and history, they work the same.
+ 
+C13. Berenguer Ramon
+If Count of Barcelona with Muslims, they discard card
+If not, a Lord may Levy this card and its units now for 1 Asset
+Lords. Al-Mustain or al-Mundir (Sancho or Eudes).
+Tips. See Christian Capability #C13 Count of Barcelona: if in play with an Enemy Lord, discard will remove Forces from him. If not, Levy of the Capability for this side is immediate and, if taken, costs any 1 Asset (Sharing applies, 1.5.2) instead of 2 Coin but otherwise follows 3.4.4, including limiting eligibility to a Lord indicated, who must be at a Friendly Locale free of Siege (3.4 Important).
+ 
+C14. Pope Gregory
+Hold: Play on Sancho or Eudes any time to Muster him from Calendar, OR shift his Service 2 boxes, OR for Lordship +2
+Lords. Sancho or Eudes.
+Tips. See 3.4.1 ARTS OF WAR. Muster of Sancho or Eudes may be from anywhere on the Calendar without rolling or using any Levy action (for Sancho) or counting as a Call to Arms (for Eudes), but otherwise per 3.4.1 or 3.5.1, as appropriate.
+ 
+C15. Cluniacs – Monastic network
+Hold: Play on a Lord any time to Muster him from Calendar, OR shift his Service 1 box right, OR for Lordship +2
+Lords. Any Christian.
+Tips. See 3.4.1 ARTS OF WAR. Muster of a Christian Lord may be any with a cylinder anywhere on the Calendar without rolling, using any Levy action, or counting as a Call to Arms, but otherwise per 3.4.1 or 3.5.1, as appropriate to that Lord.
+ 
+C16. Bernard de Sédirac – Aggressive bishop
+Shift a Lord's Service 1 box right OR Muster a Lord from Calendar now
+Levy Cathedrals (this card)
+Lords. Any Christian.
+Tips. See 3.4.1 ARTS OF WAR. The Christians must immediately choose shift or Muster. Muster of a Christian Lord may be any with a cylinder anywhere on the Calendar without rolling, using any Levy action, or counting as a Call to Arms, but otherwise per 3.4.1 or 3.5.1, as appropriate to that Lord. The Christians then tuck the card under their board edge for no action: Cathedrals is in effect.
+ 
+C17. Genoa & Pisa send fleets to harass al-Andalus
+Place Ravaged at 2 Unravaged Enemy Ports where no Muslim Lords
+Lords. None.
+Tips. Put one yellow Ravaged marker at each of two Strongholds with Port symbols that are currently Friendly to the Muslims (not Neutral, 1.3.1, 1.4.1) and have no Muslim Lord (even one that is Besieged) and no Ravaged marker already. The two markers add a total of +1 Christian VP (5.1). This is not a Ravage Command action and so does not add Loot or Provender or shift any Service (4.7.2).
+ 
+C18. Runaway Slaves
+Hold: Play in Muster for each Unbesieged Christian Lord to restore all Lost Foot units and add 1 Transport
+Lords. All Christians.
+Tips. See 3.4.2 ARTS OF WAR. The Christian side may play Runaway Slaves during its Muster segment. All Christian Lords who are on the map and Unbesieged (even if Bypassed or at Neutral or Enemy Locales) add Foot units (Men-at-Arms, Militia, and Serfs) to their Forces equal in number and type to those lost from their starting Forces and Mustered Vassals. Determine lost units by comparing the Lord's current Forces units to the sum of those pictured on the mat plus pictured on his currently Mustered Vassal Service markers (including Bishops). Then choose and add either a Cart or a Mule to each Unbesieged Christian Lord on map.
+ 
+C19. Fitna – Emirs fractious
+Choose 2 Taifa Lords
+Shift Service of each by 1 box left
+This Levy, no Muster of or by them
+Lords. Taifa Muslims.
+Tips. The Christian player selects any two Taifa Lords (1.5.1). If they are currently Mustered, their Service markers shift a box left on the Calendar (as do, if using the Advanced Vassal Service advanced rule 3.4.2, their Vassals). Those two Lords this Levy may neither become Mustered nor take Levy actions themselves. Keep the Fitna card near the Muslim mats area for the current Levy; the card's Capability is unavailable this turn (3.1.3).
+ 
+C20. Al-Qadir – Puppet emir
+Hold: May play if a Reconquista or Parias Taifa is free of Muslim Lords
+Remove 2 Jihad there
+Lords. None.
+Tips. The Christian player may play at any time and select any two Jihad markers within a single eligible Taifa.
+ 
+C21. Mozárabes – Arabized Christians
+Hold: Play for a Surrender roll in a Reconquista Taifa to succeed automatically
+Lords. None.
+Tips. Play only at the moment of making a Surrender roll via a Siege action (4.5.1).
+ 
+C22. Berbers – Arab & Slav mistrust
+Shift Service of al-Mutawakkil, Abd Allah, Yusuf, OR Sir by 1 box
+This Levy, no Muster of or by any of them
+Lords. al-Mutawakkil, Abd Allah, Yusuf, or Sir.
+Tips. See Christian Event #C19 Fitna above. Berbers works the same but applied to the Christian player's choice of either al-Mutawakkil, Abd Allah, Yusuf, or Sir for the Service shift and all four of them for the ban on Muster.
+ 
+C23. Illness of the Emir
+On Calendar, shift cylinder OR Service of Abu Bakr OR al-Mustain by 1 box
+This Levy, no Muster of or by him
+Lords. Abu Bakr or al-Mustain.
+Tips. See Christian Event #C19 Fitna above. Illness of the Emir works the same but applied to the Christian player's choice of either Abu Bakr or al-Mustain for both the Service shift and the ban on Muster.
+ 
+C24. Abu Bakr ibn Umar – Almoravid rival
+On Calendar, shift Service of Yusuf AND Sir each 1 box left
+This Levy, no Muster of or by either
+Lords. Yusuf and Sir.
+Tips. See Christian Event #C19 Fitna above. Abu Bakr ibn Umar works the same but applied only to Yusuf and Sir both.
+ 
+C25. De Vivar
+Hold: Play as Christian Call to Arms if Rodrigo al-Sayyid is on map
+Reconcile with Rodrigo (3.5.1) for just 1VP to Taifas box
+Lords. Rodrigo al-Sayyid and Rodrigo Campeador.
+Tips. The Christians may not play the Event unless (green) Rodrigo al-Sayyid is on map. Play must be during Christian Call to Arms, during which the Christians may do nothing else. Reconcile with Rodrigo per the procedure in 3.5.1 but add only 1VP to the Taifas box regardless of Rodrigo's current Service.
+ 
+C26. Freebooter
+Disband Rodrigo al-Sayyid as if at Service Limit (3.3.2)
+If desired, Reconcile with Rodrigo (3.5.1) now for just 1VP to Taifas box
+Lords. Rodrigo al-Sayyid and Rodrigo Campeador.
+Tips. Disband of (green) Rodrigo al-Sayyid is immediate and mandatory (if he is on map). Reconcile works the same as for Christian Event #C25 De Vivar above, except that it occurs immediately rather than during Call to Arms.
+ 
+ 
+================================================================
+CHRISTIAN CAPABILITIES (bottom half of card)
+================================================================
+ 
+C1. Battering Ram
+This Lord at Siege counts as 2 Lords and may reroll 1 Surrender die per Christian Siege action
+Lords. Any Christian.
+Tips. Any Lord with Battering Ram at a Siege Locale may reroll a die; it need not be the Lord taking the Siege action. Counts as 2 Lords regards only the number of Lords outside the Stronghold needed to place Siege markers per 4.5.1. For example, two Lords, one of whom has Battering Ram, Besieging an Enemy City (Capacity ) could add Siege markers.
+ 
+C2. Ballesteros – Crossbows
+This Lord's Men-at-Arms and Militia have Missiles x½ that select target units, –1 to target's Armor
+Lords. Any Christian.
+Tips. Crossbow units Strike with both Missile and Melee. The side using Crossbows selects which individual unit piece of the Enemy Lord or Garrison involved will roll Protection against and take each Crossbow Hit. "–1 Armor" means, for example, 1-3 Armor becomes 1-2 Armor. Militia using both Crossbows and Javelins get the benefits of each (x1, target selection, and –1 to Armor). When Crossbowmen units and other Missile units Strike together, any Hit that includes at least ½ a Hit from Crossbowmen gains the targeting and 1 Armor. That is, when rounding units with Archery, round in favor of Crossbowmen (4.4.2 Mixed Missiles).
+ 
+C3 & C10. Adalides – Royal guides
+This Lord may Bypass without stopping AND ignores Swollen River
+Lords. Not Eudes.
+Tips. Bypass without stopping means that a Lord with Adalides may Bypass an Enemy Stronghold and then use a March action on the same Command card (4.3.4). If the Muslims play Event #M3 Swollen River at any Locale where this Lord is present, whether or not himself Marching, discard Swollen River without effect. A Lord may have only one Adalides card (3.4.4).
+ 
+C4 & C5. Arqueros – Bowmen
+This Lord's Foot and Light Horse have Missiles x½
+Lords. Any Christian.
+Tips. Bowmen units Strike with both Missile and Melee. Note that even Serfs can be Bowmen. A Lord may have only one Arqueros card (3.4.4).
+ 
+C6. Siege Towers
+This Lord at Storm from Round 2 on weakens Enemy Stronghold to Walls –1
+Lords. Any Christian.
+Tips. Any Lord with Siege Towers at a Storm Locale affects the Enemy Stronghold's Walls; it need not be the Lord taking the Storm action. On Round 1, there is no effect. For Round 2 and all later Rounds, Walls –1 means treat Walls 1-4 as Walls 1-3. The Attackers' Siegeworks are unaffected (4.5.2).
+ 
+C7. Jabalinas – Javelins
+Up to 4 of this Lord's Unarmored units have Missiles x1 on any 1 Battle Round, Missiles x½ if Storm (mark)
+Lords. Any Christian.
+Tips. Puts a Javelins marker on this Lord's mat. In each Battle or Storm with this Lord, the owner may declare at one Missiles step of any one Round only that Lord's use of Javelin Missiles per the Capability (4.4.2 Javelins). After use, flip the Javelins marker to the side with the X (used). Flip it back to the front side after the Battle or Storm. For a Lord with more than four Unarmored units, it is not necessary to designate which four have Javelins: if reduced to four or fewer Unarmored units, they retain Javelins. Units with both Javelins and Bowmen or Crossbows are Missiles x1 on the Battle Round of Javelin use and Missiles x½ on other Rounds. Javelin units Strike with both Missile and Melee.
+ 
+C8. Hueste – Offensive expedition
+This Lord Marches as a Marshal to or from Locales in Taifas, not with Alfonso
+Lords. Pedro Ansúrez, García Ordóñez, Álvar Fáñez, or Rodrigo Campeador.
+Tips. A Lord with Hueste counts as a Marshal when he undertakes March actions to or from any Locales in any Taifas, not from one Kingdom Locale to another. He may not use that ability to take Alfonso along in his Marching Group (1.5.1 Marshals, 4.3.1). He may act as a Marshal even if already a Lieutenant; he remains a Lieutenant and his Lower Lord stays with him (4.1.3). If he is a Lower Lord, he may not undertake actions and so cannot make use of Hueste.
+ 
+C9. Slingers
+Up to 3 Militia of this Lord have Missiles x1 in Battle, Missiles x½ in Storm
+Lords. Any Christian.
+Tips. Slinger units Strike with both Missile and Melee. Units with both Missiles x1 and Missiles x½ are Missiles x1. For a Lord with more than three Militia, it is not necessary to designate which three have Slingers: if reduced to three or fewer Militia, they remain Slingers.
+ 
+C11 & C12. Mesnada – Private troop contingent
+This Lord with Knights Command +1
+Lords. Not Eudes.
+Tips. Command +1 means that a Lord with a Command rating of "4" instead could take five Command actions on his card, for example (1.5.3, 1.4.1). A Lord with Mesnada receives the added Command with even a single Knights unit on his mat. A Lord may have only one Mesnada card (3.4.4).
+ 
+C13. Count of Barcelona
+Unless Count of Barcelona with Muslims, this Lord pays 2 Coin (once) to Muster 2 Knights, 2 Men-at-Arms until card discarded
+Lords. Sancho or Eudes.
+Tips. See 3.4.2 ARTS OF WAR. Either indicated Lord with this Capability during any Muster segment in which he is eligible per 3.4 "Important" may pay for the units, for no actions. Sharing applies (1.5.2). Discard removes the same number of units from that Lord's mat. See also Christian and Muslim Events #C13/M23 Berenguer Ramon.
+ 
+C14 & C17. Cabalgadas – Long-range raids
+This Lord may pay 1 Prov to use entire card to Ravage across up to 2 Ways, not at or past any Unbesieged Enemy Lord
+Lords. Any Christian.
+Tips. The Lord must have or Share (1.5.2) one Provender and use all actions on his Command card to use this Capability. Expend the Provender and Ravage a Locale up to two Locales distant. Neither the intervening Locale nor the target Locale may have an Unbesieged Enemy Lord, even if Bypassed. Place a Ravaged marker, gain Loot or Provender, and shift a Taifa Lord's Service normally (4.7.2). A Lord may have only one Cabalgadas card (3.4.4).
+ 
+C15. Alférez – Standard bearer
+This Lord may use 1 Command to become or stop being a Lieutenant
+Lords. Pedro Ansúrez, García Ordóñez, Álvar Fáñez, or Rodrigo Campeador.
+Tips. A Lord with Alférez may use a Command action to immediately stack as a Lieutenant on top of another Christian Lord at the same Locale, or may use an action to unstack and no longer be a Lieutenant (4.1.3). He may do so multiple times during a single card. Alférez alters the restrictions on when Lieutenants are designated; other rules regarding Lieutenants remain in effect, including that Alfonso may not be a Lower Lord because he is a Marshal.
+ 
+C16. Cathedrals
+Alfonso at Conquered City may place Cathedral Seat if none there yet
+When he does, Muslims add 1 Jihad
+Lords. Alfonso.
+Tips. Although only Alfonso can Levy and use this Capability, put the Cathedrals card at the board edge not at his mat (3.4.4). The marker is both a Seat marker and worth 1VP. If both are already on the map, the Christians can relocate one of those. Later discard of the card does not alone remove the marker(s). The Muslims decide where to add the Jihad per 1.4.4 "Important".
+ 
+C18. Milites
+Put 2 Militia and 4 Light Horse on this card
+Christian Lords pay 1 Asset to Muster up to 3 of them per Lord
+Discard removes card from game
+Lords. Any Christians.
+Tips. See 3.4.2 ARTS OF WAR. Put the Milites card at the board edge, not at a mat (3.4.4). Any Christian Lords during any Muster segments in which they are eligible per 3.4 "Important" may pay for the units, for no actions. Sharing applies (1.5.2). Discard leaves units in place. Because discard removes the card from the game, it removes Event #C18 Runaway Slaves with it.
+ 
+C19. Caballería Villana patrols the frontier
+Muslim Ravage in Kingdoms must roll 1-3 for effect (mark)
+Block al-Maghawir
+Lords. Any Christians.
+Tips. Put the Caballería Villana card at the board edge, not at a mat (3.4.4). Place one reminder marker within the borders of León Kingdom and the second in Aragón. The Capability affects Ravage Command actions, not placement of Ravaged markers by Event. Muslims roll as they expend each action.
+ 
+C20. Fueros – City codes of law
+Each Levy, remove up to 2 Jihad from a Reconquista Taifa Locale to which Alfonso is closer than any Muslim
+Lords. Alfonso.
+Tips. Although only Alfonso can Levy and use this Capability, put the Fueros card at the board edge not at his mat (3.4.4). The Christians may remove the Jihad at any one moment of each Levy, for no actions. They choose which eligible Jihad markers to remove, possibly removing Siege or Bypass (1.4.4). Closer means by the shortest chain of adjacent spaces away. Alfonso in the same Locale as a Muslim Lord is not closer, regardless of who is Sieging or Bypassing.
+ 
+C21. Sisnando Davídez – Mozarab count
+Each Levy, remove up to 1 Jihad from a Locale where no Lord of either side
+Lords. Alfonso.
+Tips. Although only Alfonso can Levy and use this Capability, place it at the board edge not his mat (3.4.4). The Christians may remove the Jihad at any one moment of each Levy, for no actions. They choose which eligible Jihad marker to remove. A Besieged or Bypassed Locale is not eligible.
+ 
+C22. Bishoprics
+Add 1 Bishop each as a Ready Vassal to up to 3 Christian Lords other than Sancho
+If card discarded, remove all Bishops
+Lords. Not Sancho.
+Tips. See 3.4.2 ARTS OF WAR. Put the Bishoprics card at the board edge, not at a mat (3.4.4). Add Bishops to any Mustered Christian Lords at any time, no more than one Bishop per Lord. Bishop Vassals then may Muster like other Vassals. Do not put Bishops on the Calendar even if using the Vassal Service advance rule 3.4.2: they are immune to Vassal Service limits.
+ 
+C23. Fonsadera – Payment in lieu of service
+Your Unbesieged Lords during Muster may exchange Ready non-Bishop Vassals for 1 Coin OR 3 Transport each
+Lords. Any Christians.
+Tips. Put the Fonsadera card at the board edge, not at a mat (3.4.4). See 3.4.3 EXCHANGE VASSAL FOR ASSETS. Any Christian Lords during any Muster segments may make the exchange any number of times, for no actions. They may be Bypassed or at a Neutral or Enemy Locale. Set exchanged Vassal Service markers aside until that Lord Disbands and re-Musters (3.4.1).
+ 
+C24. García Jiménez – Conqueror of Aledo
+This Lord's Storm may go 2 extra Rounds
+Lords. Pedro Ansúrez, García Ordóñez, Álvar Fáñez, or Rodrigo Campeador.
+Tips. The Storm must be on this Lord's card, not just where he is present. Go 2 extra Rounds means, for example, his Storm with one Siege marker could go three Rounds (4.5.2).
+ 
+C25. El Cid
+This Lord on his Command card may play Swollen River, Surprise, Camp Attack, Cantador, or Baggage Parapet from deck
+Lords. Rodrigo Campeador.
+Tips. El Cid enables the owning player at one moment only during each of Rodrigo's Command cards to search the Arts of War deck (not cards Held or already in play) for one of the listed Events (only) and immediately play it. It may not instead be Held. The Event must at that moment be applicable.
+ 
+C26. Al-Faraj – El Cid's Muslim lieutenant
+This Lord may use Command card at or adjacent to Muslim Lord to cause Muslims to discard 1 random Held card
+Lords. Rodrigo Campeador.
+Tips. Rodrigo with Al-Faraj may use all actions on his own Command card while in the same Locale as or adjacent to any Enemy Lord for the player with Rodrigo to blindly draw, inspect, and discard one of the other side's Held cards.
+ 
+ 
+================================================================
+MUSLIM EVENTS (top half of card)
+================================================================
+ 
+M1. Hills
+Hold: May play if Defending in Battle – Muslims' Slingers are x1½ and their other Missiles are x1 (not x½)
+Lords. All Muslims (including Rodrigo al-Sayyid).
+Tips. See Christian Event #C1 Hills.
+ 
+M2. Camp Attack
+Hold: May play in Battle – Unless Baggage Parapet, Round 1, take 2 Assets from each Enemy Lord there as Spoils, remove 2 more from each
+Lords. All Christians.
+Tips. See Christian Events #C2 Camp Attack and #C7 Baggage Parapet. See also Muslim Capabilities #M8 Dawud ibn Aisha and #M25 El Cid.
+ 
+M3. Swollen River
+Hold: Unless a Lord there has Adalides, play to block March on a Command card OR to block Avoid Battle
+Lords. All Christians.
+Tips. See Christian Event #C3 Swollen River. Any play at a Locale where a Christian Lord has Capability #C3/C10 Adalides is canceled; if Swollen River played, discard it without effect. See also Muslim Capability #M25 El Cid.
+ 
+M4. Arid Terrain
+Hold: May play as Christians March – They immediately Feed 2 Marching Lords
+Lords. Any Christians.
+Tips. See Christian Event #C4 Arid Terrain. (The only difference is that Christians have no Camels.)
+ 
+M5. Drought
+Christians immediately Feed 2 of their Lords not at Friendly Gardens or Seat
+Lords. Any Christians.
+Tips. See Christian Event #C5 Drought.
+ 
+M6. Feigned Retreat
+Hold: May play in Battle – On Round 2, all Muslim Melee Strikes before all Christian Melee
+Lords. All Muslims.
+Tips. Play Feigned Retreat at the outset of Battle Attack or Defense (4.4.1 Events), not in Storm. The Event alters the Initiative order during Round 2 only of that Battle. After Missiles as usual, instead of Defending then Attacking Horse then Defending then Attacking Foot (4.4.2 Initiative), all Muslim Horse and Foot Melee Strike, then all Christian units Melee Strike, regardless of which side is that Attacker. See also Muslim Capabilities #M8 Dawud ibn Aisha and #M25 El Cid.
+ 
+M7. Spear Wall
+Hold: May play in Battle – Any 1 Round 2 Muslim Lords' Armored Foot units have Armor +1 against Horse Melee (mark)
+Lords. Any Muslims.
+Tips. Play Spear Wall at the outset of Battle Attack or Defense (4.4.1 Events), not in Storm. The Muslim player puts one Spear Wall marker each on the mats of two Muslim Lords in the Battle. At any time during any one Battle Round only, the Muslim player declares Spear Wall to be in effect. For the rest of that Round only, those two Lords' Men-at-Arms and African Foot units have Armor +1 when rolling Protection against Melee Strikes from Christian Horse (4.4.2 Initiative). Armor 1-3 becomes Armor 1-4, Armor 1-2 becomes 1-3, for example. At the end of that Round, flip the Spear Wall markers to Used. See also Muslim Capabilities #M8 Dawud ibn Aisha and #M25 El Cid.
+ 
+M8. Ahmad Ibn Rumayla – Ascetic faqih of Córdoba
+Hold: Play in Taifa with Yusuf, Sir, or al-Mutamid to remove Conquered from empty Town OR add 2 Jihad
+Lords. Yusuf, Sir, or al-Mutamid.
+Tips. Empty Town means where no Lords of either side. The Muslim player may add the Jihad to any eligible Locale(s) per rule 1.4.4 "Important" that are within the same Taifa as Yusuf or Sir or al-Mutamid.
+ 
+M9. Maliki Islam
+Hold: Play to add 2 Jihad if Yusuf or Sir in a Reconquista Taifa OR 4 Jihad if in a Kingdom
+Lords. Yusuf or Sir.
+Tips. The Muslim player may add the Jihad to any eligible Locale(s) per rule 1.4.4 "Important" regardless of which Reconquista Taifa or Kingdom Yusuf or Sir occupies.
+ 
+M10. Fatwa
+Hold: Play to add 1 Jihad OR add 1 Jihad for each—Yusuf and/or Sir in any Kingdom, Eudes plus each Crusaders on map
+Lords. Yusuf or Sir; Eudes.
+Tips. The Muslim player may add the Jihad to any eligible Locale(s) per rule 1.4.4 "Important". The maximum number of Jihad markers added would be four: one if Yusuf or Sir is in a Kingdom, plus one if Eudes is on map, plus one for each of two Crusader Vassals Mustered with any Christian Lords.
+ 
+M11. Al-Qadir balks at payment
+Hold: Play to add 1 Jihad OR— if Yusuf or Sir in any Reconquista or Parias Taifa or Kingdom—3 Jihad
+Lords. Yusuf or Sir.
+Tips. The Muslim player may add the Jihad to any eligible Locale(s) per rule 1.4.4 "Important" regardless of which Reconquista or Parias Taifa or Kingdom Yusuf or Sir occupies.
+ 
+M12. Taifa Marriage
+Hold: Play to shift 2 Taifa Lords' cylinder or Service by 1 Calendar box each OR for one to use Lordship +2
+Lords. Taifa Muslims.
+Tips. The Muslim player may play at any time to select up to two Taifa Lords in the game and, for each, shift his cylinder left if on the Calendar or Service right if the Lord is on the map. For Lordship, play during the Muslim Muster segment (3.4).
+ 
+M13. Severed Heads
+Hold: Play as Ravaging to shift 1 Taifa Lord's cylinder or Service 2 boxes OR add 2 Jihad
+OR play if Christians Retreat or Sacked for 2 Lords OR 4 Jihad
+Lords. Taifa Muslims.
+Tips. The Muslim player may play the card at any moment that a Muslim Lord succeeds in a Ravage action (4.7.2, not placing Ravage by Event). Ravage that has no effect because of Christian Capability #C19 Caballería Villana does not allow Severed Heads. Alternatively, the Muslim player may play the card for the greater reward listed at any moment that any Christian Lord(s) are forced to Retreat from Battle (4.4.3, including elimination for failure to Retreat but not including Withdrawal into a Stronghold) or that a Christian Stronghold is Sacked (4.5.2). Shift Taifa Lord cylinder(s) left or Service right. Add Jihad markers per 1.4.4 "Important".
+ 
+M14. Devaluation
+Each Locale where Christian Lords have Coin, they reduce their total there to half (rounded up)
+Lords. All Christians.
+Tips. Total the Coin of all Lords at each Locale separately. The Christian player immediately removes Coin from Christian mats until the amount at each Locale is half of the original total, rounded up. For example, if Alfonso has two Coin and Pedro at the same Locale has one, the Christian player would remove any one Coin from one them.
+ 
+M15. Parias Revolt – Subjects resent tax
+Hold: Play to add 1 Jihad in Parias Taifa, OR 2 Jihad at Jihad there, OR 3 Jihad if Yusuf or Sir there
+Lords. Yusuf or Sir.
+Tips. For adding Jihad, see 1.4.4 "Important". At Jihad means at a Stronghold that already has at least one Jihad marker.
+ 
+M16. Galician Revolt
+Shift Service of Ansúrez, Ordóñez, OR Fañez by 1 box left
+This Levy, no Muster of or by Alfonso
+Lords. Pedro Ansúrez, García Ordóñez, or Álvar Fáñez; Alfonso.
+Tips. The Muslim player selects one Mustered Lord from among the three listed (if any); his Service marker shifts one box left on the Calendar (if using the Advanced Vassal Service advanced rule 3.4.2, his Vassals' markers too). Alfonso this Levy may neither become Mustered nor take Levy actions himself. Keep the card near the other side's mats area for the rest of the current Levy; its Capability is unavailable this turn (3.1.3).
+ 
+M17. León y Castilla – Rivalry
+Shift Service of Ansúrez, Ordóñez, Fañez, OR Rodrigo Campeador 1 box left
+This Levy, no Muster of or by them
+Lords. Pedro Ansúrez, García Ordóñez, Álvar Fáñez, or Rodrigo Campeador.
+Tips. See Muslim Event #M16 Galician Revolt above. León Y Castilla works the same but applied to the Muslim player's choice of one of the four listed Lords for the Service shift and all four of them for the ban on Muster.
+ 
+M18. Refugees
+Hold: Play in Muster for each Unbesieged Taifa Lord to restore all Lost Unarmored units and add 1 Transport
+Lords. Taifa Muslims.
+Tips. See 3.4.2 ARTS OF WAR. The Muslim side may play Refugees during its Muster segment. All Taifa Lords who are on the map and Unbesieged (even if Bypassed or at Neutral or Enemy Locales) add Unarmored units (Light Horse and Militia) to their Forces equal in number and type to those lost from their starting Forces and Mustered Vassals. Determine lost units by comparing the Lord's current Forces units to the sum of those pictured on the mat plus pictured on his currently Mustered Vassal Service markers. Then choose and add either a Cart or a Mule to each Unbesieged Taifa Lord on the map.
+ 
+M19. African Fleet
+Hold: Play for a Lord to use his Command card to March between two Ports where no Christian Lord
+Lords. Any Muslim.
+Tips. The movement counts as a March for Group March (4.3.1), Laden (4.3.2), and Feed (4.3, 4.8.1) but takes up all actions of a Command card and moves directly between any two Ports free of Enemy Lords rather than across a Way (4.3.3). If the destination is an Enemy Stronghold, Besiege or Bypass it normally (4.3.5). See also Muslim Capability #M25 El Cid.
+ 
+M20. Mudéjares – Subject Muslims
+Hold: Play to add 1 Jihad in Reconquista Taifa, OR 2 Jihad at Jihad there, OR 3 Jihad if Yusuf or Sir there
+Lords. Yusuf or Sir.
+Tips. For adding Jihad, see 1.4.4 "Important". At Jihad means at a Stronghold that already has at least one Jihad marker.
+ 
+M21. Al-Sumaisir – Poet reproaches emirs
+Hold: Play to Muster Taifa Lord from Calendar OR add 2 Jihad in Parias Taifa—4 Jihad if Yusuf or Sir there
+Lords. Yusuf or Sir; Taifa Muslim.
+Tips. For Muster of a Taifa Lord, see 3.4.1 ARTS OF WAR: it may be any Lord with a cylinder anywhere on the Calendar without rolling or using any Levy action, but otherwise per 3.4.1. For adding Jihad, see 1.4.4 "Important".
+ 
+M22. Massacre
+If Eudes or Crusaders on map, Muster a Taifa Lord from Calendar OR add 3 Jihad
+If not, add 1 Jihad
+Lords. Eudes; Taifa Muslim.
+Tips. For adding Jihad, see 1.4.4 "Important". For Muster of a Taifa Lord, see 3.4.1 ARTS OF WAR: it may be any Lord with a cylinder anywhere on the Calendar without rolling or using any Levy action, but otherwise per 3.4.1.
+ 
+M23. Berenguer Ramon
+If Count of Barcelona with Christians, they discard card
+If not, a Lord may Levy this card and its units now for 1 Asset
+Lords. Sancho or Eudes (al-Mustain or al-Mundir).
+Tips. See Christian Event #C13 Berenguer Ramon.
+ 
+M24. Al-Maghawir – Frontier raiders
+Unless Caballería Villana, place Ravaged at 2 Unravaged Enemy Locales adjacent to Friendly Locales
+Lords. None.
+Tips. If Caballería Villana is in play, discard al-Maghawir without effect. If not, put one green Ravaged marker at each of two Locales that are currently Friendly to the Christians (not Neutral, 1.3.1, 1.4.1), are adjacent to at least one Locale Friendly to the Muslims (even if Besieged), and have no Ravaged marker already. The two markers add a total of +1 Muslim VP (5.1). This is not a Ravage Command action and so does not add Loot or Provender (4.7.2).
+ 
+M25 & M26. Freebooter
+Disband Rodrigo Campeador as if at Service Limit (3.3.2)
+If desired, remove 1VP from Taifas box to replace him on Calendar with Rodrigo al-Sayyid
+Lords. Rodrigo Campeador and Rodrigo al-Sayyid.
+Tips. If (yellow) Rodrigo Campeador is on map, his Disband per 3.3.2 is immediate and mandatory, placing his cylinder two boxes ahead on the Calendar. Then, if Rodrigo Campeador's cylinder is now somewhere on the Calendar (however that occurred), the Muslim player may expend one Taifas Box Conquered/1VP marker (adjusting score, 5.1) to replace the yellow Rodrigo cylinder with the green Rodrigo cylinder in the same Calendar box.
+ 
+ 
+================================================================
+MUSLIM CAPABILITIES (bottom half of card)
+================================================================
+ 
+M1. Battering Ram
+This Lord at Siege counts as 2 Lords and may reroll 1 Surrender die per Muslim Siege action
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C1 Battering Ram.
+ 
+M2. Aqqara – Crossbows
+This Lord's Men-at-Arms and Militia have Missiles x½ that select target units, –1 to target's Armor
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C2 Ballesteros.
+ 
+M3 & M6. Harbah – Javelins
+Up to 4 of this Lord's Unarmored units have Missiles x1 on any 1 Battle Round, Missiles x½ if Storm (mark)
+Lords. Taifa Muslim or Rodrigo.
+Tips. See Christian Capability #C7 Jabalinas. Javelin use is by Lord; if a Lord with Harbah and another with African Horse are in the same Battle or Storm, each may use his Javelins on a different Round (4.4.2 Javelins). A Lord may have only one Harbah card (3.4.4).
+ 
+M4 & M5. Alrama – Bowmen
+This Lord's Foot and Light Horse have Missiles x½
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C4 Arqueros. A Lord may have only one Alrama card (3.4.4).
+ 
+M7. Slingers
+Up to 3 Militia of this Lord have Missiles x1 in Battle, Missiles x½ in Storm
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C9 Slingers.
+ 
+M8. Dawud ibn Aisha – Almoravid general
+This Lord's Supply adds 1 extra Prov
+In Battle, play Feigned Retreat, Spear Wall, or Camp Attack from deck
+Lords. Yusuf or Sir.
+Tips. To benefit from extra Provender, a Lord with Dawud ibn Aisha must carry out a Supply action (4.6.1) and so may not be Besieged. Add +1 Prov means that, if the Supply action were out of reach of any Source, it would add one Provender instead of zero. The Lord gains an extra Provender each of his Supply actions; that may be several per card. In each Battle (not Storm) involving this Lord, the Muslim player at the moment of playing Battle Events (4.4.1 Event) may search the Muslim Arts of War deck (not cards otherwise in play) for one of the listed Events (only) and immediately play it. It may not be Held.
+ 
+M9. Emir al-Muslimin
+This Lord if closer than any Christian to Jihad-eligible Locale (1.4.4) may use his Command card to add 1 Jihad there
+Lords. Yusuf.
+Tips. Closer means by the shortest chain of adjacent spaces away. Yusuf in the same Locale as a Christian Lord is not closer, regardless of who is Sieging or Bypassing. Placing Jihad requires Yusuf's entire Command card. See rule 1.4.4 "Important" for what is Jihad-eligible.
+ 
+M10. Andalusians – Nimble horses
+All Muslim Light Horse Evade 1-3 (vs Melee in Battle)
+Lords. Taifa Muslims and Rodrigo al-Sayyid.
+Tips. Andalusians goes at the board edge, not at a mat (3.4.4). While this Capability is in play, all Light Horse of all Taifa Muslim Lords and of Rodrigo al-Sayyid (only) have Evade 1-3 Protection against Melee Hits in all Battles (4.4.2 Evade). Note that Andalusians combined with Alrama or Javelins turn Muslim Light Horse in effect into even better African Horse.
+ 
+M11 & M21. Hasham – Elite guard
+This Lord with Horse Command +1
+Lords. Any Muslim.
+Tips. Command +1 means that a Lord with a Command rating of "2" instead could take three Command actions on his card, for example (1.5.3, 1.4.1). A Lord with Hasham receives the added Command with even a single Horse unit of any type on his mat. A Lord may have only one Hasham card (3.4.4).
+ 
+M12. Al-Yazirat al-Hadra – Almoravid bastion
+Flip Yusuf and Sir Seat markers to 2 Seats
+If card discarded, flip back to 1 Seat
+Lords. Yusuf and Sir.
+Tips. Al-Yazirat al-Hadra goes at the board edge, not at a mat (3.4.4). While this Capability is in play, Yusuf's and Sir's Seat markers whenever and wherever on the map, use their two-Seat side. The Locale serves as two Sources for Supply actions by that Lord (4.6.1).
+ 
+M13. Siege Towers
+This Lord at Storm from Round 2 on weakens Enemy Stronghold to Walls –1
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C6 Siege Towers.
+ 
+M14 & M18. Ribat Monks patrol the frontier
+Christian Ravage in this Lord's Taifa must roll 1-3 for effect (mark)
+Lords. Taifa Muslim.
+Tips. Place a reminder marker in the affected Taifa. The Capability affects Ravage Command actions, not placement of Ravaged markers by Event. Christians roll as they expend each action. A Lord may have only one Ribat Monks card.
+ 
+M15. Saqalibah – Slav troops
+This Lord may Muster 2 Men-at-Arms (once, free)
+If card discarded, remove them
+Lords. Taifa Muslim.
+Tips. See 3.4.2 ARTS OF WAR. The Taifa Lord with this Capability during a Muster segment in which he is eligible per 3.4 "Important" may Muster the units, for no actions. Discard removes the same number of units from that Lord's mat.
+ 
+M16. Camels
+Discard to ignore Arid Terrain or Drought
+Yusuf and Sir Mules count double for move and Supply
+Lords. All Muslims; Yusuf and Sir.
+Tips. See Christian Events #C4 Arid Terrain and #C5 Drought; the Christian player may not retract play of one of those Events if the Muslim side has and discards Camels. Camels goes at the board edge, not at a mat (3.4.4). With Camels, Mules (only, not Carts) on Yusuf and Sir's mats (only) carry twice the amount of Provender (4.3.2) and reach twice as far to Supply Sources (4.6.1) but Muster and Feed normally (3.4.3, 4.8.1).
+ 
+M17. Arrada – Catapults & mangonels
+This Lord at Storm or when Sallying adds 3 Missile Hits per Round with –2 to Enemy Armor
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. Any Lord with Arrada at a Storm Locale adds the Hits; it need not be the Lord taking the Storm action, and it may be during Christian Storm (4.5.2). Similarly, add the Hits so long as the Lord with Arrada is Attacking during a Sally (4.5.3, not once he Routs). Relief Sally (4.4.1) counts as Sally for use of Arrada so long as this Lord is among those joining the Attack. During the Muslims' Missiles step (4.4.2), add an extra three Hits to Muslim Missile Hits (if any). Armor 1-3 against those three Hits becomes Armor 1, for example, Armor 1-4 becomes 1-2.
+ 
+M19. Guadalquivir – River and shore fleets
+Taifa Lords may March directly among Ports and Sevilla Taifa Cities and Towns where no Christian Lord
+Lords. Taifa Muslims.
+Tips. Guadalquivir goes at the board edge, not at a mat (3.4.4). March actions with this Capability follow Group March (4.3.1), Laden (4.3.2), and Feed (4.3, 4.8.1) rules normally but may move directly between any two Locales listed that are free of Enemy Lords, rather than across a Way (4.3.3). In addition to Strongholds with Port symbols, origin and destination may include the Cities or Towns of Córdoba, Jaén, Baeza, Lorca, or Murcia. If the destination is an Enemy Stronghold, Besiege or Bypass it normally (4.3.5). Note that Yusuf as a Marshal cannot be a Lower Lord and so can never move via Guadalquivir but Sir could under a Taifa Lord Lieutenant (4.1.3).
+ 
+M20. Al-Rûm – Christian mercenaries
+This Lord pays 1 Coin (once) to Muster 2 Knights
+If card discarded, remove them
+Lords. Taifa Muslim.
+Tips. See 3.4.2 ARTS OF WAR. The Taifa Lord with this Capability during a Muster segment in which he is eligible per 3.4 "Important" may pay for the units, for no actions. Sharing and Taifas box apply (1.3.3, 1.5.2). Discard removes the same number of units from that Lord's mat.
+ 
+M22. War Drums
+Yusuf, Sir, and Muslim Lieutenants Ravage for 1 extra Prov AND may Bypass without stopping
+Lords. Yusuf, Sir, and any Muslim Lieutenants.
+Tips. War Drums goes at the board edge, not at a mat (3.4.4). It applies to Yusuf and Sir at all times but to Taifa Lords only while Lieutenants (4.1.3). Ravage for 1 extra Prov means that, each time an eligible Lord succeeds in a Ravage action, add one Provender to that Lord's mat beyond the Loot and/or Provender normally received (4.7.2). Ravage that has no effect because of Christian Capability #C19 Caballería Villana does not add extra Provender. Bypass without stopping means that the affected Lords may Bypass an Enemy Stronghold and then use a March action on the same Command card (4.3.4).
+ 
+M23. Count of Barcelona
+Unless Count of Barcelona with Christians, this Lord pays 2 Coin (once) to Muster 2 Knights, 2 Men-at-Arms until card discarded
+Lords. Al-Mustain or al-Mundir.
+Tips. See 3.4.2 ARTS OF WAR and Christian Capability #C13 Count of Barcelona. Taifas Coin applies (1.3.3). See also Christian and Muslim Events #C13/M23 Berenguer Ramon.
+ 
+M24. Al-Garada – Long-range raids
+This Lord may pay 1 Prov to use entire card to Ravage across up to 2 Ways, not at or past any Unbesieged Enemy Lord
+Lords. Taifa Muslim or Rodrigo al-Sayyid.
+Tips. See Christian Capability #C14/C17 Cabalgadas.
+ 
+M25. El Cid
+This Lord on his Command card may play from deck Swollen River, Camp Attack, Feigned Retreat, Spear Wall, or African Fleet
+Lords. Rodrigo al-Sayyid.
+Tips. See Christian Capability #C25 El Cid.
+ 
+M26. Al-Faraj – El Cid's Muslim lieutenant
+This Lord may use Command card at or adjacent to Christian Lord to cause Christians to discard 1 random Held card
+Lords. Rodrigo al-Sayyid.
+Tips. See Christian Capability #C26 Al-Faraj.

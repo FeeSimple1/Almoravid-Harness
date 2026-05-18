@@ -1,0 +1,505 @@
+============================================================
+ ALMORAVID MAP REFERENCE — v13 (Town Capacity corrected)
+============================================================
+ 
+Iberia, circa 1085. 72 Locales, 109 Ways.
+ 
+Christian Territory:  Kingdoms of León and Aragón
+Muslim Territory:     Taifas of Badajoz, Toledo, Zaragoza,
+                      Lérida, Sevilla, Granada, Valencia
+ 
+ 
+============================================================
+ PART 1 — LOCALES
+============================================================
+ 
+LEGEND
+  Format: NAME | TYPE | CAP | GARDEN | PORT | SEAT | TARGET
+  CAP    1/2/3 (siege capacity dots), blank for Region
+  GARDEN Y/N (orange-tree icon, only at Cities/Fortresses)
+  PORT   Y/N (ship icon)
+  SEAT   Lord(s) whose printed pennant sits there, or —
+  TARGET Y/N (Reconquista target: City or printed Seat in a Taifa)
+ 
+VP value derives from TYPE: Castle/Town = 1, Fortress = 2, City = 3.
+(VP value is the Conquered-marker scoring multiplier per 1.4.4 —
+ separate from Capacity.)
+ 
+NOTE on CAP: Capacity values per the foldout reference table are
+City 3, Fortress 2, Town 2, Castle 1. Earlier versions of this
+doc listed Towns as Cap 1; that was an error and is corrected
+here (all 19 Towns now read Cap 2). Capacity governs Siegeworks
+threshold (4.5.1) and Storm Reposition limits (4.5.2).
+ 
+ 
+--- KINGDOM OF LEÓN (Christian) ---
+Coria      | Town     | 2 | — | N | —                       | —
+Astorga    | Town     | 2 | — | N | —                       | —
+León       | Town     | 2 | — | N | Alfonso                 | —
+Zamora     | Castle   | 1 | — | N | —                       | —
+Simancas   | Castle   | 1 | — | N | Pedro Ansúrez           | —
+Palencia   | Town     | 2 | — | N | —                       | —
+Peñafiel   | Castle   | 1 | — | N | —                       | —
+Burgos     | Town     | 2 | — | N | Alfonso, Álvar Fáñez    | —
+Gormaz     | Fortress | 2 | Y | N | —                       | —
+Najera     | Town     | 2 | — | N | García Ordóñez          | —
+Calahorra  | Castle   | 1 | — | N | —                       | —
+Alava      | Region   |   |   |   |                         |
+Sahagún    | Region   |   |   |   |                         |       (Christian forward camp:
+                                                                       Alfonso, Pedro Ansúrez,
+                                                                       and/or García Ordóñez
+                                                                       set up here in Scenarios
+                                                                       A, E, F)
+Somosierra | Region   |   |   |   |                         |
+Guadarrama | Region   |   |   |   |                         |
+Transduero | Region   |   |   |   |                         |
+Tormes     | Region   |   |   |   |                         |
+ 
+--- KINGDOM OF ARAGÓN (Christian) ---
+Pamplona | Town | 2 | — | N | Eudes  | —
+Jaca     | Town | 2 | — | N | Sancho | —
+ 
+--- TAIFA OF ZARAGOZA ---
+Medinaceli | Fortress | 2 | Y | N | —          | N
+Calatayud  | Castle   | 1 | — | N | —          | N
+Tudela     | Fortress | 2 | Y | N | —          | N
+Huesca     | Fortress | 2 | Y | N | —          | N
+Zaragoza   | City     | 3 | Y | Y | Al-Mustain | Y      (river port)
+Ibérico    | Region   |   |   |   |            |
+Albarracín | Region   |   |   |   |            |
+Alpuente   | Region   |   |   |   |            |
+ 
+--- TAIFA OF LÉRIDA ---
+Alicante  | Town     | 2 | — | Y | —         | N
+Denia     | Town     | 2 | — | Y | —         | N
+Burriana  | Castle   | 1 | — | N | —         | N
+Tortosa   | Fortress | 2 | Y | Y | —         | N
+Lérida    | Fortress | 2 | Y | Y | Al-Mundir | Y      (river port)
+Barbastro | Town     | 2 | — | N | —         | N
+Baniskula | Region   |   |   |   |           |
+ 
+--- TAIFA OF VALENCIA ---
+Játiva   | Town | 2 | — | N | —        | N
+Valencia | City | 3 | Y | Y | Abu Bakr | Y
+ 
+--- TAIFA OF TOLEDO ---
+Trujillo    | Castle   | 1 | — | N | — | N
+Talavera    | Fortress | 2 | Y | N | — | N
+Toledo      | City     | 3 | Y | N | — | Y      (no seat — no Taifa Lord;
+                                                  starts as Reconquista
+                                                  in Scenarios B, C, D, E)
+Calatrava   | Fortress | 2 | Y | N | — | N
+Madrid      | Town     | 2 | — | N | — | N
+Uclés       | Fortress | 2 | Y | N | — | N
+Cuenca      | Castle   | 1 | — | N | — | N
+Guadalajara | Castle   | 1 | — | N | — | N
+Muradal     | Region   |   |   |   |   |
+La Mancha   | Region   |   |   |   |   |
+Júcar       | Region   |   |   |   |   |
+Zancara     | Region   |   |   |   |   |
+ 
+--- TAIFA OF BADAJOZ ---
+Badajoz   | City     | 3 | Y | N | Al-Mutawakkil | Y
+Mérida    | Fortress | 2 | Y | N | —             | N
+Alcántara | Castle   | 1 | — | N | —             | N
+Sagrajas  | Region   |   |   |   |               |
+ 
+--- TAIFA OF SEVILLA ---
+Algeciras | Fortress | 2 | Y | Y | Yusuf, Sir | N      (printed Seats but Yusuf/Sir not Taifa Lords)
+Jerez     | Town     | 2 | — | Y | —          | N
+Huelva    | Town     | 2 | — | Y | —          | N
+Sevilla   | City     | 3 | Y | Y | Al-Mutamid | Y
+Córdoba   | City     | 3 | Y | N | Al-Mutamid | Y
+Jaén      | Town     | 2 | — | N | —          | N
+Baeza     | Town     | 2 | — | N | —          | N
+Aledo     | Castle   | 1 | — | N | —          | N
+Lorca     | Town     | 2 | — | N | —          | N
+Cartagena | Town     | 2 | — | Y | —          | N
+Murcia    | City     | 3 | Y | N | —          | Y      (no seat — but City)
+Morón     | Region   |   |   |   |            |
+Ardila    | Region   |   |   |   |            |
+Firrish   | Region   |   |   |   |            |
+Morena    | Region   |   |   |   |            |
+Alcaraz   | Region   |   |   |   |            |
+Albacete  | Region   |   |   |   |            |
+ 
+--- TAIFA OF GRANADA ---
+Granada | City     | 3 | Y | N | Abd Allah | Y
+Málaga  | Fortress | 2 | Y | Y | —         | N
+Almería | Fortress | 2 | Y | Y | —         | N
+ 
+ 
+============================================================
+ PART 2 — WAYS (ROADS — 72 total)
+============================================================
+ 
+--- KINGDOM OF LEÓN — internal ---
+León — Astorga          | Road
+León — Zamora           | Road
+León — Sahagún          | Road
+Sahagún — Palencia      | Road
+Sahagún — Burgos        | Road
+Palencia — Burgos       | Road
+Zamora — Simancas       | Road
+Zamora — Transduero     | Road
+Simancas — Peñafiel     | Road
+Simancas — Transduero   | Road
+Peñafiel — Gormaz       | Road
+Burgos — Najera         | Road
+Najera — Calahorra      | Road
+Najera — Alava          | Road
+Transduero — Guadarrama | Road
+ 
+--- LEÓN — borders ---
+Calahorra — Pamplona    | Road      (to Aragón)
+Calahorra — Tudela      | Road      (to Zaragoza)
+Coria — Alcántara       | Road      (to Badajoz)
+Coria — Mérida          | Road      (to Badajoz)
+Coria — Talavera        | Road      (to Toledo)
+ 
+ 
+--- TAIFA OF ZARAGOZA — internal ---
+Tudela — Zaragoza       | Road
+Huesca — Zaragoza       | Road
+Zaragoza — Calatayud    | Road
+Zaragoza — Ibérico      | Road
+Calatayud — Medinaceli  | Road
+Albarracín — Alpuente   | Road
+ 
+--- ZARAGOZA — borders ---
+Huesca — Barbastro      | Road      (to Lérida)
+Huesca — Lérida         | Road      (to Lérida)
+Zaragoza — Lérida       | Road      (to Lérida)
+Medinaceli — Guadalajara| Road      (to Toledo)
+Alpuente — Valencia     | Road      (to Valencia)
+ 
+ 
+--- TAIFA OF LÉRIDA — internal ---
+Lérida — Barbastro      | Road
+Lérida — Tortosa        | Road
+Tortosa — Baniskula     | Road
+Burriana — Baniskula    | Road
+Alicante — Denia        | Road
+ 
+--- LÉRIDA — borders ---
+Burriana — Valencia     | Road      (to Valencia)
+Denia — Játiva          | Road      (to Valencia)
+Alicante — Murcia       | Road      (to Sevilla)
+Alicante — Cartagena    | Road      (to Sevilla)
+ 
+ 
+--- TAIFA OF VALENCIA — internal ---
+Valencia — Játiva       | Road
+ 
+--- VALENCIA — borders ---
+Játiva — Júcar          | Road      (to Toledo region)
+ 
+ 
+--- TAIFA OF TOLEDO — internal ---
+Toledo — Talavera       | Road
+Toledo — Calatrava      | Road
+Toledo — Madrid         | Road
+Toledo — Uclés          | Road
+Toledo — Zancara        | Road
+Madrid — Guadalajara    | Road
+Calatrava — Muradal     | Road
+Calatrava — Zancara     | Road
+Uclés — Zancara         | Road
+La Mancha — Zancara     | Road
+ 
+--- TOLEDO — borders ---
+Talavera — Trujillo     | Road      (to Badajoz)
+ 
+ 
+--- TAIFA OF BADAJOZ — internal ---
+Badajoz — Mérida        | Road
+Badajoz — Sagrajas      | Road
+Sagrajas — Alcántara    | Road
+Mérida — Trujillo       | Road      (to Toledo)
+ 
+--- BADAJOZ — borders ---
+Mérida — Ardila         | Road      (to Sevilla region)
+ 
+ 
+--- TAIFA OF SEVILLA — internal ---
+Sevilla — Córdoba       | Road
+Sevilla — Jerez         | Road
+Sevilla — Huelva        | Road
+Sevilla — Morón         | Road
+Sevilla — Ardila        | Road
+Córdoba — Jaén          | Road
+Córdoba — Morón         | Road
+Jerez — Algeciras       | Road
+Jaén — Baeza            | Road
+Baeza — Alcaraz         | Road
+Aledo — Lorca           | Road
+Aledo — Murcia          | Road
+Aledo — Cartagena       | Road
+ 
+--- SEVILLA — borders ---
+Morón — Málaga          | Road      (to Granada)
+ 
+ 
+============================================================
+ PART 3 — WAYS (PASSES — 37 total)
+============================================================
+ 
+Pyrenees:
+  Pamplona — Jaca
+  Jaca — Huesca
+  Jaca — Barbastro
+ 
+León internal:
+  Astorga — Zamora
+  Burgos — Alava
+  Tormes — Coria
+  Transduero — Tormes
+  Somosierra — Madrid
+  Somosierra — Peñafiel
+  Somosierra — Simancas
+  Somosierra — Guadarrama
+ 
+León borders:
+  Gormaz — Medinaceli         (to Zaragoza)
+  Guadarrama — Talavera       (to Toledo)
+ 
+Sistema Ibérico:
+  Ibérico — Albarracín
+  Albarracín — Cuenca         (to Toledo)
+  Uclés — Cuenca
+  Cuenca — Júcar
+  La Mancha — Júcar
+  Alicante — Játiva           (to Valencia)
+ 
+Sierra Morena & Toledo–Sevilla:
+  Calatrava — Morena          (to Sevilla)
+  Córdoba — Morena
+  Córdoba — Firrish
+  Mérida — Firrish            (Badajoz to Sevilla)
+  Badajoz — Ardila
+  Muradal — Baeza             (to Sevilla)
+  La Mancha — Albacete        (to Sevilla)
+  La Mancha — Alcaraz         (to Sevilla)
+ 
+Southeast & Béticas:
+  Algeciras — Málaga          (to Granada)
+  Jaén — Granada              (to Granada)
+  Morón — Granada             (to Granada)
+  Granada — Lorca             (to Granada)
+  Granada — Almería
+  Lorca — Almería             (to Granada)
+  Aledo — Alcaraz
+  Murcia — Albacete
+  Ardila — Huelva
+  Málaga — Almería
+ 
+ 
+============================================================
+ PART 4 — TAIFA STATUS BOXES
+============================================================
+ 
+Each Taifa has a status-tracking box (or boxes) printed
+within its territory. The default state shows "Independent."
+When status changes per rule 1.4.1, the box is covered with
+a Parias marker or a Reconquista marker.
+ 
+  Badajoz   — 1 box, "Independent"
+  Toledo    — 1 box, "Parias or Reconquista"
+              (Toledo has no Taifa Lord and can NEVER be
+               Independent — rule 1.4.1 note. Starts as
+               Reconquista in Scenarios B, C, D, E and as
+               Parias in Scenarios A and F.)
+  Zaragoza  — 1 box, "Independent"
+  Lérida    — 1 box, "Independent"
+  Valencia  — 1 box, "Independent"
+  Sevilla   — 3 boxes, all "Independent"
+              (Sevilla is worth 3× VP of other Taifas;
+               three markers placed when status changes)
+  Granada   — 1 box, "Independent"
+ 
+VP per Taifa status:
+  Independent  → 0 VP
+  Parias       → 1 VP Christian (3 VP if Sevilla)
+  Reconquista  → 3 VP Christian (9 VP if Sevilla)
+ 
+ 
+============================================================
+ PART 5 — KEY FACTS FOR REFERENCE
+============================================================
+ 
+PRINTED LORD SEATS (the printed pennants on the map —
+these define a Lord's home Stronghold for Muster, Supply,
+Tax, etc., AND count toward Reconquista targets per 1.4.1):
+ 
+  Christian:
+    León       — Alfonso (lion pennant)
+    Burgos     — Alfonso AND Álvar Fáñez (two pennants)
+    Najera     — García Ordóñez
+    Simancas   — Pedro Ansúrez
+    Jaca       — Sancho
+    Pamplona   — Eudes
+  Muslim Taifa Lords (one Seat each, in their Taifa):
+    Zaragoza   — Al-Mustain
+    Lérida     — Al-Mundir
+    Valencia   — Abu Bakr
+    Badajoz    — Al-Mutawakkil
+    Sevilla    — Al-Mutamid
+    Córdoba    — Al-Mutamid (his second Seat)
+    Granada    — Abd Allah
+  Muslim non-Taifa Lords:
+    Algeciras  — Yusuf AND Sir (single banner each;
+                 Yusuf gets a doubled Seat marker via the
+                 AL-YAZIRAT AL-HADRA capability card)
+ 
+NOTE on Toledo and Murcia: Both are Reconquista Cities in
+their Taifas but have no printed Lord Seat. Toledo Taifa
+has no Taifa Lord at all (al-Qadir's historical weakness).
+Murcia in Sevilla Taifa is held politically by al-Mutamid
+without a separate Seat — his Vassal Ibn Rashiq of Murcia
+represents Murcian forces.
+ 
+Lords with NO printed Seat (Muster via Call to Arms or
+Seat markers placed during play):
+  Rodrigo Campeador / al-Sayyid (yellow / green cylinders;
+                                 Seat marker placed)
+  Cathedral Seat markers — Alfonso may place at Conquered
+                           Cities via Cathedrals capability
+ 
+RECONQUISTA TARGETS (Christian must Conquer all to flip
+Taifa to Reconquista status — rule 1.4.1, Cities and
+printed Taifa Lord Seats; marked on map with red
+cross-on-disc symbol):
+  Granada Taifa:  Granada
+  Sevilla Taifa:  Sevilla, Córdoba, Murcia
+  Badajoz Taifa:  Badajoz
+  Lérida Taifa:   Lérida (the only non-City target —
+                  al-Mundir's printed Seat, a Fortress)
+  Valencia Taifa: Valencia
+  Toledo Taifa:   Toledo
+  Zaragoza Taifa: Zaragoza
+ 
+  Total: 9 Reconquista targets across 7 Taifas.
+ 
+  IMPORTANT RULE NOTE: Rule 1.4.1's "printed Seats"
+  effectively means Taifa Lord Seats only. Yusuf's and
+  Sir's printed pennants at Algeciras do NOT make
+  Algeciras a Reconquista target, because they are
+  not Taifa Lords. The map's red cross-on-disc symbols
+  are the authoritative indicator.
+ 
+PORTS (ship icon — affects African Fleet/Guadalquivir
+and Genoa & Pisa cards):
+  Mediterranean: Algeciras, Málaga, Almería, Cartagena,
+                 Alicante, Denia, Valencia, Tortosa
+  Atlantic:      Jerez, Huelva, Sevilla
+  River:         Zaragoza, Lérida
+ 
+GUADALQUIVIR MOVEMENT (card capability M19) — Taifa Lords
+may March directly between any combination of Ports above
+plus the Sevilla Taifa Cities/Towns of Córdoba, Jaén,
+Baeza, Lorca, and Murcia.
+ 
+GARDENS (orange-tree icon — guarantee Forage at Friendly
+Cities and Fortresses):
+  All Cities have Gardens.
+  All Fortresses have Gardens.
+ 
+ 
+============================================================
+ PART 6 — KEY OBSERVATIONS
+============================================================
+ 
+CHOKEPOINTS:
+ 
+- SOMOSIERRA: Connects only via 4 Passes (Madrid,
+  Peñafiel, Simancas, Guadarrama). NO ROADS at all.
+  Primary central-meseta crossing for north-south
+  movement, but every transit Ladens Carts.
+ 
+- TORMES: Connects only via 2 Passes (Coria, Transduero).
+  No Roads. The León→Extremadura corridor.
+ 
+- GORMAZ: Only 2 connections — Peñafiel (Road) and
+  Medinaceli (Pass to Zaragoza). Eastern León Fortress
+  anchoring the Duero frontier.
+ 
+- SOUTHERN MOUNTAINS: 10 Passes link Granada Taifa to
+  Sevilla Taifa — heavily connected, but every link
+  is a Pass.
+ 
+ISOLATED / DISTINCTIVE:
+ 
+- ALMERÍA: Three land Ways, all Passes (Málaga, Granada,
+  Lorca). Plus Guadalquivir as a Port.
+ 
+- CARTAGENA: Two land Ways, both Roads (Aledo,
+  Alicante). Plus Guadalquivir as a Port.
+ 
+- MORÓN — MÁLAGA: The only Road crossing from Sevilla
+  Taifa into Granada Taifa.
+ 
+HUBS:
+ 
+- TOLEDO (city): 5 spokes — Talavera, Calatrava, Madrid,
+  Uclés, Zancara (all Roads). Most connected stronghold
+  in central Iberia.
+ 
+- ZARAGOZA (city): 4 spokes — Tudela, Huesca, Calatayud,
+  Ibérico (all Roads).
+ 
+- SEVILLA (city): 5 spokes — Córdoba, Jerez, Huelva,
+  Morón, Ardila (all Roads). Plus Atlantic port.
+ 
+- BURGOS: Christian Seat-of-seats — Alfonso AND Álvar
+  Fáñez both have printed pennants here. The most
+  important Christian Stronghold for Muster purposes
+  (two Lords can Muster directly from it).
+ 
+- ALGECIRAS: Muslim entry-point Stronghold for Yusuf
+  and Sir (the Almoravid Marshal and his cousin).
+  When Yusuf is Called to Arms ("Invite the Almoravids"),
+  he Musters at Algeciras. If Algeciras is unfriendly or
+  Besieged, falls back to nearest Friendly siege-free
+  Port. The AL-YAZIRAT AL-HADRA capability gives Yusuf
+  a doubled Seat marker here.
+ 
+- ALEDO: A small Castle with 4 connections (Lorca,
+  Murcia, Cartagena via Road; Alcaraz via Pass). Anchor
+  for the southeast.
+ 
+CORIA TRIANGLE: Coria has 3 Roads (Alcántara, Mérida,
+Talavera) plus the Tormes Pass. León's forward base for
+projection into Extremadura.
+ 
+ 
+============================================================
+ PART 7 — TOTALS
+============================================================
+LOCALES BY TYPE:
+  Cities:     8
+  Fortresses: 13
+  Towns:      19
+  Castles:    11
+  Regions:    21
+  TOTAL:      72
+ 
+LOCALES BY TERRITORY:
+  León:       17 (11 Strongholds + 6 Regions)
+  Aragón:      2 (2 Strongholds + 0 Regions)
+  Zaragoza:    8 (5 Strongholds + 3 Regions)
+  Lérida:      7 (6 Strongholds + 1 Region)
+  Valencia:    2 (2 Strongholds + 0 Regions)
+  Toledo:     12 (8 Strongholds + 4 Regions)
+  Badajoz:     4 (3 Strongholds + 1 Region)
+  Sevilla:    17 (11 Strongholds + 6 Regions)
+  Granada:     3 (3 Strongholds + 0 Regions)
+ 
+WAYS:           109 total
+  Roads:        72
+  Passes:       37
+ 
+PRINTED LORD SEATS: 16 banners across 14 Strongholds
+  (Burgos has 2; Algeciras has 2 effective; one Lord —
+   al-Mutamid — has 2 Seats himself at Sevilla and Córdoba.)
+ 
+TAIFA STATUS BOXES: 9 total (Sevilla 3 + 6 others 1 each)
