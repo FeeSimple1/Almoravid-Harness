@@ -78,15 +78,25 @@ def test_verbose_includes_calendar_decorations() -> None:
     assert "scenario_end" in out  # Scenario End marker at box 3
 
 
-def test_cli_view_summary_runs() -> None:
+def test_cli_view_summary_runs(tmp_path) -> None:
+    """`almoravid view state.json` renders the summary."""
     import subprocess
     import sys
     from pathlib import Path
-    result = subprocess.run(
-        [sys.executable, "-m", "almoravid.cli", "view", "scenario_a_toledo_beset"],
-        capture_output=True, text=True,
-        env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src"),
-             "PATH": "/usr/bin:/bin"},
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src"),
+           "PATH": "/usr/bin:/bin"}
+    state_file = tmp_path / "state.json"
+    # Initialize state first
+    r = subprocess.run(
+        [sys.executable, "-m", "almoravid.cli", "new",
+         "scenario_a_toledo_beset", "-o", str(state_file)],
+        capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 0, result.stderr
-    assert "Scenario A" in result.stdout
+    assert r.returncode == 0, r.stderr
+    # Now view it
+    r = subprocess.run(
+        [sys.executable, "-m", "almoravid.cli", "view", str(state_file)],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "Scenario A" in r.stdout

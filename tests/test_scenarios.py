@@ -124,17 +124,23 @@ def test_service_markers_placed() -> None:
     assert sancho_sm[0].box == 3
 
 
-def test_cli_new_game_runs() -> None:
-    """CLI new-game produces output without crashing."""
+def test_cli_new_writes_state_file(tmp_path) -> None:
+    """`almoravid new <scenario> -o state.json` writes a valid state file."""
     import subprocess
     import sys
     from pathlib import Path
-    result = subprocess.run(
-        [sys.executable, "-m", "almoravid.cli", "new-game", "scenario_a_toledo_beset"],
-        capture_output=True, text=True,
-        env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src"),
-             "PATH": "/usr/bin:/bin"},
+
+    from almoravid.state import GameState
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src"),
+           "PATH": "/usr/bin:/bin"}
+    state_file = tmp_path / "state.json"
+    r = subprocess.run(
+        [sys.executable, "-m", "almoravid.cli", "new",
+         "scenario_a_toledo_beset", "-o", str(state_file)],
+        capture_output=True, text=True, env=env,
     )
-    assert result.returncode == 0, result.stderr
-    assert "Scenario: A" in result.stdout
-    assert "Lords:" in result.stdout
+    assert r.returncode == 0, r.stderr
+    assert state_file.exists()
+    # Round-trips through pydantic
+    s = GameState.model_validate_json(state_file.read_text())
+    assert s.meta.scenario_letter == "A"

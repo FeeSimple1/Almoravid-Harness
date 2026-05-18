@@ -9,6 +9,36 @@ active player. Per Pattern 1 (state-set-but-unreachable), any new
 handler in `actions.py` must add a corresponding enumerator in
 `legal_moves.py` in the same PR.
 
+## CLI state-file flow
+
+States are persisted to JSON files via Pydantic round-trip. Actions
+are also JSON files. The typical flow is:
+
+```
+$ almoravid new scenario_a_toledo_beset -o game.json --seed 1
+$ almoravid state game.json
+Scenario A (toledo_beset)  box 1 spring  phase=setup  active=christian  VP=C5/M8
+
+$ almoravid legal game.json
+{"type": "begin_levy"}
+
+$ echo '{"type": "begin_levy"}' > a.json
+$ almoravid do game.json a.json
+OK: {"levy_step": "arts_of_war", "phase": "levy"}
+
+$ almoravid view game.json --mode summary
+[render output]
+
+$ almoravid history game.json --tail 5
+T0 system  load_scenario: Loaded scenario A: Toledo Beset, Spring 1085
+T0 christian  begin_levy: Begin Levy phase (3.1 arts_of_war)
+```
+
+`do` overwrites `game.json` by default; use `--output game2.json` to
+branch the state. Exit codes: 0 success, 1 usage error, 2 IllegalAction
+(or malformed action JSON) — agents should branch on exit code 2 to
+re-pick from the legal-moves palette.
+
 ## Lifecycle
 
 ### `begin_levy`
