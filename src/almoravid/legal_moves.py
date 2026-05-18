@@ -309,6 +309,29 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             if len(our_here) == 1 and len(enemy_here) == 1:
                                 out.append({"type": "cmd_battle",
                                             "side": active})
+                            # Storm: at enemy Stronghold with our Siege.
+                            if (loc.base_type != "region"
+                                    and not is_friendly_locale(state, here,
+                                                               active)):
+                                siege_markers = (loc.siege_yellow
+                                                 if active == "christian"
+                                                 else loc.siege_green)
+                                if siege_markers > 0:
+                                    out.append({"type": "cmd_storm",
+                                                "side": active})
+                    # Sally: Besieged Lord with besiegers outside.
+                    if _ib(state, lord_id):
+                        here = lord.cylinder.locale_id
+                        besiegers = [
+                            l.id for l in state.lords.values()
+                            if l.side != active
+                            and l.cylinder.kind == "locale"
+                            and l.cylinder.locale_id == here
+                            and not l.in_stronghold
+                        ]
+                        if besiegers:
+                            out.append({"type": "cmd_sally",
+                                        "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
             out.append({"type": "end_card", "side": active})

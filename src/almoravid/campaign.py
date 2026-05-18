@@ -1047,6 +1047,176 @@ def _h_cmd_battle(state, action):
     }
 
 
+
+# ---------------------------------------------------------------------------
+# 4.5.2 Storm + 4.5.3 Sally (Phase 5f)
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_storm(state, action):
+    """4.5.2 Storm. Active Lord outside a Besieged Stronghold (i.e.,
+    with at least one of our Siege markers at the Locale) assaults
+    the defending Garrison + any besieged enemy Lords inside.
+
+    Uses entire card. Resolution via battle.resolve_storm.
+    """
+    from almoravid.battle import (
+        BattleSide,
+        apply_aftermath,
+        battleside_for_lord,
+        commit_forces_after_battle,
+        resolve_storm,
+    )
+    from almoravid.effective import is_besieged, is_friendly_locale
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, code="wrong_side",
+             message=f"{lord_id} not on {side}'s side") if False else _require(lord.side == side, f"{lord_id} not on {side}'s side", code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord must Sally not Storm", code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale", code="not_on_map")
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    _require(loc.base_type != "region",
+             f"No Stronghold at {here} to Storm", code="region_no_storm")
+    _require(not is_friendly_locale(state, here, side),
+             f"Cannot Storm Friendly Stronghold {here}",
+             code="friendly_locale")
+    siege_markers = (loc.siege_yellow if side == "christian"
+                     else loc.siege_green)
+    _require(siege_markers > 0,
+             f"No {side} Siege at {here}; place a Siege first",
+             code="no_siege")
+
+    # Find enemy Lords inside the Stronghold (defenders)
+    enemy_inside = [
+        l.id for l in state.lords.values()
+        if l.side != side
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here
+        and l.in_stronghold
+    ]
+    atk = battleside_for_lord(state, lord_id, "attacker")
+    # Build defender side. If multiple Lords inside, aggregate (Phase 5f).
+    if enemy_inside:
+        dfd_forces: dict = {}
+        dfd_caps: list[str] = []
+        for eid in enemy_inside:
+            for ut, n in state.lords[eid].forces.items():
+                dfd_forces[ut] = dfd_forces.get(ut, 0) + n
+            dfd_caps.extend(state.lords[eid].capabilities)
+        dfd = BattleSide(
+            side=("muslim" if side == "christian" else "christian"),
+            role="defender",
+            lord_ids=enemy_inside,
+            forces=dfd_forces,
+            capabilities_in_play=dfd_caps,
+        )
+    else:
+        # No defending Lord — pure Garrison defense.
+        dfd = BattleSide(
+            side=("muslim" if side == "christian" else "christian"),
+            role="defender",
+            lord_ids=[],
+            forces={},
+            capabilities_in_play=[],
+        )
+    result = resolve_storm(state, atk, dfd)
+    commit_forces_after_battle(state, atk)
+    # Defender: only commit back if single-Lord (Phase 5f limit)
+    if len(dfd.lord_ids) == 1:
+        commit_forces_after_battle(state, dfd)
+    apply_aftermath(state, result)
+
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {lord_id} Storms {here}: winner={result.winner}, "
+            f"rounds={len(result.rounds)}; card spent ({consumed} actions)")
+    return {"winner": result.winner, "rounds": len(result.rounds),
+            "actions_consumed": consumed}
+
+
+def _h_cmd_sally(state, action):
+    """4.5.3 Sally. Besieged Lord attacks the besieger.
+
+    Uses entire card. If Sally loses, sallying Lords Withdraw back
+    inside; Siege markers reduce to 1.
+    """
+    from almoravid.battle import (
+        BattleSide,
+        apply_sally_aftermath,
+        battleside_for_lord,
+        commit_forces_after_battle,
+        resolve_sally,
+    )
+    from almoravid.effective import is_besieged
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(is_besieged(state, lord_id),
+             "Sally requires Besieged Lord (4.5.3)", code="not_besieged")
+    here = lord.cylinder.locale_id  # type: ignore[union-attr]
+
+    # Find besieging Lord(s) outside the Stronghold at this Locale
+    other = "muslim" if side == "christian" else "christian"
+    besiegers = [
+        l.id for l in state.lords.values()
+        if l.side == other
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here
+        and not l.in_stronghold
+    ]
+    _require(besiegers, f"No besiegers to Sally against at {here}",
+             code="no_besiegers")
+    atk = battleside_for_lord(state, lord_id, "attacker")
+    atk.lord_ids = [lord_id]  # the sallying Lord
+    # Sally exits the Stronghold for the duration of the Sally
+    state.lords[lord_id].in_stronghold = False
+
+    # Build defender side (besiegers)
+    dfd_forces: dict = {}
+    dfd_caps: list[str] = []
+    for bid in besiegers:
+        for ut, n in state.lords[bid].forces.items():
+            dfd_forces[ut] = dfd_forces.get(ut, 0) + n
+        dfd_caps.extend(state.lords[bid].capabilities)
+    dfd = BattleSide(
+        side=other,
+        role="defender",
+        lord_ids=besiegers,
+        forces=dfd_forces,
+        capabilities_in_play=dfd_caps,
+    )
+    result = resolve_sally(state, atk, dfd)
+    commit_forces_after_battle(state, atk)
+    if len(dfd.lord_ids) == 1:
+        commit_forces_after_battle(state, dfd)
+    apply_sally_aftermath(state, result, here)
+
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {lord_id} Sallies at {here}: winner={result.winner}, "
+            f"rounds={len(result.rounds)}; card spent ({consumed} actions)")
+    return {"winner": result.winner, "rounds": len(result.rounds),
+            "actions_consumed": consumed}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -1061,5 +1231,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_ravage": _h_cmd_ravage,
     "cmd_siege": _h_cmd_siege,
     "cmd_battle": _h_cmd_battle,
+    "cmd_storm": _h_cmd_storm,
+    "cmd_sally": _h_cmd_sally,
     "end_campaign": _h_end_campaign,
 }

@@ -461,3 +461,182 @@ def commit_forces_after_battle(state: GameState, side: BattleSide) -> None:
     # Routed units stay on the Lord's routed_units for Service-shift
     # processing in Phase 5h Feed/Pay/Disband.
     lord.routed_units = dict(side.routed_units)
+
+
+
+# ---------------------------------------------------------------------------
+# Storm (4.5.2) — variant Battle vs Garrison
+# ---------------------------------------------------------------------------
+
+
+def _garrison_for_locale(state: GameState, locale_id: str) -> dict:
+    """Build a Garrison BattleSide partial (forces + cap modifiers) from
+    strongholds.json. Returns dict suitable for BattleSide(forces=...).
+    """
+    from almoravid.static_data import load_strongholds
+    loc = state.locales[locale_id]
+    if loc.base_type == "region":
+        return {}
+    sh = load_strongholds()["strongholds"][loc.base_type]
+    g = sh["garrison"]
+    out = {}
+    if g.get("men_at_arms", 0):
+        out["men_at_arms"] = g["men_at_arms"]
+    if g.get("militia", 0):
+        out["militia"] = g["militia"]
+    return out
+
+
+def resolve_storm(
+    state: GameState,
+    attacker: BattleSide,
+    defender: BattleSide,
+    *,
+    max_rounds: int | None = None,
+) -> BattleResult:
+    """4.5.2 Storm. Attacker assaults the Stronghold's Garrison + any
+    defending Lord units inside.
+
+    Phase 5f baseline: defender's forces include Garrison (auto-loaded
+    from strongholds.json) ADDED to whatever besieged Lord forces are
+    inside the Stronghold. Walls roll cancels Hits (Pattern 5/6: roll
+    within stronghold's walls_range cancels). Evade does NOT apply in
+    Storm. Javelins/Slingers Strike x1/2 in Storm (forces.json already
+    encodes this distinction in strikes_storm rows).
+
+    max_rounds defaults to the number of Siege markers our side has
+    at the Locale (rule 4.5.2 'Rounds completed >= Siege markers ->
+    Attacker loses'). For Phase 5f baseline we use the count of our
+    color's siege markers as the cap.
+    """
+    # Load walls range
+    from almoravid.static_data import load_strongholds
+    locale_id = None
+    # Find the locale the defender is at
+    for lid in defender.lord_ids:
+        l = state.lords.get(lid)
+        if l and l.cylinder.kind == "locale":
+            locale_id = l.cylinder.locale_id
+            break
+    if locale_id is None:
+        # Fallback: use attacker's location (besieger outside the walls)
+        for lid in attacker.lord_ids:
+            l = state.lords.get(lid)
+            if l and l.cylinder.kind == "locale":
+                locale_id = l.cylinder.locale_id
+                break
+    walls_range = (1, 4)
+    if locale_id is not None:
+        loc = state.locales[locale_id]
+        if loc.base_type != "region":
+            walls_range = tuple(
+                load_strongholds()["strongholds"][loc.base_type]["walls_range"]
+            )
+        # Storm cap = Siege markers our side has (rule 4.5.2)
+        if max_rounds is None:
+            siege = (loc.siege_yellow if attacker.side == "christian"
+                     else loc.siege_green)
+            max_rounds = max(1, siege)
+
+    if max_rounds is None:
+        max_rounds = 4
+
+    # Add Garrison to defender's forces (Phase 5f baseline).
+    garrison = _garrison_for_locale(state, locale_id) if locale_id else {}
+    for ut, n in garrison.items():
+        defender.forces[ut] = defender.forces.get(ut, 0) + n
+
+    # Storm strike order: defender (all stronghold defenders) -> attacker (all).
+    # In Storm there are only 2 melee substeps after missiles (per SoP).
+    result = BattleResult(
+        engagement="storm",
+        attacker=attacker,
+        defender=defender,
+    )
+    storm_steps: list[tuple[str, Role, str, UnitClass | None]] = [
+        ("1.a", "defender", "missile", None),
+        ("1.b", "attacker", "missile", None),
+        ("2.a", "defender", "melee", "horse"),   # combined with foot via 'all'
+        ("2.a", "defender", "melee", "foot"),
+        ("2.b", "attacker", "melee", "horse"),
+        ("2.b", "attacker", "melee", "foot"),
+    ]
+    for round_idx in range(1, max_rounds + 1):
+        rnd = BattleRound(index=round_idx)
+        for step_id, actor_role, step_type, unit_class in storm_steps:
+            step_res = _resolve_step(
+                state, step_id, actor_role, step_type, unit_class,
+                attacker, defender, context="storm",
+            )
+            rnd.steps.append(step_res)
+            if _battle_over(attacker, defender):
+                break
+        result.rounds.append(rnd)
+        if _battle_over(attacker, defender):
+            break
+    # Rule 4.5.2: 'Rounds completed >= Siege markers there (Attacker loses)'
+    if attacker.has_unrouted() and not defender.has_unrouted():
+        result.winner = attacker.side
+    elif defender.has_unrouted() and not attacker.has_unrouted():
+        result.winner = defender.side
+    elif len(result.rounds) >= max_rounds:
+        # Attacker loses if rounds run out
+        result.winner = defender.side
+        result.notes.append(
+            f"Storm round-cap reached ({max_rounds}); attacker loses"
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Sally (4.5.3) — besieged Lord attacks besieger
+# ---------------------------------------------------------------------------
+
+
+def resolve_sally(
+    state: GameState,
+    attacker: BattleSide,    # the BESIEGED Lord(s) — sallying out
+    defender: BattleSide,    # the besieger
+) -> BattleResult:
+    """4.5.3 Sally. The Besieged Lord attacks the besieger.
+
+    Mechanics are like Battle (no Walls protection — the Sallying side
+    is OUTSIDE the walls for this action). Phase 5f baseline:
+    structurally a Battle with engagement='sally'. On attacker loss,
+    Sallying Lords Withdraw back into the Stronghold and Siege markers
+    there reduce to 1 (per rule 4.5.3 / SoP on_attacker_loss).
+    """
+    result = resolve_battle(state, attacker, defender)
+    result.engagement = "sally"
+    # Sally-specific aftermath flag — actual Withdraw-back and Siege
+    # marker reduction happen in apply_sally_aftermath called from the
+    # cmd_sally handler.
+    return result
+
+
+def apply_sally_aftermath(state: GameState, result: BattleResult,
+                          locale_id: str) -> None:
+    """Sally-specific aftermath (rule 4.5.3 / SoP on_attacker_loss).
+
+    If the Sallying side lost: their Lords Withdraw back into the
+    Stronghold (in_stronghold=True) and Siege markers there reduce to 1.
+    """
+    apply_aftermath(state, result)
+    sallying_side = result.attacker.side
+    if result.winner == sallying_side:
+        return  # Sally succeeded; no Siege-reduction trigger.
+    # Sallying side lost: Withdraw back inside, reduce Siege to 1.
+    for lid in result.attacker.lord_ids:
+        if lid in state.lords:
+            state.lords[lid].in_stronghold = True
+    loc = state.locales[locale_id]
+    if sallying_side == "muslim":
+        if loc.siege_yellow > 1:
+            loc.siege_yellow = 1
+    else:
+        if loc.siege_green > 1:
+            loc.siege_green = 1
+    result.notes.append(
+        f"Sally raid: {sallying_side} withdrew, siege at {locale_id} "
+        f"reduced to 1"
+    )
