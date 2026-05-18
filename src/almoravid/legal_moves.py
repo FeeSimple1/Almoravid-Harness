@@ -77,36 +77,50 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.2 Pay. Phase 2b has no payment handlers yet; pass_step only."""
-    return []
+    """3.2 Pay: spend 1 Coin to shift Service marker 1 box left."""
+    out: list[dict[str, Any]] = []
+    for lid, lord in state.lords.items():
+        if (lord.side == side
+                and lord.cylinder.kind == "locale"
+                and lord.assets.get("coin", 0) >= 1):
+            # Must have a Service marker to shift
+            if any(sm.lord_id == lid for sm in state.calendar.service_markers):
+                out.append({"type": "pay_lord", "side": side, "lord_id": lid})
+    return out
 
 
 def _service_disband_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.3 Service / Disband. Phase 2b: pass_step only (Disband logic
-    lands in Phase 3 alongside Calendar shift mechanics)."""
-    return []
+    """3.3 Service / Disband: voluntary Disband of own Lords."""
+    out: list[dict[str, Any]] = []
+    for lid, lord in state.lords.items():
+        if lord.side == side and lord.cylinder.kind == "locale":
+            out.append({"type": "disband_lord", "side": side, "lord_id": lid})
+    return out
 
 
 def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.4 Muster: enumerate Lords with Fealty on Calendar with free Seats."""
+    """3.4 Muster: Lord-Muster + Lordship-spending Levy actions."""
     out: list[dict[str, Any]] = []
     for lid, lord in state.lords.items():
         if lord.side != side:
             continue
-        if lord.fealty is None:
-            continue  # CtA-only Lord
-        if lord.cylinder.kind != "calendar":
-            continue
-        free = _free_seats_for(state, lid)
-        if not free:
-            continue
-        for seat in free:
-            out.append({
-                "type": "muster_lord",
-                "side": side,
-                "lord_id": lid,
-                "seat": seat,
-            })
+        # Path 1: Muster a Lord from Calendar
+        if (lord.fealty is not None
+                and lord.cylinder.kind == "calendar"):
+            free = _free_seats_for(state, lid)
+            for seat in free:
+                out.append({"type": "muster_lord", "side": side,
+                            "lord_id": lid, "seat": seat})
+        # Path 2: Spend Lordship on a Mustered Lord
+        if (lord.cylinder.kind == "locale"
+                and lord.lordship_used < lord.lordship_rating):
+            for i, v in enumerate(lord.vassals):
+                if v.ready:
+                    out.append({"type": "levy_take_vassal", "side": side,
+                                "lord_id": lid, "vassal_index": i})
+            for card_id in state.decks.board_edge.get(side, []):
+                out.append({"type": "levy_take_capability", "side": side,
+                            "lord_id": lid, "card_id": card_id})
     return out
 
 

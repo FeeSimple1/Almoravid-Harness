@@ -340,12 +340,227 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+
+# ---------------------------------------------------------------------------
+# 3.2 Pay (Phase 5g)
+# ---------------------------------------------------------------------------
+
+
+def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.2 Pay: an Active-side Lord with current Service shifts his
+    Service marker LEFT (toward Disband) one box per Coin spent.
+
+    Phase 5g baseline: handle the single common case — spend 1 Coin
+    to shift Service 1 box left. Multi-coin payments and shared
+    payments from co-located Lords are Phase 5g+ work.
+    """
+    from almoravid.state import ServiceMarker
+    side = _require_side(action)
+    _require_levy_step(state, "pay")
+    _require_active(state, side)
+    lord_id = action.get("lord_id")
+    _require(isinstance(lord_id, str), "lord_id required (str)", code="bad_arg")
+    lord_id = cast(str, lord_id)
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not on map; cannot Pay", code="not_on_map")
+    coin = lord.assets.get("coin", 0)
+    _require(coin >= 1, f"{lord_id} has no Coin to spend", code="no_coin")
+    # Find the Service marker for this Lord
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == lord_id), None)
+    _require(sm is not None, f"{lord_id} has no Service marker",
+             code="no_service_marker")
+    # Spend 1 Coin, shift Service 1 box left (toward Disband / smaller).
+    lord.assets["coin"] = coin - 1
+    new_box = sm.box - 1
+    if new_box < 0:
+        new_box = 0  # off-left service lane
+        state.calendar.off_left_service.append(lord_id)
+        state.calendar.service_markers = [s for s in state.calendar.service_markers
+                                           if s.lord_id != lord_id]
+    else:
+        sm.box = new_box
+    _record(state, action,
+            f"{side} {lord_id} pays 1 Coin -> Service to box {new_box}")
+    return {"lord_id": lord_id, "service_box": new_box,
+            "coin_after": lord.assets["coin"]}
+
+
+# ---------------------------------------------------------------------------
+# 3.3 Service / Disband (Phase 5g)
+# ---------------------------------------------------------------------------
+
+
+def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.3 Disband: voluntarily Disband a Lord whose Service marker is
+    at or beyond Service limit (Beyond-Service per rule 3.3.1) OR
+    voluntarily before Service expires.
+
+    Phase 5g baseline: Disband to the Calendar. Sets cylinder to
+    'calendar' at the current Levy box + Lord's service_rating
+    (rule 3.4.1 'Service-rating boxes ahead'). Clears all
+    Lord.cleanup_on_removal_fields per Pattern 8.
+    """
+    from almoravid.state import Cylinder
+    side = _require_side(action)
+    _require_levy_step(state, "service_disband")
+    _require_active(state, side)
+    lord_id = action.get("lord_id")
+    _require(isinstance(lord_id, str), "lord_id required", code="bad_arg")
+    lord_id = cast(str, lord_id)
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not on map", code="not_on_map")
+    # Place cylinder on Calendar service_rating boxes ahead of current box
+    new_box = state.calendar.current_box + lord.service_rating
+    if new_box > 16:
+        new_box = 17  # off-right sentinel
+        state.calendar.off_right.append(lord_id)
+    lord.cylinder = Cylinder(kind="calendar", box=new_box)
+    # Pattern 8: clear cleanup_on_removal_fields
+    lord.forces = {}
+    lord.assets = {}
+    lord.capabilities = []
+    lord.vassals = []
+    lord.in_stronghold = False
+    lord.moved_fought = False
+    lord.just_arrived_this_levy = False
+    lord.lordship_used = 0
+    lord.first_march_used_this_card = False
+    lord.raiders_used_this_card = False
+    lord.routed_units = {}
+    # Remove Service marker
+    state.calendar.service_markers = [
+        s for s in state.calendar.service_markers if s.lord_id != lord_id
+    ]
+    _record(state, action,
+            f"{side} {lord_id} Disbands -> Calendar box {new_box}")
+    return {"lord_id": lord_id, "calendar_box": new_box}
+
+
+# ---------------------------------------------------------------------------
+# 3.4 Lordship-spending (Phase 5g)
+# ---------------------------------------------------------------------------
+
+
+def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.4 Muster Levy action: spend 1 Lordship to add a Vassal's Forces
+    to the Lord's mat. The Vassal must be Ready.
+
+    Phase 5g baseline: just bring a Ready Vassal into play (set ready=False
+    means in-play / spent; for now we track via a marker on the Lord).
+    Actual Service marker advancement of the Vassal happens with the
+    advanced Vassal Service rule (3.4.2), deferred.
+    """
+    side = _require_side(action)
+    _require_levy_step(state, "muster")
+    _require_active(state, side)
+    lord_id = action.get("lord_id")
+    vassal_index = action.get("vassal_index")
+    _require(isinstance(lord_id, str), "lord_id required", code="bad_arg")
+    _require(isinstance(vassal_index, int), "vassal_index required (int)",
+             code="bad_arg")
+    lord_id = cast(str, lord_id)
+    vassal_index = cast(int, vassal_index)
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not mustered", code="not_on_map")
+    _require(lord.lordship_used < lord.lordship_rating,
+             f"{lord_id} has already spent {lord.lordship_used}/"
+             f"{lord.lordship_rating} Lordship",
+             code="lordship_exhausted")
+    _require(0 <= vassal_index < len(lord.vassals),
+             f"vassal_index {vassal_index} out of range",
+             code="bad_arg")
+    vassal = lord.vassals[vassal_index]
+    _require(vassal.ready, f"vassal {vassal.name} not Ready",
+             code="vassal_not_ready")
+    # Bring Vassal's Forces onto the Lord's mat
+    for ut, n in vassal.forces.items():
+        lord.forces[ut] = lord.forces.get(ut, 0) + n
+    vassal.ready = False
+    lord.lordship_used += 1
+    _record(state, action,
+            f"{side} {lord_id} spends Lordship -> takes Vassal {vassal.name}")
+    return {"lord_id": lord_id, "vassal_name": vassal.name,
+            "lordship_used": lord.lordship_used}
+
+
+def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.4 Muster Levy action: spend 1 Lordship to add a Capability
+    card from this side's board-edge stock to a Lord's mat (this_lord)
+    or to capabilities_in_play (side_wide).
+
+    Phase 5g baseline: validates Lordship, capability scope, and card
+    availability; moves card from board_edge to the appropriate target.
+    """
+    from almoravid.state import CardInPlay
+    from almoravid.static_data import load_cards
+    side = _require_side(action)
+    _require_levy_step(state, "muster")
+    _require_active(state, side)
+    lord_id = action.get("lord_id")
+    card_id = action.get("card_id")
+    _require(isinstance(lord_id, str), "lord_id required", code="bad_arg")
+    _require(isinstance(card_id, str), "card_id required", code="bad_arg")
+    lord_id = cast(str, lord_id)
+    card_id = cast(str, card_id)
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not mustered", code="not_on_map")
+    _require(lord.lordship_used < lord.lordship_rating,
+             "lordship exhausted", code="lordship_exhausted")
+    # Card must be in the side's board_edge stock
+    edge = state.decks.board_edge.get(side, [])
+    _require(card_id in edge, f"{card_id} not in {side} board edge",
+             code="card_not_available")
+    cards = load_cards()["cards"]
+    rec = cards.get(card_id)
+    _require(rec and not rec["no_capability"],
+             f"{card_id} has no Capability half", code="no_capability_half")
+    scope = rec["capability_scope"]
+    # Move from edge to target
+    state.decks.board_edge[side].remove(card_id)
+    if scope == "this_lord":
+        lord.capabilities.append(card_id)
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id=card_id, scope=scope, owner_side=side,
+        owner_lord_id=lord_id if scope == "this_lord" else None,
+    ))
+    lord.lordship_used += 1
+    _record(state, action,
+            f"{side} {lord_id} spends Lordship -> takes Capability {card_id}")
+    return {"lord_id": lord_id, "card_id": card_id, "scope": scope,
+            "lordship_used": lord.lordship_used}
+
+
 _HANDLERS = {
     "begin_levy": _h_begin_levy,
     "pass_step": _h_pass_step,
     "aow_shuffle": _h_aow_shuffle,
     "aow_draw": _h_aow_draw,
     "muster_lord": _h_muster_lord,
+    "pay_lord": _h_pay_lord,
+    "disband_lord": _h_disband_lord,
+    "levy_take_vassal": _h_levy_take_vassal,
+    "levy_take_capability": _h_levy_take_capability,
 }
 
 # Campaign handlers registered in campaign.py. Imported lazily to avoid
