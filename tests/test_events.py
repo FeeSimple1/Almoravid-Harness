@@ -91,10 +91,10 @@ def test_devaluation_with_target_coin_defers() -> None:
 
 
 def test_unregistered_card_raises_event_not_resolvable() -> None:
+    """All cards now have resolvers (Phase 5j); unknown card id raises."""
     s = load_scenario("scenario_a_toledo_beset")
-    # C11 Indulgences has an event half but no resolver registered yet
     with pytest.raises(EventNotResolvable):
-        resolve_event(s, "christian", "C11")
+        resolve_event(s, "christian", "NOT_A_REAL_CARD_ID")
 
 
 def test_unknown_card_raises_event_not_resolvable() -> None:
@@ -112,13 +112,6 @@ def test_registered_cards_returns_set() -> None:
 
 
 def test_unresolved_event_cards_inventory() -> None:
-    """Cards with event halves still awaiting Phase 5+ resolvers."""
+    """Phase 5j: registry now complete; no cards in the todo list."""
     todo = unresolved_event_cards()
-    # The big-effect events (Indulgences, Song of Roland, Pope Gregory,
-    # Severed Heads, etc.) ARE in the todo list.
-    assert "C11" in todo  # Indulgences
-    assert "C12" in todo  # Song of Roland
-    assert "M13" in todo  # Severed Heads
-    # Already-resolved cards are NOT.
-    assert "C1" not in todo
-    assert "M12" not in todo
+    assert todo == []
