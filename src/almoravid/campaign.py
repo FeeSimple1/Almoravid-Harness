@@ -271,12 +271,44 @@ def _advance_or_end_campaign(state: GameState) -> None:
         state.meta.active_player = other
 
 
-def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """End the currently-active Lord's card and flip the baton.
+def _feed_lord(state: GameState, lord_id: str) -> dict[str, Any]:
+    """Rule 4.8.1 Feed: a Lord who Moved/Fought this card consumes
+    ceil((units + mules) / 6) Provender or Loot. Unfed -> Service
+    marker shifts 1 box left.
+    """
+    import math
+    lord = state.lords[lord_id]
+    if not lord.moved_fought:
+        return {"skipped": "did_not_move_fight", "consumed": 0}
+    units = sum(lord.forces.values())
+    mules = lord.assets.get("mule", 0)
+    needed = math.ceil((units + mules) / 6) if (units + mules) > 0 else 0
+    prov = lord.assets.get("prov", 0)
+    loot = lord.assets.get("loot", 0)
+    use_prov = min(prov, needed)
+    short_after = needed - use_prov
+    use_loot = min(loot, short_after)
+    short = short_after - use_loot
+    lord.assets["prov"] = prov - use_prov
+    lord.assets["loot"] = loot - use_loot
+    unfed = False
+    if short > 0:
+        sm = next((s for s in state.calendar.service_markers
+                   if s.lord_id == lord_id), None)
+        if sm is not None:
+            sm.box = max(0, sm.box - 1)
+        unfed = True
+    return {"consumed": use_prov + use_loot, "needed": needed,
+            "short": short, "unfed_penalty": unfed,
+            "use_prov": use_prov, "use_loot": use_loot}
 
-    Future phases will trigger Feed/Pay/Disband here per rule 4.8 (in
-    Almoravid: at end of each Command card, the Lord Feeds and may
-    Pay / Disband). Phase 3a only does the bookkeeping.
+
+def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """End the currently-active Lord's card. Runs the rule 4.8 cascade.
+
+    Phase 5h: auto-Feed via _feed_lord. Voluntary Pay/Disband during
+    the FPD step are deferred to a later commit — rule 4.8.2/4.8.3
+    allow each side to Pay or Disband Beyond-Service Lords here.
     """
     side = _require_side(action)
     _require_campaign_step(state, "activation")
@@ -285,19 +317,27 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "no active Lord — reveal a card first",
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    # 4.8.1 Feed
+    feed_result = _feed_lord(state, lord_id)
+    # Bookkeeping
     state.meta.active_lord_id = None
     state.meta.actions_remaining = 0
-    # Clear per-card flags (Pattern 3: per-card scope reset).
-    lord = state.lords[lord_id]
+    # Pattern 3 per-card flag reset
     lord.lordship_used = 0
     lord.first_march_used_this_card = False
     lord.raiders_used_this_card = False
+    lord.moved_fought = False
     _advance_or_end_campaign(state)
     _record(state, action,
-            f"{side} ends {lord_id}'s card"
+            f"{side} ends {lord_id}'s card; Feed: "
+            f"consumed={feed_result.get('consumed',0)} "
+            f"short={feed_result.get('short',0)} "
+            f"unfed={feed_result.get('unfed_penalty', False)}"
             + (f" -> campaign_step={state.meta.campaign_step}"
                if state.meta.campaign_step != "activation" else ""))
-    return {"ended": lord_id, "campaign_step": state.meta.campaign_step}
+    return {"ended": lord_id, "feed": feed_result,
+            "campaign_step": state.meta.campaign_step}
 
 
 def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
