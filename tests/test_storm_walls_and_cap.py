@@ -322,3 +322,39 @@ def test_bug_n_disband_target_box_uses_next_box_during_campaign() -> None:
     s.calendar.current_box = 5
     # current_box + 1 + service_rating = 5 + 1 + 4 = 10
     assert _compute_disband_target_box(s, s.lords["alfonso"]) == 5 + 1 + 4
+
+
+def test_bug_o_mixed_missile_rounding_half_goes_to_crossbows() -> None:
+    """Bug O (rule 4.4.2): when mixed missile contributors total to a
+    fractional Hit count, the rounded-up half goes to Crossbows first.
+
+    Per the Battle and Storm Reference example: 3 Crossbow MaA (x½) +
+    3 Militia Bowmen (x½) = 1½ Crossbow + 1½ Bowmen = 3 total —
+    2 Crossbow + 1 Bowmen.
+    """
+    from almoravid.battle import _allocate_rounded_hits
+    # 3 Crossbow contributing 1.5 raw, 3 Bowmen contributing 1.5 raw
+    by_kind = {"crossbows": 1.5, "bowmen": 1.5}
+    out = _allocate_rounded_hits(3.0, by_kind)
+    # Total 3; floors are 1 + 1 = 2; leftover 1 goes to Crossbows.
+    assert out["crossbows"] == 2
+    assert out["bowmen"] == 1
+
+
+def test_bug_o_no_crossbow_half_goes_to_bowmen() -> None:
+    """Without Crossbow contribution, the half goes to Bowmen
+    (next priority per mixed-missile rounding)."""
+    from almoravid.battle import _allocate_rounded_hits
+    by_kind = {"bowmen": 1.5, "javelins": 1.5}
+    out = _allocate_rounded_hits(3.0, by_kind)
+    assert out["bowmen"] == 2
+    assert out["javelins"] == 1
+
+
+def test_bug_o_whole_hits_no_rounding_needed() -> None:
+    """When all contributions are whole, no leftover to allocate."""
+    from almoravid.battle import _allocate_rounded_hits
+    by_kind = {"crossbows": 2.0, "bowmen": 1.0}
+    out = _allocate_rounded_hits(3.0, by_kind)
+    assert out["crossbows"] == 2
+    assert out["bowmen"] == 1

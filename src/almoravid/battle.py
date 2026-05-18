@@ -211,14 +211,19 @@ def _step_hits(
     rows: list[StrikeRow],
     step_type: str,
     unit_class: UnitClass | None,
-) -> float:
-    """Total raw Hits (in halves) for the named step.
+) -> tuple[float, dict[str, float]]:
+    """Total raw Hits (in halves) for the named step, plus a per-kind
+    breakdown for the mixed-missile rounding rule (4.4.2).
 
     step_type == 'missile': sum all missile/crossbows/bowmen/slingers/
     javelins rows that aren't melee.
     step_type == 'melee': sum all melee rows for the given unit_class.
+
+    Returns (total, by_kind) where by_kind[strike_kind] is the
+    fractional contribution from rows of that kind.
     """
     total = 0.0
+    by_kind: dict[str, float] = {}
     for r in rows:
         if step_type == "missile":
             if r.kind == "melee":
@@ -229,8 +234,42 @@ def _step_hits(
             if _unit_class(r.unit_type) != unit_class:
                 continue
         num, den = _RATE.get(r.rate, (0, 1))
-        total += (r.count * num) / den
-    return total
+        contrib = (r.count * num) / den
+        total += contrib
+        by_kind[r.kind] = by_kind.get(r.kind, 0.0) + contrib
+    return total, by_kind
+
+
+def _allocate_rounded_hits(total: float, by_kind: dict[str, float]) -> dict[str, int]:
+    """Mixed-missile rounding (rule 4.4.2): allocate rounded Hits to
+    kinds, sending the rounded-up half to Crossbows first if present
+    (otherwise Bowmen, then Javelins, then Slingers, then Melee).
+
+    Each kind contributes its floor; the leftover (0 or 1 Hit) goes
+    to the priority kind that has a non-zero fractional contribution.
+    """
+    import math as _m
+    rounded_total = _m.ceil(total)
+    out: dict[str, int] = {}
+    floors_sum = 0
+    # Allocate floors per kind.
+    for kind, contrib in by_kind.items():
+        out[kind] = int(_m.floor(contrib))
+        floors_sum += out[kind]
+    leftover = rounded_total - floors_sum
+    if leftover > 0:
+        # Mixed-missile priority for the leftover half-Hit.
+        priority = ["crossbows", "bowmen", "javelins", "slingers", "missiles", "melee"]
+        # Build candidates that contributed a fractional half (i.e.,
+        # contrib > floor(contrib)).
+        candidates = [k for k in priority
+                       if by_kind.get(k, 0.0) > _m.floor(by_kind.get(k, 0.0))]
+        if not candidates:
+            # All contributions were whole; assign to first kind with non-zero contrib
+            candidates = [k for k in priority if by_kind.get(k, 0.0) > 0]
+        if candidates:
+            out[candidates[0]] = out.get(candidates[0], 0) + leftover
+    return out
 
 
 def _resolve_protection_roll(
@@ -376,63 +415,82 @@ def _resolve_step(
     target = defender if actor_role == "attacker" else attacker
 
     rows = build_strike_rows(state, actor, context=context)
-    raw = _step_hits(rows, step_type, unit_class)
+    raw, by_kind = _step_hits(rows, step_type, unit_class)
     rounded = math.ceil(raw)
 
-    # Bug-fix E (Pattern 9 audit): rule 4.5.2 cap — in Storm each Lord
-    # adds at most 6 Melee Hits per Round; Missiles unlimited. Apply
-    # per-actor-side (single-Lord baseline; multi-Lord arrays are
-    # Phase 5e+ and will cap per Lord).
+    # Bug E (Pattern 9): Storm 6-Melee cap per Lord per Round.
     if context == "storm" and step_type == "melee":
         rounded = min(rounded, 6)
+
+    # Bug O (Pattern 7): mixed-missile rounding — the rounded-up
+    # half goes to Crossbows first when present (rule 4.4.2). We
+    # honour this for the missile step ONLY by allocating Hits per
+    # kind from the by_kind breakdown.
+    if step_type == "missile":
+        # If the Storm cap kicked in for missile this is a no-op
+        # (no cap on missiles per 4.5.2 storm_only_modifiers).
+        per_kind_hits = _allocate_rounded_hits(raw, by_kind)
+    else:
+        # Melee step — single kind. The rounded total IS the hit count.
+        # If cap reduced it, distribute the cap to melee kinds proportionally
+        # (only melee here so just attribute everything to melee).
+        per_kind_hits = {"melee": rounded}
 
     result = StepResolution(step=step_id, actor=actor_role,
                             raw_hits=raw, rounded_hits=rounded)
 
-    # Bug-fix D (Pattern 9 audit): rule 4.4.2 ROLL WALLS — in Storm /
-    # Sally, side benefiting from Walls rolls dice = total Hits in
-    # this step; each die <= walls_range cancels 1 Hit. Siegeworks-as-
-    # Walls similarly. Defender side in Storm benefits from Walls;
-    # attacker side benefits from Siegeworks. We apply Walls to Hits
-    # FOR the side being struck (the target).
-    hits_to_apply = rounded
+    # Bug D (Pattern 9) — Walls / Siegeworks roll cancels Hits.
+    # We apply cancellation proportionally across kinds (drain
+    # Crossbow Hits last since they got priority in rounding).
+    hits_to_apply_by_kind = dict(per_kind_hits)
     if walls_range is not None and rounded > 0:
-        # Which side benefits depends on direction:
-        # - If actor is attacker striking defender: Walls protect defender.
-        # - If actor is defender striking attacker: Siegeworks (Siege
-        #   markers acting as Walls) protect attacker.
         if actor_role == "attacker":
             wlo, whi = walls_range
             dice = [roll_d6(state) for _ in range(rounded)]
             canceled = sum(1 for d in dice if wlo <= d <= whi)
-            hits_to_apply = rounded - canceled
+            # Drain non-Crossbow first, then Crossbow.
+            drain_order = ["javelins", "slingers", "bowmen", "missiles",
+                           "melee", "crossbows"]
+            for k in drain_order:
+                if canceled <= 0:
+                    break
+                avail = hits_to_apply_by_kind.get(k, 0)
+                take = min(avail, canceled)
+                hits_to_apply_by_kind[k] = avail - take
+                canceled -= take
         elif actor_role == "defender" and siege_markers > 0:
-            # Siegeworks: attacker rolls dice = total Hits; each <=
-            # siege_markers cancels 1 Hit (rule 4.4.2 / 4.5.2).
             dice = [roll_d6(state) for _ in range(rounded)]
             canceled = sum(1 for d in dice if d <= siege_markers)
-            hits_to_apply = rounded - canceled
+            drain_order = ["javelins", "slingers", "bowmen", "missiles",
+                           "melee", "crossbows"]
+            for k in drain_order:
+                if canceled <= 0:
+                    break
+                avail = hits_to_apply_by_kind.get(k, 0)
+                take = min(avail, canceled)
+                hits_to_apply_by_kind[k] = avail - take
+                canceled -= take
 
-    # Apply each remaining Hit to the target.
-    striker_kind: StrikeKind = "melee" if step_type == "melee" else "missiles"
-    # Bug L (Pattern 7 audit): if this missile step includes any
-    # Crossbow row, the firing side selects which target unit takes
-    # each Hit. Phase L baseline applies striker-selects to the whole
-    # step if Crossbows are present (over-applies the benefit when
-    # Bowmen/Javelins also contribute — full mixed-missile-rounding
-    # refinement is a Phase 5+ Q-NNN candidate).
-    has_crossbows = any(r.kind == "crossbows" for r in rows)
-    striker_selects_target = (step_type != "melee" and has_crossbows)
-    for _ in range(hits_to_apply):
-        if not target.has_unrouted():
-            break
-        _, routed = _resolve_protection_roll(
-            state, target, striker_kind,
-            context=context,
-            striker_selects=striker_selects_target,
-        )
-        if routed is not None:
-            result.losses[routed] = result.losses.get(routed, 0) + 1
+    # Apply Hits per kind. Crossbow Hits use striker-selects
+    # target selection; other Hits use target-selects.
+    for kind, count in hits_to_apply_by_kind.items():
+        if count <= 0:
+            continue
+        striker_selects_target = (kind == "crossbows")
+        # Map our internal kind to the StrikeKind alias used by
+        # _resolve_protection_roll's signature (it doesn't branch on
+        # this currently except for the auto_remove path).
+        protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
+        for _ in range(count):
+            if not target.has_unrouted():
+                break
+            _, routed = _resolve_protection_roll(
+                state, target, protroll_kind,
+                context=context,
+                striker_selects=striker_selects_target,
+            )
+            if routed is not None:
+                result.losses[routed] = result.losses.get(routed, 0) + 1
     return result
 
 
