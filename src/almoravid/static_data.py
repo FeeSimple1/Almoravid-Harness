@@ -49,6 +49,19 @@ def load_cards() -> dict[str, Any]:
     return _read("cards.json")
 
 
+
+@lru_cache(maxsize=1)
+def load_forces() -> dict[str, Any]:
+    """Return the parsed forces.json. Cached."""
+    return _read("forces.json")
+
+
+@lru_cache(maxsize=1)
+def load_strongholds() -> dict[str, Any]:
+    """Return the parsed strongholds.json. Cached."""
+    return _read("strongholds.json")
+
+
 def neighbors(locale_id: str) -> list[tuple[str, str]]:
     """List (other_locale_id, way_type) tuples reachable from `locale_id`.
 

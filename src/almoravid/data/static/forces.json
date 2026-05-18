@@ -1,0 +1,362 @@
+{
+  "_doc": "Strike profile per unit type. Source: reference/Almoravid Quick Reference.txt Table 1 (rules 1.6, 4.4.2, 4.5.2). 'strikes_battle' lists unconditional Battle Strikes; 'strikes_storm' lists what the unit does in Storm (4.5.2 reduces Javelins/Slingers x1 -> x1/2 in Storm). 'strikes_by_capability' lists Arts of War card IDs that add a Strike row. 'strikes_by_garrison' lists Strikes automatic when defending in Storm — only Men-at-Arms and Militia. 'protection' is {type: armored|unarmored|none, range: [lo, hi]}; type 'auto_remove' for Serfs (1.7.1).",
+  "horse": {
+    "knights": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x2"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_by_capability": [],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "armored",
+        "range": [
+          1,
+          4
+        ]
+      },
+      "notes": [
+        "C8 Cantador (Evt): +1 Hit Round 1 Melee.",
+        "C11/C12 Mesnada (Cap) or M11/M21 Hasham (Cap): Lord Command +1."
+      ]
+    },
+    "sergeants": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_by_capability": [],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "armored",
+        "range": [
+          1,
+          3
+        ]
+      },
+      "notes": [
+        "C8 Cantador (Evt): +1 Hit Round 1 Melee.",
+        "M11/M21 Hasham (Cap): Lord Command +1."
+      ]
+    },
+    "african_horse": {
+      "strikes_battle": [
+        {
+          "kind": "javelins",
+          "rate": "x1",
+          "any_one_round": true,
+          "mark": true
+        },
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "javelins",
+          "rate": "x1/2"
+        },
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_by_capability": [],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "unarmored",
+        "range": [
+          1,
+          1
+        ],
+        "evade": {
+          "range": [
+            1,
+            2
+          ],
+          "vs": "battle_melee_only"
+        }
+      },
+      "notes": [
+        "M11/M21 Hasham (Cap): Lord Command +1."
+      ]
+    },
+    "light_horse": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_by_capability": [
+        {
+          "kind": "missiles",
+          "rate": "x1/2",
+          "cap_type": "bowmen",
+          "card_ids": [
+            "C4",
+            "C5",
+            "M4",
+            "M5"
+          ]
+        },
+        {
+          "kind": "javelins",
+          "rate": "x1",
+          "any_one_round": true,
+          "mark": true,
+          "cap_type": "javelins",
+          "card_ids": [
+            "C7",
+            "M3",
+            "M6"
+          ]
+        }
+      ],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "unarmored",
+        "range": [
+          1,
+          1
+        ]
+      },
+      "notes": [
+        "M10 Andalusians (Cap): Evade 1-3 vs Battle Melee.",
+        "M11/M21 Hasham (Cap): Lord Command +1."
+      ]
+    }
+  },
+  "foot": {
+    "men_at_arms": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_by_capability": [
+        {
+          "kind": "crossbows",
+          "rate": "x1/2",
+          "minus_armor": 1,
+          "firing_side_selects_target": true,
+          "card_ids": [
+            "C2",
+            "M2"
+          ]
+        },
+        {
+          "kind": "bowmen",
+          "rate": "x1/2",
+          "card_ids": [
+            "C4",
+            "C5",
+            "M4",
+            "M5"
+          ]
+        }
+      ],
+      "strikes_by_garrison": [
+        {
+          "kind": "crossbows",
+          "rate": "x1/2",
+          "minus_armor": 1,
+          "firing_side_selects_target": true,
+          "auto": true
+        }
+      ],
+      "protection": {
+        "type": "armored",
+        "range": [
+          1,
+          3
+        ]
+      },
+      "notes": [
+        "M7 Spear Wall (Evt): Armor +1 vs Horse Melee, 1 Round (mark)."
+      ]
+    },
+    "african_foot": {
+      "strikes_battle": [
+        {
+          "kind": "missiles",
+          "rate": "x1/2",
+          "subkind": "bowmen"
+        },
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "missiles",
+          "rate": "x1/2",
+          "subkind": "bowmen"
+        },
+        {
+          "kind": "melee",
+          "rate": "x1"
+        }
+      ],
+      "strikes_by_capability": [],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "armored",
+        "range": [
+          1,
+          2
+        ]
+      },
+      "notes": [
+        "M7 Spear Wall (Evt): Armor +1 vs Horse Melee, 1 Round (mark)."
+      ]
+    },
+    "militia": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_by_capability": [
+        {
+          "kind": "crossbows",
+          "rate": "x1/2",
+          "minus_armor": 1,
+          "firing_side_selects_target": true,
+          "card_ids": [
+            "C2",
+            "M2"
+          ]
+        },
+        {
+          "kind": "bowmen",
+          "rate": "x1/2",
+          "card_ids": [
+            "C4",
+            "C5",
+            "M4",
+            "M5"
+          ]
+        },
+        {
+          "kind": "javelins",
+          "rate": "x1",
+          "any_one_round": true,
+          "mark": true,
+          "card_ids": [
+            "C7",
+            "M3",
+            "M6"
+          ]
+        },
+        {
+          "kind": "slingers",
+          "rate": "x1",
+          "max_per_lord": 3,
+          "card_ids": [
+            "C9",
+            "M7"
+          ]
+        }
+      ],
+      "strikes_by_garrison": [
+        {
+          "kind": "bowmen",
+          "rate": "x1/2",
+          "auto": true,
+          "note": "regular bowmen — no -1 vs Armor, no target selection"
+        }
+      ],
+      "protection": {
+        "type": "unarmored",
+        "range": [
+          1,
+          1
+        ]
+      },
+      "notes": []
+    },
+    "serfs": {
+      "strikes_battle": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_storm": [
+        {
+          "kind": "melee",
+          "rate": "x1/2"
+        }
+      ],
+      "strikes_by_capability": [
+        {
+          "kind": "bowmen",
+          "rate": "x1/2",
+          "card_ids": [
+            "C4",
+            "C5",
+            "M4",
+            "M5"
+          ]
+        },
+        {
+          "kind": "javelins",
+          "rate": "x1",
+          "any_one_round": true,
+          "mark": true,
+          "card_ids": [
+            "C7",
+            "M3",
+            "M6"
+          ]
+        }
+      ],
+      "strikes_by_garrison": [],
+      "protection": {
+        "type": "auto_remove",
+        "rule_ref": "1.7.1",
+        "note": "Serfs auto-remove on Hit; no Protection roll."
+      },
+      "notes": []
+    }
+  }
+}
