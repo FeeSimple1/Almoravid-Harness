@@ -1,0 +1,914 @@
+{
+  "$defs": {
+    "Calendar": {
+      "additionalProperties": false,
+      "description": "The 16-box Calendar plus off-edge lanes.\n\nOff-edge lanes are separate for cylinders vs Service markers\n(Pattern 6 / SMOKE-057). Do NOT merge.",
+      "properties": {
+        "boxes": {
+          "items": {
+            "$ref": "#/$defs/CalendarBox"
+          },
+          "title": "Boxes",
+          "type": "array"
+        },
+        "current_box": {
+          "default": 1,
+          "title": "Current Box",
+          "type": "integer"
+        },
+        "off_left": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Off Left",
+          "type": "array"
+        },
+        "off_right": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Off Right",
+          "type": "array"
+        },
+        "service_markers": {
+          "items": {
+            "$ref": "#/$defs/ServiceMarker"
+          },
+          "title": "Service Markers",
+          "type": "array"
+        },
+        "off_left_service": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Off Left Service",
+          "type": "array"
+        },
+        "off_right_service": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Off Right Service",
+          "type": "array"
+        }
+      },
+      "required": [
+        "boxes"
+      ],
+      "title": "Calendar",
+      "type": "object"
+    },
+    "CalendarBox": {
+      "additionalProperties": false,
+      "description": "One box on the 16-box Calendar.",
+      "properties": {
+        "number": {
+          "title": "Number",
+          "type": "integer"
+        },
+        "season": {
+          "enum": [
+            "spring",
+            "summer",
+            "fall",
+            "winter"
+          ],
+          "title": "Season",
+          "type": "string"
+        },
+        "turn_type": {
+          "enum": [
+            "levy",
+            "campaign",
+            "curias",
+            "winter"
+          ],
+          "title": "Turn Type",
+          "type": "string"
+        },
+        "cylinder_lord_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Cylinder Lord Ids",
+          "type": "array"
+        },
+        "decorations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Decorations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "number",
+        "season",
+        "turn_type"
+      ],
+      "title": "CalendarBox",
+      "type": "object"
+    },
+    "CardInPlay": {
+      "additionalProperties": false,
+      "description": "An Arts of War card currently in play.\n\n`scope` enforces the this_lord vs side_wide distinction\n(Pattern 14 / SMOKE-016). Helpers in Phase 4 must filter on this.",
+      "properties": {
+        "card_id": {
+          "title": "Card Id",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "this_lord",
+            "side_wide"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "owner_side": {
+          "enum": [
+            "christian",
+            "muslim"
+          ],
+          "title": "Owner Side",
+          "type": "string"
+        },
+        "owner_lord_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Owner Lord Id"
+        }
+      },
+      "required": [
+        "card_id",
+        "scope",
+        "owner_side"
+      ],
+      "title": "CardInPlay",
+      "type": "object"
+    },
+    "Cylinder": {
+      "additionalProperties": false,
+      "description": "Where a Lord's cylinder currently is.\n\nValidation that (kind, box, locale_id) are consistent is deferred\nto Phase 1. Phase 0 just records the shape.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "calendar",
+            "locale",
+            "mat",
+            "set_aside",
+            "removed"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "box": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Box"
+        },
+        "locale_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Locale Id"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Cylinder",
+      "type": "object"
+    },
+    "Decks": {
+      "additionalProperties": false,
+      "description": "Arts of War deck state.\n\n`capabilities_in_play` holds side-wide-scope cards (Pattern 14).\nThis-lord-scope cards live on `Lord.capabilities`.",
+      "properties": {
+        "draw": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Draw",
+          "type": "array"
+        },
+        "discard": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Discard",
+          "type": "array"
+        },
+        "held": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Held",
+          "type": "object"
+        },
+        "capabilities_in_play": {
+          "items": {
+            "$ref": "#/$defs/CardInPlay"
+          },
+          "title": "Capabilities In Play",
+          "type": "array"
+        },
+        "board_edge": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Board Edge",
+          "type": "object"
+        }
+      },
+      "title": "Decks",
+      "type": "object"
+    },
+    "HistoryEntry": {
+      "additionalProperties": false,
+      "description": "One action recorded in the game history log.",
+      "properties": {
+        "turn_index": {
+          "title": "Turn Index",
+          "type": "integer"
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "enum": [
+                "christian",
+                "muslim"
+              ],
+              "type": "string"
+            },
+            {
+              "const": "system",
+              "type": "string"
+            }
+          ],
+          "title": "Actor"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turn_index",
+        "actor",
+        "action"
+      ],
+      "title": "HistoryEntry",
+      "type": "object"
+    },
+    "Locale": {
+      "additionalProperties": false,
+      "description": "A map location.\n\n`base_type` is fixed at scenario setup. Overlay state (Conquered,\nJihad, Seat, Siege, Bypass, Ravaged) lives in separate fields and\nis queried via Phase 1 `effective_*` helpers (Pattern 5 / SMOKE-040,\n054, 065, 066, 073-077).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "territory": {
+          "title": "Territory",
+          "type": "string"
+        },
+        "base_type": {
+          "enum": [
+            "city",
+            "fortress",
+            "town",
+            "castle",
+            "region"
+          ],
+          "title": "Base Type",
+          "type": "string"
+        },
+        "has_gardens": {
+          "default": false,
+          "title": "Has Gardens",
+          "type": "boolean"
+        },
+        "has_port": {
+          "default": false,
+          "title": "Has Port",
+          "type": "boolean"
+        },
+        "is_reconquista_target": {
+          "default": false,
+          "title": "Is Reconquista Target",
+          "type": "boolean"
+        },
+        "conquered_markers": {
+          "default": 0,
+          "title": "Conquered Markers",
+          "type": "integer"
+        },
+        "jihad_markers": {
+          "default": 0,
+          "title": "Jihad Markers",
+          "type": "integer"
+        },
+        "seat_marker_lord_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Seat Marker Lord Ids",
+          "type": "array"
+        },
+        "siege_yellow": {
+          "default": 0,
+          "title": "Siege Yellow",
+          "type": "integer"
+        },
+        "siege_green": {
+          "default": 0,
+          "title": "Siege Green",
+          "type": "integer"
+        },
+        "bypass_yellow": {
+          "default": false,
+          "title": "Bypass Yellow",
+          "type": "boolean"
+        },
+        "bypass_green": {
+          "default": false,
+          "title": "Bypass Green",
+          "type": "boolean"
+        },
+        "ravaged": {
+          "default": "none",
+          "enum": [
+            "none",
+            "yellow",
+            "green"
+          ],
+          "title": "Ravaged",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "territory",
+        "base_type"
+      ],
+      "title": "Locale",
+      "type": "object"
+    },
+    "Lord": {
+      "additionalProperties": false,
+      "description": "A Lord (Christian or Muslim).\n\nPer-flag scope conventions (Pattern 3 / SMOKE-001, 035, 036, 037, 095):\n    moved_fought:            scope = per-Levy\n    just_arrived_this_levy:  scope = per-Levy (reset on Levy->Campaign->Levy)\n    lordship_used:           scope = per-card (Muster segment)\n    in_stronghold:           scope = lifecycle (cleared on move / re-Muster)\n    routed_units:            scope = per-engagement (cleared on aftermath)\n    first_march_used_this_card: scope = per-card\n    raiders_used_this_card:  scope = per-card\n\nLifecycle cleanup contract (Pattern 8 / SMOKE-033, 038, 087, 088, 095):\n`Lord.cleanup_on_removal_fields` lists every field that MUST be\ncleared when this Lord is permanently removed OR Disbanded at limit.\nRemoval handlers added in later phases must consult this list.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "christian",
+            "muslim"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "is_taifa": {
+          "default": false,
+          "title": "Is Taifa",
+          "type": "boolean"
+        },
+        "home_taifa": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Home Taifa"
+        },
+        "seats": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Seats",
+          "type": "array"
+        },
+        "fealty": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fealty"
+        },
+        "service_rating": {
+          "title": "Service Rating",
+          "type": "integer"
+        },
+        "lordship_rating": {
+          "title": "Lordship Rating",
+          "type": "integer"
+        },
+        "command_rating": {
+          "title": "Command Rating",
+          "type": "integer"
+        },
+        "cylinder": {
+          "$ref": "#/$defs/Cylinder"
+        },
+        "forces": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "knights",
+              "sergeants",
+              "african_horse",
+              "light_horse",
+              "men_at_arms",
+              "african_foot",
+              "militia",
+              "serfs"
+            ]
+          },
+          "title": "Forces",
+          "type": "object"
+        },
+        "assets": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "coin",
+              "loot",
+              "prov",
+              "cart",
+              "mule"
+            ]
+          },
+          "title": "Assets",
+          "type": "object"
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "vassals": {
+          "items": {
+            "$ref": "#/$defs/Vassal"
+          },
+          "title": "Vassals",
+          "type": "array"
+        },
+        "in_stronghold": {
+          "default": false,
+          "title": "In Stronghold",
+          "type": "boolean"
+        },
+        "moved_fought": {
+          "default": false,
+          "title": "Moved Fought",
+          "type": "boolean"
+        },
+        "just_arrived_this_levy": {
+          "default": false,
+          "title": "Just Arrived This Levy",
+          "type": "boolean"
+        },
+        "lordship_used": {
+          "default": 0,
+          "title": "Lordship Used",
+          "type": "integer"
+        },
+        "first_march_used_this_card": {
+          "default": false,
+          "title": "First March Used This Card",
+          "type": "boolean"
+        },
+        "raiders_used_this_card": {
+          "default": false,
+          "title": "Raiders Used This Card",
+          "type": "boolean"
+        },
+        "routed_units": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "knights",
+              "sergeants",
+              "african_horse",
+              "light_horse",
+              "men_at_arms",
+              "african_foot",
+              "militia",
+              "serfs"
+            ]
+          },
+          "title": "Routed Units",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "side",
+        "service_rating",
+        "lordship_rating",
+        "command_rating",
+        "cylinder"
+      ],
+      "title": "Lord",
+      "type": "object"
+    },
+    "Meta": {
+      "additionalProperties": false,
+      "description": "Top-level game-meta state.\n\n`active_player` is the single source of truth for whose turn it is\n(Pattern 11). Any mutator that ends a step / passes the baton must\nupdate it.",
+      "properties": {
+        "scenario_id": {
+          "title": "Scenario Id",
+          "type": "string"
+        },
+        "scenario_letter": {
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+          ],
+          "title": "Scenario Letter",
+          "type": "string"
+        },
+        "seed": {
+          "default": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "active_player": {
+          "enum": [
+            "christian",
+            "muslim"
+          ],
+          "title": "Active Player",
+          "type": "string"
+        },
+        "phase": {
+          "default": "setup",
+          "enum": [
+            "setup",
+            "levy",
+            "campaign",
+            "curias",
+            "winter",
+            "ended"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "turn_index": {
+          "default": 0,
+          "title": "Turn Index",
+          "type": "integer"
+        },
+        "version": {
+          "default": "0.1.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "scenario_letter",
+        "active_player"
+      ],
+      "title": "Meta",
+      "type": "object"
+    },
+    "PendingDecision": {
+      "additionalProperties": false,
+      "description": "A response/choice owed by some side before play can continue.\n\nPhase 0 scaffold. Phase 2+ will populate `kind` with action-specific\ndiscriminators (battle strike select, siege response, event target\npick, etc.) and may turn this into a discriminated union.\n\nPattern 11 (active-player desync): when `pending` is set, the side\nin `waiting_on` must equal `Meta.active_player`. Tests should\nassert this invariant.",
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "waiting_on": {
+          "enum": [
+            "christian",
+            "muslim"
+          ],
+          "title": "Waiting On",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "waiting_on"
+      ],
+      "title": "PendingDecision",
+      "type": "object"
+    },
+    "Score": {
+      "additionalProperties": false,
+      "description": "Victory point totals, separated by side and source.\n\nDetail breakdown (Conquered, Jihad, Taifa-status, etc.) added in\nPhase 1 when scoring is wired up.",
+      "properties": {
+        "christian": {
+          "default": 0.0,
+          "title": "Christian",
+          "type": "number"
+        },
+        "muslim": {
+          "default": 0.0,
+          "title": "Muslim",
+          "type": "number"
+        }
+      },
+      "title": "Score",
+      "type": "object"
+    },
+    "ServiceMarker": {
+      "additionalProperties": false,
+      "description": "A Lord's Service marker position on the Calendar.\n\nOff-edge handling: `box` may be 0 (off-left-service) or 17 (off-\nright-service). Cylinder and Service off-edges are independent\n(Pattern 6 / SMOKE-057).",
+      "properties": {
+        "lord_id": {
+          "title": "Lord Id",
+          "type": "string"
+        },
+        "box": {
+          "title": "Box",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lord_id",
+        "box"
+      ],
+      "title": "ServiceMarker",
+      "type": "object"
+    },
+    "Taifa": {
+      "additionalProperties": false,
+      "description": "One of the 7 Muslim Taifas.\n\nChristian \"Kingdoms\" (Le\u00f3n, Arag\u00f3n) are NOT Taifas and live in their\nown structure (or implicitly as a territory string on Locales).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "locale_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Locale Ids",
+          "type": "array"
+        },
+        "status": {
+          "default": "independent",
+          "enum": [
+            "independent",
+            "parias",
+            "reconquista",
+            "kingdoms"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "status_marker_count": {
+          "default": 0,
+          "title": "Status Marker Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Taifa",
+      "type": "object"
+    },
+    "Vassal": {
+      "additionalProperties": false,
+      "description": "A Lord's Vassal. Pure data per the Lords reference.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "forces": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "knights",
+              "sergeants",
+              "african_horse",
+              "light_horse",
+              "men_at_arms",
+              "african_foot",
+              "militia",
+              "serfs"
+            ]
+          },
+          "title": "Forces",
+          "type": "object"
+        },
+        "service_cost": {
+          "title": "Service Cost",
+          "type": "integer"
+        },
+        "ready": {
+          "default": true,
+          "title": "Ready",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "service_cost"
+      ],
+      "title": "Vassal",
+      "type": "object"
+    },
+    "Way": {
+      "additionalProperties": false,
+      "description": "A connection between two Locales.\n\nStored as a list on GameState, NOT a dict keyed by (a, b)\n(Pattern 4 / SMOKE-047, 067-069). Each Way carries its `way_type`\nso parallel Ways are distinguishable.",
+      "properties": {
+        "a": {
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "title": "B",
+          "type": "string"
+        },
+        "way_type": {
+          "enum": [
+            "road",
+            "pass"
+          ],
+          "title": "Way Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "way_type"
+      ],
+      "title": "Way",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The full game state.\n\nInvariants future phases must enforce (and tests must check):\n\n1. Pattern 11: `pending.waiting_on == meta.active_player` whenever\n   `pending` is not None.\n2. Pattern 6: any cylinder/Service marker not on the 16-box track\n   must live in exactly one of the off-edge lanes.\n3. Pattern 14: every `CardInPlay` with `scope == \"this_lord\"` must\n   have its `card_id` in exactly one `Lord.capabilities` list.\n4. Pattern 8: removed Lords have all `cleanup_on_removal_fields`\n   fields cleared.",
+  "properties": {
+    "meta": {
+      "$ref": "#/$defs/Meta"
+    },
+    "calendar": {
+      "$ref": "#/$defs/Calendar"
+    },
+    "lords": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Lord"
+      },
+      "title": "Lords",
+      "type": "object"
+    },
+    "locales": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Locale"
+      },
+      "title": "Locales",
+      "type": "object"
+    },
+    "taifas": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Taifa"
+      },
+      "title": "Taifas",
+      "type": "object"
+    },
+    "ways": {
+      "items": {
+        "$ref": "#/$defs/Way"
+      },
+      "title": "Ways",
+      "type": "array"
+    },
+    "decks": {
+      "$ref": "#/$defs/Decks"
+    },
+    "pending": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PendingDecision"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "history": {
+      "items": {
+        "$ref": "#/$defs/HistoryEntry"
+      },
+      "title": "History",
+      "type": "array"
+    },
+    "score": {
+      "$ref": "#/$defs/Score"
+    }
+  },
+  "required": [
+    "meta",
+    "calendar"
+  ],
+  "title": "GameState",
+  "type": "object"
+}

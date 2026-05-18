@@ -1,0 +1,18 @@
+{
+  "scenario_id": "arrival_of_the_africans",
+  "scenario_letter": "D",
+  "name": "Arrival of the Africans",
+  "start_box": 12,
+  "end_box": 15,
+  "starting_vp": {
+    "christian": 11,
+    "muslim": 10
+  },
+  "active_player_at_start": "muslim",
+  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
+  "lords": [],
+  "locale_markers": [],
+  "calendar": {},
+  "taifa_status": {},
+  "special_rules": []
+}
