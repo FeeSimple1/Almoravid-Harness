@@ -281,3 +281,127 @@ def unresolved_event_cards() -> list[str]:
         if not c.get("no_event") and cid not in _RESOLVERS:
             out.append(cid)
     return sorted(out)
+
+
+
+# ===========================================================================
+# Phase 5j: structural resolvers for the remaining event halves.
+# Each card here has a known effect per the AoW Reference; Phase 5j ships
+# the dispatch + Pattern 10 no-op-on-missing-target check + deferred-marker
+# bucket placement. Detailed per-card mechanics (specific Service shifts,
+# specific marker placements, VP adjustments beyond the standard 1/2 VP
+# per marker) land in later commits as the agent exercises each.
+# ===========================================================================
+
+
+# --- Hold events affecting Battle / Storm / Sally (this_levy bucket) ---
+# These cards persist through Battle resolution; Phase 5 Battle code
+# (battle.py) can consult state.decks.this_levy_events to apply effects.
+
+@register("C13")  # Berenguer Ramon (Count of Barcelona / event side)
+@register("M23")  # Berenguer Ramon (Muslim side)
+def _berenguer_ramon(state, side, card_id, payload):
+    """Berenguer Ramon: Count of Barcelona event. Held in this_levy
+    bucket; Phase 5 Battle resolver consults for force-modifier bonus.
+    """
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
+
+# --- Immediate events with side-wide state effects ---
+
+
+@register("C11")  # Indulgences
+@register("C12")  # Song of Roland
+def _crusader_event(state, side, card_id, payload):
+    """C11 Indulgences / C12 Song of Roland: immediate, Muster 1
+    Crusaders marker onto any unbesieged Christian Lord. Also forces
+    Eudes (if on map and Unbesieged) to Muster all Ready Vassals.
+
+    Phase 5j: validates a target Christian Lord; records the
+    intent. Crusader-marker placement and forced-Eudes-Vassal-Muster
+    are Phase 5j+ once the Crusaders model lands in state.
+    """
+    target_lord_id = payload.get("target_lord_id")
+    available_christians = [
+        l.id for l in state.lords.values()
+        if l.side == "christian"
+        and l.cylinder.kind == "locale"
+    ]
+    if not available_christians:
+        return _no_op_with_note(state, card_id, side,
+                                "no unbesieged Christian Lord available")
+    if target_lord_id and target_lord_id not in available_christians:
+        return _no_op_with_note(state, card_id, side,
+                                f"target {target_lord_id} not eligible")
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "target": target_lord_id or available_christians[0],
+            "deferred": "phase_5j_plus"}
+
+
+@register("C14")  # Pope Gregory
+def _pope_gregory(state, side, card_id, payload):
+    """Pope Gregory: hold-event eligibility on Sancho (Pope Gregory cap).
+    Phase 5j: held in this_levy_events; resolver hook for Sancho's
+    capability bonus."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
+
+@register("C15")  # Cluniacs
+@register("M9")   # Maliki Islam
+@register("M20")  # Mudejares
+def _religious_hold(state, side, card_id, payload):
+    """Religious hold events: persistent through some window. Buffered
+    in this_levy_events; specific mechanics in Phase 5j+."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
+
+@register("C16")  # Bernard de Sedirac
+@register("C17")  # Genoa & Pisa send fleets
+@register("C18")  # Runaway Slaves
+@register("C19")  # Fitna
+@register("C20")  # Al-Qadir
+@register("C21")  # Mozarabes
+@register("C22")  # Berbers
+@register("C23")  # Illness of the Emir
+@register("C24")  # Abu Bakr ibn Umar
+@register("M11")  # Al-Qadir balks at payment
+@register("M15")  # Parias Revolt
+@register("M16")  # Galician Revolt
+@register("M17")  # Leon y Castilla
+@register("M18")  # Refugees
+@register("M19")  # African Fleet
+@register("M22")  # Massacre
+@register("M24")  # Al-Maghawir
+@register("M8")   # Ahmad Ibn Rumayla
+def _generic_immediate(state, side, card_id, payload):
+    """Immediate events with side-wide or scenario-specific effects.
+
+    Phase 5j: discard with a deferred note. Per CROSS_PROJECT_LESSONS
+    Pattern 10, these resolvers do NOT raise even if the effect isn't
+    fully wired — the card discards cleanly and the agent moves on.
+    The specific mechanics land per-card as agents exercise them and
+    the implementation pressure points itself.
+    """
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+
+
+# --- Rodrigo (El Cid) family ---
+
+
+@register("C25")  # De Vivar
+@register("M10")  # Fatwa (immediate Muslim)
+def _de_vivar(state, side, card_id, payload):
+    """C25 De Vivar / M10 Fatwa: scenario-specific effects.
+    Phase 5j: structural no-op."""
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+
+
+@register("C26")  # Freebooter
+@register("M13")  # Severed Heads
+def _hostile_event(state, side, card_id, payload):
+    """C26 Freebooter / M13 Severed Heads: structural no-op for Phase 5j."""
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
