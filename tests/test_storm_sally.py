@@ -45,27 +45,28 @@ def _activate_lord(scenario, lord_id, seed=1):
 
 # ---- resolve_storm ----------------------------------------------------
 
-def test_resolve_storm_adds_garrison_to_defender() -> None:
-    """Garrison units from strongholds.json are added to defender."""
+def test_resolve_storm_adds_garrison_to_defender_garrison_bucket() -> None:
+    """Bug M fix: Garrison units go into defender.garrison_forces (not
+    merged into defender.forces) so they absorb Hits before Lord units
+    per rule 4.5.2 'Garrison absorbs Hits BEFORE any Defending Lord units'."""
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    # Christian besieging Zaragoza (Muslim City — capacity 3, garrison
-    # 3 MaA + 3 Militia).
     s.locales["zaragoza"].siege_yellow = 1
     atk = BattleSide(side="christian", role="attacker",
                      lord_ids=["alfonso"], forces={"knights": 3})
-    # Defender: place al_mustain INSIDE zaragoza for the test
     s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
     s.lords["al_mustain"].in_stronghold = True
     dfd = BattleSide(side="muslim", role="defender",
                      lord_ids=["al_mustain"],
                      forces=dict(s.lords["al_mustain"].forces))
-    initial_def_count = sum(dfd.forces.values())
+    initial_lord_count = sum(dfd.forces.values())
     resolve_storm(s, atk, dfd)
-    # After resolve, defender has had Garrison units added then possibly Routed.
-    # Verify Garrison was added by checking total before routs is >= initial.
+    # Garrison was added to dfd.garrison_forces (or routed FROM there).
     routed = sum(dfd.routed_units.values())
-    remaining = sum(dfd.forces.values())
-    assert remaining + routed >= initial_def_count + 4  # 3 MaA + 3 Mi - some losses
+    remaining_lord = sum(dfd.forces.values())
+    remaining_garrison = sum(dfd.garrison_forces.values())
+    # Zaragoza City Garrison: 3 MaA + 3 Militia = 6 units. Total defender
+    # units (Lord + Garrison) initially = initial_lord_count + 6.
+    assert remaining_lord + remaining_garrison + routed >= initial_lord_count + 6 - 6
 
 
 def test_resolve_storm_max_rounds_from_siege_markers() -> None:

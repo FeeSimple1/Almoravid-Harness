@@ -31,6 +31,7 @@ from almoravid.state import (
     GameState,
     HistoryEntry,
     LevyStep,
+    Lord,
     Side,
 )
 from almoravid.static_data import load_cards, load_lords
@@ -350,6 +351,26 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
 
 
+
+
+
+def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
+    """Errata p.12: where the Disbanding Lord's cylinder lands.
+
+    During Levy: current_box + service_rating.
+    During Campaign: current_box + 1 + service_rating ('next box if
+    Campaign' per Errata p.12, inserted before 'marker' in 3.3.2
+    bullet 1). The +1 accounts for the Campaign-step Calendar advance
+    that hasn't happened yet at the moment of Disband.
+
+    Pattern 9 audit fix N — codifies the Errata before Campaign-time
+    Disband paths get wired in a later phase.
+    """
+    base = state.calendar.current_box + lord.service_rating
+    if state.meta.phase == "campaign":
+        return base + 1
+    return base
+
 # ---------------------------------------------------------------------------
 # 3.2 Pay (Phase 5g)
 # ---------------------------------------------------------------------------
@@ -429,8 +450,15 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="wrong_side")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not on map", code="not_on_map")
-    # Place cylinder on Calendar service_rating boxes ahead of current box
-    new_box = state.calendar.current_box + lord.service_rating
+    # Bug N (Pattern 9 audit / Errata p.12): Disband target box differs
+    # by phase per the Errata correction —
+    #   if Levy: current_box + service_rating
+    #   if Campaign: current_box + 1 + service_rating  (the +1 is the
+    #     errata 'next box if Campaign (4.8.2)' insertion)
+    # Today _h_disband_lord is gated on Levy step, so the if-branch is
+    # what runs; the helper is in place so when 4.8.2/4.8.3 voluntary
+    # Campaign-time Disband lands later it uses the right box.
+    new_box = _compute_disband_target_box(state, lord)
     if new_box > 16:
         new_box = 17  # off-right sentinel
         state.calendar.off_right.append(lord_id)

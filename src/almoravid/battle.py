@@ -82,7 +82,15 @@ class StrikeRow:
 
 @dataclass
 class BattleSide:
-    """One side of an engagement."""
+    """One side of an engagement.
+
+    Bug M (Pattern 7 audit) — Storm requires Garrison-vs-Lord unit
+    provenance because rule 4.5.2 says 'Garrison absorbs Hits BEFORE
+    any Defending Lord units'. `garrison_forces` is populated by
+    resolve_storm; outside Storm context it's empty. When taking a
+    Hit during Storm, the protection-roll helper drains garrison_forces
+    before forces.
+    """
 
     side: Side
     role: Role
@@ -90,12 +98,16 @@ class BattleSide:
     forces: dict[UnitType, int]
     capabilities_in_play: list[str] = field(default_factory=list)
     routed_units: dict[UnitType, int] = field(default_factory=dict)
+    # Garrison units split out for Storm absorption-order (Bug M).
+    garrison_forces: dict[UnitType, int] = field(default_factory=dict)
 
     def has_unrouted(self) -> bool:
-        return any(v > 0 for v in self.forces.values())
+        return any(v > 0 for v in self.forces.values()) or any(
+            v > 0 for v in self.garrison_forces.values()
+        )
 
     def total_unrouted(self) -> int:
-        return sum(self.forces.values())
+        return sum(self.forces.values()) + sum(self.garrison_forces.values())
 
 
 @dataclass
@@ -227,6 +239,7 @@ def _resolve_protection_roll(
     striker_kind: StrikeKind,
     *,
     context: Literal["battle", "storm"] = "battle",
+    striker_selects: bool = False,
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -245,30 +258,57 @@ def _resolve_protection_roll(
     """
     forces_data = load_forces()
 
-    # Build candidate units: prefer Armored over Unarmored, since Armored
-    # has the best chance of canceling Hits.
-    candidates: list[tuple[int, UnitType]] = []  # (priority, type)
-    for unit_type, count in target_side.forces.items():
-        if count <= 0:
-            continue
-        # Find unit record
-        unit = None
-        for cat in ("horse", "foot"):
-            if unit_type in forces_data[cat]:
-                unit = forces_data[cat][unit_type]
-                break
-        if unit is None:
-            continue
-        ptype = unit["protection"]["type"]
-        # Pure deterministic priority: armored > unarmored > auto_remove
-        # (so we save Serfs for last — but they auto-rout regardless).
-        prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
-                "none": 3}.get(ptype, 4)
-        candidates.append((prio, unit_type))
-    if not candidates:
+    # Bug M (Pattern 7 audit) — Storm: drain Garrison units BEFORE
+    # Lord units. We try the garrison_forces pool first; only when
+    # garrison is empty do we fall through to forces.
+    pools: list[tuple[str, dict]] = []
+    if context == "storm" and target_side.garrison_forces:
+        pools.append(("garrison", target_side.garrison_forces))
+    pools.append(("forces", target_side.forces))
+
+    def _build_candidates(pool: dict) -> list[tuple[int, UnitType]]:
+        cs: list[tuple[int, UnitType]] = []
+        for unit_type, count in pool.items():
+            if count <= 0:
+                continue
+            unit_rec = None
+            for cat in ("horse", "foot"):
+                if unit_type in forces_data[cat]:
+                    unit_rec = forces_data[cat][unit_type]
+                    break
+            if unit_rec is None:
+                continue
+            ptype = unit_rec["protection"]["type"]
+            # Bug L (Pattern 7 audit) — Crossbow Hits: the FIRING side
+            # selects the target unit (rule 1.3.1 / forces.json
+            # firing_side_selects_target). The optimal choice is the
+            # unit most likely to fail Protection — i.e., Unarmored
+            # before Armored. Otherwise the TARGETED side picks, and
+            # its optimal choice is the opposite: Armored first.
+            if striker_selects:
+                # Striker picks: unarmored (auto_remove first) before armored
+                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
+                        "none": 3}.get(ptype, 4)
+            else:
+                # Target picks: armored before unarmored (absorb safely)
+                prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                        "none": 3}.get(ptype, 4)
+            cs.append((prio, unit_type))
+        cs.sort()
+        return cs
+
+    chosen = None
+    chosen_pool_name = None
+    chosen_pool = None
+    for pool_name, pool in pools:
+        cands = _build_candidates(pool)
+        if cands:
+            _, chosen = cands[0]
+            chosen_pool_name = pool_name
+            chosen_pool = pool
+            break
+    if chosen is None:
         return (False, None)
-    candidates.sort()
-    _, chosen = candidates[0]
     unit = None
     for cat in ("horse", "foot"):
         if chosen in forces_data[cat]:
@@ -278,9 +318,13 @@ def _resolve_protection_roll(
     ptype = unit["protection"]["type"]
     # Serfs auto-rout
     if ptype == "auto_remove":
-        target_side.forces[chosen] -= 1
-        if target_side.forces[chosen] <= 0:
-            target_side.forces.pop(chosen, None)
+        chosen_pool[chosen] -= 1
+        if chosen_pool[chosen] <= 0:
+            chosen_pool.pop(chosen, None)
+        # Bug M: Routed Garrison units 'return to pool' (per SoP
+        # storm_procedure.garrison_during_storm.routed_garrison).
+        # We track them in routed_units for the engagement; they
+        # vanish at end-of-storm regardless.
         target_side.routed_units[chosen] = target_side.routed_units.get(chosen, 0) + 1
         return (False, chosen)
     # Roll Protection
@@ -309,9 +353,9 @@ def _resolve_protection_roll(
     if canceled:
         return (True, None)
     # Failed Protection -> Rout
-    target_side.forces[chosen] -= 1
-    if target_side.forces[chosen] <= 0:
-        target_side.forces.pop(chosen, None)
+    chosen_pool[chosen] -= 1
+    if chosen_pool[chosen] <= 0:
+        chosen_pool.pop(chosen, None)
     target_side.routed_units[chosen] = target_side.routed_units.get(chosen, 0) + 1
     return (False, chosen)
 
@@ -371,11 +415,22 @@ def _resolve_step(
 
     # Apply each remaining Hit to the target.
     striker_kind: StrikeKind = "melee" if step_type == "melee" else "missiles"
+    # Bug L (Pattern 7 audit): if this missile step includes any
+    # Crossbow row, the firing side selects which target unit takes
+    # each Hit. Phase L baseline applies striker-selects to the whole
+    # step if Crossbows are present (over-applies the benefit when
+    # Bowmen/Javelins also contribute — full mixed-missile-rounding
+    # refinement is a Phase 5+ Q-NNN candidate).
+    has_crossbows = any(r.kind == "crossbows" for r in rows)
+    striker_selects_target = (step_type != "melee" and has_crossbows)
     for _ in range(hits_to_apply):
         if not target.has_unrouted():
             break
-        _, routed = _resolve_protection_roll(state, target, striker_kind,
-                                                context=context)
+        _, routed = _resolve_protection_roll(
+            state, target, striker_kind,
+            context=context,
+            striker_selects=striker_selects_target,
+        )
         if routed is not None:
             result.losses[routed] = result.losses.get(routed, 0) + 1
     return result
@@ -603,10 +658,12 @@ def resolve_storm(
     if max_rounds is None:
         max_rounds = 4
 
-    # Add Garrison to defender's forces (Phase 5f baseline).
+    # Bug M (Pattern 7 audit fix): Garrison units kept in their own
+    # bucket so the Protection roll drains them before Lord units.
+    # Rule 4.5.2: 'Garrison absorbs Hits BEFORE any Defending Lord
+    # units'.
     garrison = _garrison_for_locale(state, locale_id) if locale_id else {}
-    for ut, n in garrison.items():
-        defender.forces[ut] = defender.forces.get(ut, 0) + n
+    defender.garrison_forces = dict(garrison)
 
     # Storm strike order: defender (all stronghold defenders) -> attacker (all).
     # In Storm there are only 2 melee substeps after missiles (per SoP).

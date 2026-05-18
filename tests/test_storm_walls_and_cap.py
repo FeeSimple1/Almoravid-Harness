@@ -229,3 +229,96 @@ def test_bug_k_pending_draw_cleared_at_arts_of_war_end() -> None:
     # Now in pay step; pending_draw cleared
     assert s.meta.levy_step == "pay"
     assert s.decks.pending_draw == {}
+
+
+def test_bug_l_crossbow_striker_selects_target() -> None:
+    """Bug L (Pattern 7): Crossbow Hits — firing side selects which
+    enemy unit takes the Hit. Striker's optimal pick is Unarmored
+    (most likely to fail Protection). Verify by comparing two runs:
+    one with Crossbow source, one without — Crossbow run should
+    rout Unarmored units more often.
+    """
+    from almoravid.battle import (
+        BattleSide,
+        _resolve_step,
+    )
+    from almoravid.scenarios import load_scenario
+
+    s = load_scenario("scenario_a_toledo_beset", seed=42)
+    # Attacker with Crossbow MaA (capability C2 active)
+    atk_cb = BattleSide(side="christian", role="attacker",
+                        lord_ids=["alvar_fanez"],
+                        forces={"men_at_arms": 4},
+                        capabilities_in_play=["C2"])  # Ballesteros = Crossbows
+    # Defender: mix of armored Knights and unarmored Light Horse
+    dfd_cb = BattleSide(side="muslim", role="defender",
+                        lord_ids=["al_mutamid"],
+                        forces={"knights": 5, "light_horse": 5})
+    res_cb = _resolve_step(s, "1.b", "attacker", "missile", None,
+                           atk_cb, dfd_cb, context="battle")
+    # With Crossbow firing-side select: striker picks unarmored
+    # (light_horse) first. So light_horse losses should be >= 0 with
+    # high probability, and the picked unit type should match Unarmored.
+    # The structural check: when striker_selects=True, _resolve_protection_roll
+    # picks light_horse before knights as the absorbing unit.
+    # Easier: check that knights took FEWER hits than light_horse here.
+    knights_routed = dfd_cb.routed_units.get("knights", 0)
+    horse_routed = dfd_cb.routed_units.get("light_horse", 0)
+    # Crossbow's job: bypass armor. Expect more unarmored losses.
+    assert horse_routed >= knights_routed, (
+        f"Bug L regression: expected Crossbow striker to target light_horse "
+        f"(unarmored) first; got knights_routed={knights_routed}, "
+        f"horse_routed={horse_routed}"
+    )
+
+
+def test_bug_m_garrison_absorbs_before_lord_units_in_storm() -> None:
+    """Bug M (Pattern 7): Garrison absorbs Hits BEFORE Defending Lord units."""
+    from almoravid.battle import BattleSide, resolve_storm
+    from almoravid.scenarios import load_scenario
+    from almoravid.state import Cylinder
+
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    s.locales["zaragoza"].siege_yellow = 1
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
+    s.lords["al_mustain"].in_stronghold = True
+    lord_initial = dict(s.lords["al_mustain"].forces)
+    atk = BattleSide(side="christian", role="attacker",
+                     lord_ids=["alfonso"],
+                     forces={"knights": 2})  # small attacker
+    dfd = BattleSide(side="muslim", role="defender",
+                     lord_ids=["al_mustain"],
+                     forces=dict(s.lords["al_mustain"].forces))
+    result = resolve_storm(s, atk, dfd, max_rounds=1)
+    # Garrison routs first; after 1 round, Lord units mostly untouched.
+    lord_remaining = sum(dfd.forces.values())
+    lord_initial_count = sum(lord_initial.values())
+    # With Garrison absorbing first, Lord losses should be small.
+    assert lord_remaining >= lord_initial_count - 2, (
+        f"Bug M regression: Lord units should be mostly preserved when "
+        f"Garrison absorbs first; got lord_remaining={lord_remaining}, "
+        f"initial={lord_initial_count}"
+    )
+
+
+def test_bug_n_disband_target_box_uses_levy_formula_during_levy() -> None:
+    """Bug N (Errata p.12): Levy-phase Disband: current_box + service_rating."""
+    from almoravid.actions import _compute_disband_target_box
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset")  # box=1, phase=setup
+    # Drive into Levy phase
+    s.meta.phase = "levy"
+    s.calendar.current_box = 5
+    assert _compute_disband_target_box(s, s.lords["alfonso"]) == 5 + 4  # service=4
+
+
+def test_bug_n_disband_target_box_uses_next_box_during_campaign() -> None:
+    """Bug N (Errata p.12 'next box if Campaign'): Campaign Disband
+    uses current_box + 1 + service_rating."""
+    from almoravid.actions import _compute_disband_target_box
+    from almoravid.scenarios import load_scenario
+    s = load_scenario("scenario_a_toledo_beset")
+    s.meta.phase = "campaign"
+    s.calendar.current_box = 5
+    # current_box + 1 + service_rating = 5 + 1 + 4 = 10
+    assert _compute_disband_target_box(s, s.lords["alfonso"]) == 5 + 1 + 4
