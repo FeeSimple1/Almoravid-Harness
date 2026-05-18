@@ -26,9 +26,15 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Return the list of currently-legal action dicts."""
     moves: list[dict[str, Any]] = []
 
-    # Lifecycle: begin_levy when in setup or campaign.
-    if state.meta.phase in ("setup", "campaign"):
+    # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
+    # are handled by _advance_step_if_both_done and _h_end_campaign — the
+    # agent never has to explicitly invoke a phase-start handler mid-game.
+    if state.meta.phase == "setup":
         moves.append({"type": "begin_levy"})
+        return moves
+
+    if state.meta.phase == "campaign":
+        moves.extend(_campaign_moves(state))
         return moves
 
     if state.meta.phase != "levy":
@@ -122,4 +128,59 @@ def _free_seats_for(state: GameState, lord_id: str) -> list[str]:
         )
         if not enemy_present:
             out.append(seat)
+    return out
+
+
+
+def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
+    """Enumerate currently-legal Campaign moves."""
+    out: list[dict[str, Any]] = []
+    cstep = state.meta.campaign_step
+    active = state.meta.active_player
+
+    # cstep is set by _advance_step_if_both_done at Levy->Campaign
+    # transition; cstep is never None during the Campaign phase under
+    # normal operation. If it somehow is, begin_campaign is the recovery.
+    if cstep is None:
+        out.append({"type": "begin_campaign"})
+        return out
+
+    if cstep == "plan":
+        # Either side may add to their own plan in any order.
+        for side in ("christian", "muslim"):
+            plan = state.decks.plan.get(side, [])
+            from almoravid.campaign import _plan_target_size
+            target = _plan_target_size(state)
+            if len(plan) < target:
+                # Lords with cylinder on map can be planned;
+                # any Lord could in principle (rule 4.1 doesn't gate on
+                # location). Phase 3a offers the simplest variant:
+                # offer 'pass' entry plus one command entry per Lord
+                # currently on the map (most useful subset).
+                out.append({"type": "plan_add_card", "side": side, "plan_kind": "pass"})
+                for lid, lord in state.lords.items():
+                    if lord.side == side and lord.cylinder.kind == "locale":
+                        out.append({"type": "plan_add_card", "side": side,
+                                    "plan_kind": "command", "lord_id": lid})
+            already_fin = (state.meta.plan_finalized_christian
+                           if side == "christian"
+                           else state.meta.plan_finalized_muslim)
+            if len(plan) == target and not already_fin:
+                out.append({"type": "finalize_plan", "side": side})
+        return out
+
+    if cstep == "activation":
+        if state.meta.active_lord_id is None:
+            out.append({"type": "command_reveal", "side": active})
+        else:
+            # An active Lord has actions_remaining > 0.
+            if state.meta.actions_remaining > 0:
+                out.append({"type": "cmd_pass", "side": active})
+            out.append({"type": "end_card", "side": active})
+        return out
+
+    if cstep == "end_campaign":
+        out.append({"type": "end_campaign"})
+        return out
+
     return out

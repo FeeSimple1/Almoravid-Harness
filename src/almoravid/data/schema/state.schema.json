@@ -304,6 +304,22 @@
           },
           "title": "Pending Draw",
           "type": "object"
+        },
+        "plan": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/PlanEntry"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Plan",
+          "type": "object"
         }
       },
       "title": "Decks",
@@ -732,6 +748,62 @@
           "default": 0,
           "title": "Rng State",
           "type": "integer"
+        },
+        "campaign_step": {
+          "anyOf": [
+            {
+              "enum": [
+                "plan",
+                "activation",
+                "end_card",
+                "end_campaign",
+                "done"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Campaign Step"
+        },
+        "plan_finalized_christian": {
+          "default": false,
+          "title": "Plan Finalized Christian",
+          "type": "boolean"
+        },
+        "plan_finalized_muslim": {
+          "default": false,
+          "title": "Plan Finalized Muslim",
+          "type": "boolean"
+        },
+        "active_lord_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Lord Id"
+        },
+        "actions_remaining": {
+          "default": 0,
+          "title": "Actions Remaining",
+          "type": "integer"
+        },
+        "plan_index_christian": {
+          "default": 0,
+          "title": "Plan Index Christian",
+          "type": "integer"
+        },
+        "plan_index_muslim": {
+          "default": 0,
+          "title": "Plan Index Muslim",
+          "type": "integer"
         }
       },
       "required": [
@@ -769,6 +841,37 @@
         "waiting_on"
       ],
       "title": "PendingDecision",
+      "type": "object"
+    },
+    "PlanEntry": {
+      "additionalProperties": false,
+      "description": "One card in a side's Campaign Plan stack (rule 4.1).\n\nkind=\"command\" with a lord_id activates that Lord for command_rating\nactions on reveal. kind=\"pass\" advances the plan without activating\nanyone.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "command",
+            "pass"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "lord_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lord Id"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "PlanEntry",
       "type": "object"
     },
     "Score": {

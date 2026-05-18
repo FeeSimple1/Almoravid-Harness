@@ -1,0 +1,390 @@
+"""Campaign-phase handlers (rule 4).
+
+Phase 3a scope: Plan (4.1) and Activation (4.2) framework, with a
+single command implementation (cmd_pass — burn a card with no
+actions). Subsequent commits flesh out March, Supply, Forage, Ravage,
+Tax, Siege, Battle.
+
+Architectural choices driven by FUTURE_PROJECTS_LESSONS.md:
+  - Pattern 1 (state-set-but-unreachable): every Plan / Activation
+    state transition is reachable via legal_moves. The "advance the
+    revealed card" path goes through end_card -> command_reveal so
+    there's exactly one place control flows through.
+  - Pattern 11 (active-player desync): command_reveal is what flips
+    `active_player` between sides during Activation.
+  - Pattern 13 (per-window once-only): Plan stacks (decks.plan) are
+    cleared at end_campaign so they don't leak into the next Campaign.
+"""
+
+from __future__ import annotations
+
+from typing import Any, cast
+
+from almoravid.actions import (
+    ACTOR_ORDER,
+    IllegalAction,
+    _record,
+    _require,
+    _require_active,
+    _require_phase,
+    _require_side,
+)
+from almoravid.state import (
+    GameState,
+    PlanEntry,
+    Side,
+)
+
+
+# Plan size per season (SoP §4.1 / hard-coded seasonal command_cards).
+PLAN_SIZE_BY_SEASON: dict[str, int] = {
+    "spring": 7,
+    "summer": 8,
+    "autumn": 7,
+    "winter": 0,  # Winter handled via 6.3, not normal Plan
+}
+
+
+def _other(side: Side) -> Side:
+    return "muslim" if side == "christian" else "christian"
+
+
+def _current_season(state: GameState) -> str:
+    box = state.calendar.current_box
+    return state.calendar.boxes[box - 1].season
+
+
+def _plan_target_size(state: GameState) -> int:
+    """The plan size each side must reach to finalize this Campaign."""
+    return PLAN_SIZE_BY_SEASON.get(_current_season(state), 7)
+
+
+def _require_campaign_step(state: GameState, step: str) -> None:
+    _require_phase(state, "campaign")
+    _require(state.meta.campaign_step == step,
+             f"campaign_step is {state.meta.campaign_step}, expected {step}",
+             code="bad_campaign_step")
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle: begin_campaign
+# ---------------------------------------------------------------------------
+
+
+def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Move from levy/done into campaign/plan (rule 4.1 entry).
+
+    Action dispatcher in actions.py routes here when the Levy phase
+    finishes via _advance_step_if_both_done. This handler is also the
+    user-facing entry point if the harness is started with the state
+    already past Levy.
+    """
+    _require(state.meta.phase == "campaign",
+             f"begin_campaign requires phase=campaign (got {state.meta.phase})",
+             code="bad_phase")
+    state.meta.campaign_step = "plan"
+    state.meta.plan_finalized_christian = False
+    state.meta.plan_finalized_muslim = False
+    state.meta.plan_index_christian = 0
+    state.meta.plan_index_muslim = 0
+    state.meta.actions_remaining = 0
+    state.meta.active_lord_id = None
+    state.decks.plan = {"christian": [], "muslim": []}
+    state.meta.active_player = ACTOR_ORDER[0]
+    _record(state, action, "Begin Campaign — Plan step")
+    return {"campaign_step": "plan",
+            "plan_target_size": _plan_target_size(state)}
+
+
+# ---------------------------------------------------------------------------
+# 4.1 Plan
+# ---------------------------------------------------------------------------
+
+
+def _h_plan_add_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Append one card to a side's Plan stack (rule 4.1).
+
+    Both sides plan privately; the harness treats both stacks as part
+    of state so the agent abstraction stays clean. (A real two-player
+    UI would hide the opponent's stack until reveal.)
+    """
+    side = _require_side(action)
+    _require_campaign_step(state, "plan")
+    # Either side may add to their own plan in any order during the
+    # plan step. Pattern 11: no active_player gate here, but we still
+    # validate the side belongs to the game.
+    kind = action.get("plan_kind", "command")
+    _require(kind in ("command", "pass"),
+             f"plan_kind must be 'command' or 'pass', got {kind!r}",
+             code="bad_arg")
+    lord_id = action.get("lord_id")
+    if kind == "command":
+        _require(isinstance(lord_id, str),
+                 "command plan entries require lord_id",
+                 code="bad_arg")
+        _require(lord_id in state.lords,
+                 f"unknown lord {lord_id!r}",
+                 code="unknown_lord")
+        lord = state.lords[lord_id]
+        _require(lord.side == side,
+                 f"{lord_id} is not on {side}'s side",
+                 code="wrong_side")
+    plan = state.decks.plan.setdefault(side, [])
+    target = _plan_target_size(state)
+    _require(len(plan) < target,
+             f"plan already at target size {target}",
+             code="plan_full")
+    plan.append(PlanEntry(kind=kind, lord_id=lord_id if kind == "command" else None))
+    _record(state, action, f"{side} adds {kind} card"
+            + (f" for {lord_id}" if lord_id else ""))
+    return {"plan_size": len(plan), "target": target}
+
+
+def _h_finalize_plan(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Side declares its Plan complete (rule 4.1 end).
+
+    Plan must be exactly the season's target size. When both sides
+    finalize, transition to activation step.
+    """
+    side = _require_side(action)
+    _require_campaign_step(state, "plan")
+    target = _plan_target_size(state)
+    plan = state.decks.plan.get(side, [])
+    _require(len(plan) == target,
+             f"plan has {len(plan)} entries, must be {target}",
+             code="plan_size_mismatch")
+    if side == "christian":
+        _require(not state.meta.plan_finalized_christian,
+                 "christian plan already finalized",
+                 code="already_finalized")
+        state.meta.plan_finalized_christian = True
+    else:
+        _require(not state.meta.plan_finalized_muslim,
+                 "muslim plan already finalized",
+                 code="already_finalized")
+        state.meta.plan_finalized_muslim = True
+    advanced = False
+    if state.meta.plan_finalized_christian and state.meta.plan_finalized_muslim:
+        # Both sides finalized: enter Activation. Skip straight to
+        # end_campaign if neither side planned any cards (Winter season
+        # with PLAN_SIZE_BY_SEASON["winter"] = 0). Proper Scenario F
+        # Winter Sequence (6.3) lands in a later phase.
+        plan_c = state.decks.plan.get("christian", [])
+        plan_m = state.decks.plan.get("muslim", [])
+        if not plan_c and not plan_m:
+            state.meta.campaign_step = "end_campaign"
+        else:
+            state.meta.campaign_step = "activation"
+            state.meta.active_player = ACTOR_ORDER[0]
+        advanced = True
+    _record(state, action,
+            f"{side} finalizes plan ({len(plan)} cards)"
+            + ("; both finalized — activation step" if advanced else ""))
+    return {"campaign_step": state.meta.campaign_step, "advanced": advanced}
+
+
+# ---------------------------------------------------------------------------
+# 4.2 Activation
+# ---------------------------------------------------------------------------
+
+
+def _h_command_reveal(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Reveal the next card from the acting side's Plan (rule 4.2).
+
+    Christian and Muslim alternate. If the revealed card's Lord is not
+    on the map (cylinder.kind != 'locale') or the entry is kind='pass',
+    it's a "no actions taken" reveal — record and continue (rule
+    4.2.3). Otherwise, set active_lord_id and actions_remaining = the
+    Lord's command_rating.
+    """
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is None,
+             "a Lord is already active; finish their card with end_card first",
+             code="lord_already_active")
+
+    idx_attr = f"plan_index_{side}"
+    idx = getattr(state.meta, idx_attr)
+    plan = state.decks.plan.get(side, [])
+    _require(idx < len(plan),
+             f"{side} plan exhausted (idx={idx}, plan_size={len(plan)})",
+             code="plan_exhausted")
+    entry = plan[idx]
+    setattr(state.meta, idx_attr, idx + 1)
+
+    auto_pass = False
+    if entry.kind == "pass":
+        auto_pass = True
+    elif entry.lord_id is not None:
+        lord = state.lords[entry.lord_id]
+        if lord.cylinder.kind != "locale":
+            auto_pass = True
+
+    if auto_pass:
+        # No actions taken — flip baton and check campaign end.
+        _record(state, action,
+                f"{side} reveals "
+                + (f"pass card" if entry.kind == "pass"
+                   else f"command card for {entry.lord_id} (not on map)"))
+        _advance_or_end_campaign(state)
+        return {"revealed": entry.model_dump(), "auto_pass": True,
+                "active_lord_id": state.meta.active_lord_id,
+                "campaign_step": state.meta.campaign_step}
+
+    # A Lord is now active for command_rating actions.
+    assert entry.lord_id is not None
+    lord = state.lords[entry.lord_id]
+    state.meta.active_lord_id = entry.lord_id
+    state.meta.actions_remaining = lord.command_rating
+    _record(state, action,
+            f"{side} reveals command card for {entry.lord_id} "
+            f"({lord.command_rating} actions)")
+    return {"revealed": entry.model_dump(), "auto_pass": False,
+            "active_lord_id": entry.lord_id,
+            "actions_remaining": lord.command_rating}
+
+
+def _advance_or_end_campaign(state: GameState) -> None:
+    """After a card finishes, advance to the other side OR end Campaign
+    if both sides have exhausted their plans.
+
+    Pattern 1 / Pattern 11: this is the single place card-to-card and
+    Activation -> end transitions happen.
+    """
+    c_done = state.meta.plan_index_christian >= len(state.decks.plan.get("christian", []))
+    m_done = state.meta.plan_index_muslim >= len(state.decks.plan.get("muslim", []))
+    if c_done and m_done:
+        # End of Campaign — clear plans (Pattern 13) and end the Campaign
+        state.meta.campaign_step = "end_campaign"
+        state.meta.active_lord_id = None
+        state.meta.actions_remaining = 0
+        return
+    # Flip baton; if one side is exhausted, the other side continues alone.
+    other = _other(state.meta.active_player)
+    other_done = (state.meta.plan_index_muslim
+                  >= len(state.decks.plan.get("muslim", []))
+                  if other == "muslim"
+                  else state.meta.plan_index_christian
+                  >= len(state.decks.plan.get("christian", [])))
+    if not other_done:
+        state.meta.active_player = other
+
+
+def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """End the currently-active Lord's card and flip the baton.
+
+    Future phases will trigger Feed/Pay/Disband here per rule 4.8 (in
+    Almoravid: at end of each Command card, the Lord Feeds and may
+    Pay / Disband). Phase 3a only does the bookkeeping.
+    """
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord — reveal a card first",
+             code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    state.meta.active_lord_id = None
+    state.meta.actions_remaining = 0
+    # Clear per-card flags (Pattern 3: per-card scope reset).
+    lord = state.lords[lord_id]
+    lord.lordship_used = 0
+    lord.first_march_used_this_card = False
+    lord.raiders_used_this_card = False
+    _advance_or_end_campaign(state)
+    _record(state, action,
+            f"{side} ends {lord_id}'s card"
+            + (f" -> campaign_step={state.meta.campaign_step}"
+               if state.meta.campaign_step != "activation" else ""))
+    return {"ended": lord_id, "campaign_step": state.meta.campaign_step}
+
+
+def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Consume actions_remaining without doing anything (rule 4.7.4).
+
+    The active Lord may Pass on any of their remaining actions. Pass
+    is always available, which keeps the Activation loop reachable
+    (Pattern 1).
+    """
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord — reveal a card first",
+             code="no_active_lord")
+    _require(state.meta.actions_remaining > 0,
+             "no actions remaining — call end_card",
+             code="no_actions_left")
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{side} {state.meta.active_lord_id} passes "
+            f"({state.meta.actions_remaining} actions left)")
+    return {"actions_remaining": state.meta.actions_remaining}
+
+
+# ---------------------------------------------------------------------------
+# End of Campaign
+# ---------------------------------------------------------------------------
+
+
+def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve end-of-Campaign bookkeeping and advance the Calendar.
+
+    Phase 3a: minimal — clear Plans (Pattern 13), advance current_box
+    by 1, transition back to Levy (or to ended if scenario_end reached).
+    Real Feed/Pay/Disband / Wastage / Plow / Grow land in Phase 3+.
+    """
+    _require_campaign_step(state, "end_campaign")
+    # Clear plans (per-Campaign window — Pattern 13)
+    state.decks.plan = {"christian": [], "muslim": []}
+    state.meta.plan_finalized_christian = False
+    state.meta.plan_finalized_muslim = False
+    state.meta.plan_index_christian = 0
+    state.meta.plan_index_muslim = 0
+    # Clear per-Campaign event bucket
+    state.decks.this_campaign_events = {}
+    # Advance Calendar
+    prev_box = state.calendar.current_box
+    new_box = prev_box + 1
+    # Check Scenario End marker
+    if new_box > len(state.calendar.boxes):
+        state.meta.phase = "ended"
+        _record(state, action, f"Campaign end at box {prev_box}; scenario ended (off calendar)")
+        return {"phase": "ended", "current_box": prev_box}
+    state.calendar.current_box = new_box
+    # If new box has scenario_end marker, end the game
+    new_box_obj = state.calendar.boxes[new_box - 1]
+    if "scenario_end" in new_box_obj.decorations:
+        state.meta.phase = "ended"
+        _record(state, action,
+                f"Campaign end; advanced box {prev_box} -> {new_box} (Scenario End)")
+        return {"phase": "ended", "current_box": new_box}
+    # Otherwise return to Levy
+    state.meta.phase = "levy"
+    state.meta.campaign_step = None
+    state.meta.levy_step = "arts_of_war"
+    state.meta.levy_step_completed_christian = False
+    state.meta.levy_step_completed_muslim = False
+    state.meta.active_player = ACTOR_ORDER[0]
+    state.meta.turn_index += 1
+    _record(state, action,
+            f"End Campaign; advanced box {prev_box} -> {new_box}; back to Levy")
+    return {"phase": state.meta.phase, "current_box": new_box,
+            "turn_index": state.meta.turn_index}
+
+
+# ---------------------------------------------------------------------------
+# Public registry — actions.py picks these up
+# ---------------------------------------------------------------------------
+
+
+CAMPAIGN_HANDLERS = {
+    "begin_campaign": _h_begin_campaign,
+    "plan_add_card": _h_plan_add_card,
+    "finalize_plan": _h_finalize_plan,
+    "command_reveal": _h_command_reveal,
+    "end_card": _h_end_card,
+    "cmd_pass": _h_cmd_pass,
+    "end_campaign": _h_end_campaign,
+}

@@ -62,23 +62,18 @@ def test_muster_step_enumerates_calendar_lords() -> None:
 
 @pytest.mark.parametrize("name", list_scenarios())
 def test_self_play_reaches_campaign(name: str) -> None:
-    """Pattern 1: greedy first-legal-move agent must reach campaign,
-    never stall mid-Levy with zero legal moves.
-
-    Caps at 200 actions as a runaway-loop guard; real Levy should
-    finish in far fewer.
-    """
+    """Pattern 1: greedy first-legal-move agent reaches campaign phase
+    via Levy without any zero-moves stall."""
     s = load_scenario(name, seed=42)
     for action_count in range(200):
-        moves = legal_moves(s)
         if s.meta.phase == "campaign":
             return  # success
+        moves = legal_moves(s)
         assert moves, (
             f"{name}: zero legal moves at phase={s.meta.phase} "
             f"step={s.meta.levy_step} active={s.meta.active_player} "
             f"after {action_count} actions"
         )
-        # Pick first legal move; prefer pass_step to keep the loop bounded.
         chosen = next((m for m in moves if m["type"] == "pass_step"), moves[0])
         try:
             apply_action(s, chosen)

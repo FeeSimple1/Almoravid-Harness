@@ -63,6 +63,8 @@ CardScope = Literal["this_lord", "side_wide"]
 RavagedState = Literal["none", "yellow", "green"]
 CylinderKind = Literal["calendar", "locale", "mat", "set_aside", "removed"]
 LevyStep = Literal["arts_of_war", "pay", "service_disband", "muster", "call_to_arms", "done"]
+CampaignStep = Literal["plan", "activation", "end_card", "end_campaign", "done"]
+PlanEntryKind = Literal["command", "pass"]
 
 
 class StrictModel(BaseModel):
@@ -97,6 +99,18 @@ class Meta(StrictModel):
 
     # Seeded RNG counter. Advanced by every roll_d6 / shuffle call.
     rng_state: int = 0
+
+    # Campaign sub-phase tracking (Phase 3a).
+    campaign_step: CampaignStep | None = None
+    plan_finalized_christian: bool = False
+    plan_finalized_muslim: bool = False
+    # The Lord whose Command card is currently revealed (Activation step).
+    active_lord_id: str | None = None
+    # Actions remaining on the active Lord's Command card.
+    actions_remaining: int = 0
+    # Index into the plan of the next card to reveal for each side.
+    plan_index_christian: int = 0
+    plan_index_muslim: int = 0
 
 
 class Cylinder(StrictModel):
@@ -179,6 +193,18 @@ class CardInPlay(StrictModel):
     scope: CardScope
     owner_side: Side
     owner_lord_id: str | None = None  # required iff scope == "this_lord"
+
+
+class PlanEntry(StrictModel):
+    """One card in a side's Campaign Plan stack (rule 4.1).
+
+    kind="command" with a lord_id activates that Lord for command_rating
+    actions on reveal. kind="pass" advances the plan without activating
+    anyone.
+    """
+
+    kind: PlanEntryKind
+    lord_id: str | None = None  # required iff kind == "command"
 
 
 class Lord(StrictModel):
@@ -330,6 +356,10 @@ class Decks(StrictModel):
 
     # Cards just drawn but not yet implemented (3.1 Arts of War step).
     pending_draw: dict[Side, list[str]] = Field(default_factory=dict)
+
+    # Campaign Plan stacks (rule 4.1). One per side; revealed in order
+    # during Activation. Pattern 13: cleared at end-of-Campaign.
+    plan: dict[Side, list[PlanEntry]] = Field(default_factory=dict)
 
 
 class PendingDecision(StrictModel):

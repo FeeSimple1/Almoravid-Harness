@@ -139,11 +139,25 @@ def _advance_step_if_both_done(state: GameState) -> None:
     idx = LEVY_STEPS.index(current)
     if idx + 1 < len(LEVY_STEPS):
         state.meta.levy_step = LEVY_STEPS[idx + 1]
+        state.meta.active_player = ACTOR_ORDER[0]
     else:
+        # End of Levy -> enter Campaign / plan directly. Auto-initializing
+        # campaign state here means legal_moves never sees the "campaign/
+        # campaign_step=None" intermediate state that would otherwise need
+        # begin_campaign to clean up — Pattern 1 (state-set-but-unreachable
+        # at boundary).
         state.meta.levy_step = "done"
         state.meta.phase = "campaign"
+        state.meta.campaign_step = "plan"
+        state.meta.plan_finalized_christian = False
+        state.meta.plan_finalized_muslim = False
+        state.meta.plan_index_christian = 0
+        state.meta.plan_index_muslim = 0
+        state.meta.actions_remaining = 0
+        state.meta.active_lord_id = None
+        state.decks.plan = {"christian": [], "muslim": []}
         state.meta.first_levy_done = True
-    state.meta.active_player = ACTOR_ORDER[0]
+        state.meta.active_player = ACTOR_ORDER[0]
 
 
 def _record(state: GameState, action: dict[str, Any], summary: str) -> None:
@@ -166,7 +180,7 @@ def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
     Anyone can call this once the game is in a state ready for Levy.
     """
-    _require(state.meta.phase in ("setup", "campaign"),
+    _require(state.meta.phase == "setup",
              f"cannot begin Levy from phase {state.meta.phase}",
              code="bad_phase")
     state.meta.phase = "levy"
@@ -334,6 +348,14 @@ _HANDLERS = {
     "muster_lord": _h_muster_lord,
 }
 
+# Campaign handlers registered in campaign.py. Imported lazily to avoid
+# a circular import.
+def _ensure_campaign_handlers() -> None:
+    if "begin_campaign" in _HANDLERS:
+        return
+    from almoravid.campaign import CAMPAIGN_HANDLERS
+    _HANDLERS.update(CAMPAIGN_HANDLERS)
+
 
 def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Single entry point for state mutation.
@@ -341,6 +363,7 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     Routes by `action["type"]` to a handler. Returns the handler's
     result dict. Raises IllegalAction on validation failure.
     """
+    _ensure_campaign_handlers()
     action_type = action.get("type")
     if action_type not in _HANDLERS:
         raise IllegalAction(
