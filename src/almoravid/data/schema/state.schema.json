@@ -202,7 +202,7 @@
     },
     "Decks": {
       "additionalProperties": false,
-      "description": "Arts of War deck state.\n\n`capabilities_in_play` holds side-wide-scope cards (Pattern 14).\nThis-lord-scope cards live on `Lord.capabilities`.",
+      "description": "Arts of War deck state.\n\n`capabilities_in_play` holds side-wide-scope cards (Pattern 14).\nThis-lord-scope cards live on `Lord.capabilities`.\n\n`this_levy_events` and `this_campaign_events` are the persistence\nbuckets for hold-events drawn this turn (cleared at the relevant\nwindow boundary per Pattern 13).",
       "properties": {
         "draw": {
           "items": {
@@ -255,6 +255,54 @@
             ]
           },
           "title": "Board Edge",
+          "type": "object"
+        },
+        "this_levy_events": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "This Levy Events",
+          "type": "object"
+        },
+        "this_campaign_events": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "This Campaign Events",
+          "type": "object"
+        },
+        "pending_draw": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Pending Draw",
           "type": "object"
         }
       },
@@ -641,9 +689,49 @@
           "type": "integer"
         },
         "version": {
-          "default": "0.1.0",
+          "default": "0.2.0",
           "title": "Version",
           "type": "string"
+        },
+        "levy_step": {
+          "anyOf": [
+            {
+              "enum": [
+                "arts_of_war",
+                "pay",
+                "service_disband",
+                "muster",
+                "call_to_arms",
+                "done"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Levy Step"
+        },
+        "levy_step_completed_christian": {
+          "default": false,
+          "title": "Levy Step Completed Christian",
+          "type": "boolean"
+        },
+        "levy_step_completed_muslim": {
+          "default": false,
+          "title": "Levy Step Completed Muslim",
+          "type": "boolean"
+        },
+        "first_levy_done": {
+          "default": false,
+          "title": "First Levy Done",
+          "type": "boolean"
+        },
+        "rng_state": {
+          "default": 0,
+          "title": "Rng State",
+          "type": "integer"
         }
       },
       "required": [

@@ -62,6 +62,7 @@ TurnType = Literal["levy", "campaign", "curias", "winter"]
 CardScope = Literal["this_lord", "side_wide"]
 RavagedState = Literal["none", "yellow", "green"]
 CylinderKind = Literal["calendar", "locale", "mat", "set_aside", "removed"]
+LevyStep = Literal["arts_of_war", "pay", "service_disband", "muster", "call_to_arms", "done"]
 
 
 class StrictModel(BaseModel):
@@ -84,7 +85,18 @@ class Meta(StrictModel):
     active_player: Side
     phase: Literal["setup", "levy", "campaign", "curias", "winter", "ended"] = "setup"
     turn_index: int = 0
-    version: str = "0.1.0"
+    version: str = "0.2.0"
+
+    # Levy sub-phase tracking (Pattern 1: state-set-but-unreachable —
+    # each Levy step must be reachable via legal_moves; Pattern 11:
+    # active_player above is the source of truth for whose turn it is).
+    levy_step: LevyStep | None = None
+    levy_step_completed_christian: bool = False
+    levy_step_completed_muslim: bool = False
+    first_levy_done: bool = False
+
+    # Seeded RNG counter. Advanced by every roll_d6 / shuffle call.
+    rng_state: int = 0
 
 
 class Cylinder(StrictModel):
@@ -298,6 +310,10 @@ class Decks(StrictModel):
 
     `capabilities_in_play` holds side-wide-scope cards (Pattern 14).
     This-lord-scope cards live on `Lord.capabilities`.
+
+    `this_levy_events` and `this_campaign_events` are the persistence
+    buckets for hold-events drawn this turn (cleared at the relevant
+    window boundary per Pattern 13).
     """
 
     draw: list[str] = Field(default_factory=list)
@@ -306,6 +322,14 @@ class Decks(StrictModel):
     capabilities_in_play: list[CardInPlay] = Field(default_factory=list)
     # Christian/Muslim board-edge Capability cards available for Levy.
     board_edge: dict[Side, list[str]] = Field(default_factory=dict)
+
+    # Per-Levy / per-Campaign event persistence buckets (Pattern 13).
+    # Cleared at the end of their respective windows.
+    this_levy_events: dict[Side, list[str]] = Field(default_factory=dict)
+    this_campaign_events: dict[Side, list[str]] = Field(default_factory=dict)
+
+    # Cards just drawn but not yet implemented (3.1 Arts of War step).
+    pending_draw: dict[Side, list[str]] = Field(default_factory=dict)
 
 
 class PendingDecision(StrictModel):
