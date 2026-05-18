@@ -379,6 +379,114 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+
+# ---------------------------------------------------------------------------
+# 4.3 March (Phase 5a — single-Lord March only; group March via Marshal
+# lands in a later commit alongside Lieutenant/Marshal mechanics).
+# ---------------------------------------------------------------------------
+
+
+def _is_laden(lord) -> bool:
+    """A Lord is Laden if Cart or Mule carries two Provender (incl.
+    shared, 1.5.2), or Cart carries any Provender over a Pass, or
+    moving any Loot (rule 4.3.2).
+
+    Phase 5a simplification: 'two or more Provender total' AND 'any
+    Loot' are the two-action triggers. The Cart-over-Pass conditional
+    is checked separately at March time so it can fire even with one
+    Provender.
+    """
+    prov = lord.assets.get("prov", 0)
+    loot = lord.assets.get("loot", 0)
+    return prov >= 2 or loot >= 1
+
+
+def _h_cmd_march(state, action):
+    """4.3 March: move the active Lord to an adjacent Locale.
+
+    Args:
+      side (Side): the acting side.
+      target_locale_id (str): destination locale_id.
+      way_type ('road' | 'pass'): which Way to march along.
+
+    Cost: 1 action Unladen, 2 actions if Laden (rule 4.3, 4.3.2).
+    Besieged Lord may only Sally / Forage (Gardens) / Pass (rule 4.5.3).
+    Cart cannot cross a Pass Laden with Provender (rule 4.3.2): if the
+    way_type is 'pass' and Lord has any Cart-borne Provender, the
+    March is rejected. The agent can pre-discard Provender via a
+    future asset-management action.
+    """
+    from almoravid.effective import is_besieged
+    from almoravid.map import neighbors_via
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord — reveal a card first",
+             code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} is not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord may only Sally / Forage (Gardens) / Pass (4.5.3)",
+             code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"Lord {lord_id} is not at a Locale (cannot March)",
+             code="not_on_map")
+    from_loc = lord.cylinder.locale_id
+
+    target = action.get("target_locale_id")
+    way_type = action.get("way_type", "road")
+    _require(isinstance(target, str), "target_locale_id required (str)",
+             code="bad_arg")
+    _require(way_type in ("road", "pass"),
+             f"way_type must be road or pass, got {way_type!r}",
+             code="bad_arg")
+    _require(target in state.locales, f"unknown locale {target!r}",
+             code="unknown_locale")
+
+    # Pattern 4: enforce the named way_type, never pick first match.
+    nbrs = neighbors_via(from_loc, way_type)
+    _require(target in nbrs,
+             f"{target} is not reachable from {from_loc} via {way_type}",
+             code="not_adjacent")
+
+    laden = _is_laden(lord)
+    cost = 2 if laden else 1
+    _require(state.meta.actions_remaining >= cost,
+             f"March costs {cost} actions ({'Laden' if laden else 'Unladen'}), "
+             f"only {state.meta.actions_remaining} remaining",
+             code="not_enough_actions")
+
+    # Cart cannot cross a Pass with Provender (rule 4.3.2).
+    if (way_type == "pass" and lord.assets.get("cart", 0) > 0
+            and lord.assets.get("prov", 0) > 0):
+        raise IllegalAction(
+            "Cart laden with Provender cannot cross a Pass (4.3.2). "
+            "Discard Provender or use a Road.",
+            code="cart_over_pass_with_prov",
+        )
+
+    # Execute March.
+    from almoravid.state import Cylinder
+    lord.cylinder = Cylinder(kind="locale", locale_id=target)
+    # On arrival at a Stronghold, Lord is outside walls by default
+    # (entering requires explicit action — to be defined in a later
+    # Phase 5 commit for stronghold-entry mechanics).
+    lord.in_stronghold = False
+    lord.moved_fought = True
+    lord.first_march_used_this_card = True  # Pattern 3 per-card flag
+    state.meta.actions_remaining -= cost
+    _record(state, action,
+            f"{side} {lord_id} marches {from_loc} -> {target} via {way_type}"
+            f" ({'Laden, 2 actions' if laden else '1 action'})")
+    return {"from": from_loc, "to": target, "way_type": way_type,
+            "laden": laden, "cost": cost,
+            "actions_remaining": state.meta.actions_remaining}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -386,5 +494,6 @@ CAMPAIGN_HANDLERS = {
     "command_reveal": _h_command_reveal,
     "end_card": _h_end_card,
     "cmd_pass": _h_cmd_pass,
+    "cmd_march": _h_cmd_march,
     "end_campaign": _h_end_campaign,
 }
