@@ -632,6 +632,199 @@ def spring_muster(state) -> dict:
     return results
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# 1.4.3 Adjust Status cascade (Phase 5l)
+# ---------------------------------------------------------------------------
+
+
+def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
+    """Apply a Taifa status transition and its cascades per 1.4.3.
+
+    Returns dict with the cascade effects: ravaged flips, forced Conquests,
+    Siege removals, etc.
+
+    The full cascades from Quick Ref Table 5:
+
+      INDEPENDENT -> PARIAS:
+        - Christians +Coin = Service of disbanded Taifa Lord (handled
+          by caller when called from Disband path).
+        - Muslim Lord at Muslim Stronghold that would go Neutral:
+          add Jihad (Conquer).
+        - Christian Lord at Muslim Stronghold that would go Neutral:
+          remove Siege/Bypass OR add Jihad (markers = value).
+      INDEPENDENT -> RECONQUISTA:
+        - Flip yellow Ravaged in Taifa to green.
+        - Muslim Lord at Muslim Stronghold that would go Christian:
+          add Jihad.
+        - Christian Lord at Muslim Stronghold that goes Christian:
+          remove Siege/Bypass.
+      PARIAS -> INDEPENDENT:
+        - Flip green Ravaged to yellow.
+        - Christian Lord at Neutral Stronghold that would go Muslim:
+          Conquer them.
+      PARIAS -> RECONQUISTA:
+        - Flip yellow Ravaged to green.
+        - Muslim Lord at Neutral Stronghold that would go Christian:
+          add Jihad.
+      RECONQUISTA -> INDEPENDENT:
+        - Flip green Ravaged to yellow.
+        - Christian Lord at Christian Stronghold that would go Muslim:
+          Conquer them.
+        - Muslim Lord at Christian Stronghold that goes Muslim:
+          remove Siege/Bypass.
+      RECONQUISTA -> PARIAS:
+        - Christian Lord at Christian Stronghold that would go Neutral:
+          Conquer them.
+        - Muslim Lord at Christian Stronghold that would go Neutral:
+          remove Siege/Bypass OR add Christian Conquered (= value).
+
+    Phase 5l baseline: applies the structural pieces deterministically.
+    "OR" choices (remove Siege OR add Jihad) are resolved toward the
+    option that's more conservative (remove Siege) to keep the cascade
+    confined; in future the agent could be asked to choose.
+    """
+    taifa = state.taifas.get(taifa_id)
+    if taifa is None:
+        return {"no_op": True, "reason": f"unknown taifa {taifa_id}"}
+    old_status = taifa.status
+    if old_status == new_status:
+        return {"no_op": True, "reason": "no change"}
+
+    results = {"taifa_id": taifa_id, "from": old_status, "to": new_status,
+               "ravaged_flips": [], "auto_conquered": [],
+               "siege_removed": [], "jihad_added": []}
+    taifa.status = new_status
+
+    # Determine the transition and apply the cascade.
+    flip_color_from, flip_color_to = None, None
+    if (old_status, new_status) in (
+        ("independent", "reconquista"), ("parias", "reconquista")
+    ):
+        flip_color_from, flip_color_to = "yellow", "green"
+    elif (old_status, new_status) in (
+        ("parias", "independent"), ("reconquista", "independent")
+    ):
+        flip_color_from, flip_color_to = "green", "yellow"
+    # Flip Ravaged markers in this Taifa
+    if flip_color_from:
+        for lid in taifa.locale_ids:
+            if state.locales[lid].ravaged == flip_color_from:
+                state.locales[lid].ravaged = flip_color_to  # type: ignore[assignment]
+                results["ravaged_flips"].append((lid, flip_color_from, flip_color_to))
+
+    # Force-Siege / force-Conquest at each Stronghold in the Taifa based
+    # on Lord presence (1.4.3).
+    going_muslim_friendly = (new_status == "independent")
+    going_christian_friendly = (new_status == "reconquista")
+    going_neutral = (new_status == "parias")
+
+    for lid in taifa.locale_ids:
+        loc = state.locales[lid]
+        if loc.base_type == "region":
+            continue
+        # Find Lords present at this Locale (one of each side, generally)
+        present_christian = [
+            l.id for l in state.lords.values()
+            if l.side == "christian"
+            and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id == lid
+        ]
+        present_muslim = [
+            l.id for l in state.lords.values()
+            if l.side == "muslim"
+            and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id == lid
+        ]
+        # Muslim Lord at Muslim Stronghold "would go Neutral or Christian"
+        if going_neutral or going_christian_friendly:
+            if present_muslim:
+                # Add Jihad markers (Conquer per Muslim side).
+                sh_value = {"city": 3, "fortress": 2, "town": 1, "castle": 1}.get(
+                    loc.base_type, 0)
+                loc.jihad_markers += sh_value
+                results["jihad_added"].append((lid, sh_value))
+        # Christian Lord at Muslim Stronghold "goes Christian": remove Siege/Bypass
+        if going_christian_friendly:
+            if present_christian and (loc.siege_yellow > 0 or loc.bypass_yellow):
+                loc.siege_yellow = 0
+                loc.bypass_yellow = False
+                results["siege_removed"].append(lid)
+        # Christian Lord at Neutral Stronghold "would go Muslim": Conquer
+        if going_neutral or (new_status == "independent"
+                              and old_status != "independent"):
+            if present_christian and old_status in ("parias", "reconquista"):
+                # Christian Conquers the Stronghold
+                from almoravid.static_data import load_strongholds
+                sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
+                loc.conquered_markers += sh_value
+                state.score.christian += sh_value
+                results["auto_conquered"].append((lid, "christian", sh_value))
+    return results
+
+
+def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
+    """Re-evaluate a Taifa's status based on current map state per 1.4.1.
+
+    Status rules:
+      - Reconquista: ALL Cities and Seats in the Taifa are Christian-
+        conquered (yellow Conquered markers covering each).
+      - Parias: at least one unconquered City or Seat AND no Taifa Lord
+        on the map.
+      - Independent: Taifa Lord on the map AND at least one unconquered
+        City or Seat. (And not Reconquista.)
+
+    Special: Toledo can never be Independent (rule 1.4.1 note).
+    """
+    from almoravid.static_data import load_lords
+    taifa = state.taifas.get(taifa_id)
+    if taifa is None:
+        return {"no_op": True}
+    # Find Cities + printed Seats in the Taifa
+    target_locales = [
+        lid for lid in taifa.locale_ids
+        if state.locales[lid].base_type in ("city", "fortress", "town",
+                                              "castle")
+        and (state.locales[lid].is_reconquista_target
+             or lid in [
+                 seat for l in state.lords.values()
+                 for seat in l.seats if l.home_taifa == taifa_id
+             ])
+    ]
+    all_christian = all(
+        state.locales[lid].conquered_markers > 0
+        for lid in target_locales
+    ) if target_locales else False
+    # Taifa Lord on map?
+    taifa_lord_on_map = any(
+        l.is_taifa
+        and l.home_taifa == taifa_id
+        and l.cylinder.kind == "locale"
+        for l in state.lords.values()
+    )
+    new_status = taifa.status  # default no change
+    if all_christian and target_locales:
+        new_status = "reconquista"
+    elif not taifa_lord_on_map:
+        if not target_locales or any(
+            state.locales[lid].conquered_markers == 0
+            for lid in target_locales
+        ):
+            new_status = "parias"
+        else:
+            new_status = "reconquista"
+    else:
+        new_status = "independent"
+    # Toledo: never Independent
+    if taifa_id == "toledo" and new_status == "independent":
+        new_status = "parias"
+    if new_status != taifa.status:
+        return adjust_taifa_status(state, taifa_id, new_status)
+    return {"no_op": True, "current_status": taifa.status}
+
+
 # Public registry — actions.py picks these up
 # ---------------------------------------------------------------------------
 
