@@ -1,0 +1,473 @@
+{
+  "_doc": "Arts of War card catalog. Source: reference/Almoravid Arts of War Reference.txt. Each numbered card has an Event (top half, immediate or hold persistence) and may have a Capability (bottom half, this_lord or side_wide scope). Phase 1 records identity and scope only; per-card effect resolvers are Phase 4 (capabilities.py / events.py). C25/C26 and M25/M26 are El Cid / Al-Faraj cards present on both sides.",
+  "cards": {
+    "C1": {
+      "side": "christian",
+      "event_name": "Hills",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Battering Ram",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C2": {
+      "side": "christian",
+      "event_name": "Camp Attack",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Ballesteros",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C3": {
+      "side": "christian",
+      "event_name": "Swollen River",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C4": {
+      "side": "christian",
+      "event_name": "Arid Terrain",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C5": {
+      "side": "christian",
+      "event_name": "Drought",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C6": {
+      "side": "christian",
+      "event_name": "Surprise",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Siege Towers",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C7": {
+      "side": "christian",
+      "event_name": "Baggage Parapet",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Jabalinas",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C8": {
+      "side": "christian",
+      "event_name": "Cantador",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Hueste",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C9": {
+      "side": "christian",
+      "event_name": "Betrayal of Terms",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Slingers",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C10": {
+      "side": "christian",
+      "event_name": "Devaluation",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C11": {
+      "side": "christian",
+      "event_name": "Indulgences",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C12": {
+      "side": "christian",
+      "event_name": "Song of Roland",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C13": {
+      "side": "christian",
+      "event_name": "Berenguer Ramon",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Count of Barcelona",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C14": {
+      "side": "christian",
+      "event_name": "Pope Gregory",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C15": {
+      "side": "christian",
+      "event_name": "Cluniacs",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Alférez",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C16": {
+      "side": "christian",
+      "event_name": "Bernard de Sédirac",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Cathedrals",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C17": {
+      "side": "christian",
+      "event_name": "Genoa & Pisa send fleets",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "C18": {
+      "side": "christian",
+      "event_name": "Runaway Slaves",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Milites",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C19": {
+      "side": "christian",
+      "event_name": "Fitna",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Caballería Villana",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C20": {
+      "side": "christian",
+      "event_name": "Al-Qadir",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Fueros",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C21": {
+      "side": "christian",
+      "event_name": "Mozárabes",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Sisnando Davídez",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C22": {
+      "side": "christian",
+      "event_name": "Berbers",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Bishoprics",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C23": {
+      "side": "christian",
+      "event_name": "Illness of the Emir",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Fonsadera",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "C24": {
+      "side": "christian",
+      "event_name": "Abu Bakr ibn Umar",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "García Jiménez",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C25": {
+      "side": "christian",
+      "event_name": "De Vivar",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "El Cid",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "C26": {
+      "side": "christian",
+      "event_name": "Freebooter",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Al-Faraj",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M1": {
+      "side": "muslim",
+      "event_name": "Hills",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Battering Ram",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M2": {
+      "side": "muslim",
+      "event_name": "Camp Attack",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Aqqara",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M3": {
+      "side": "muslim",
+      "event_name": "Swollen River",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M4": {
+      "side": "muslim",
+      "event_name": "Arid Terrain",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M5": {
+      "side": "muslim",
+      "event_name": "Drought",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M6": {
+      "side": "muslim",
+      "event_name": "Feigned Retreat",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M7": {
+      "side": "muslim",
+      "event_name": "Spear Wall",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Slingers",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M8": {
+      "side": "muslim",
+      "event_name": "Ahmad Ibn Rumayla",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Dawud ibn Aisha",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M9": {
+      "side": "muslim",
+      "event_name": "Maliki Islam",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Emir al-Muslimin",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M10": {
+      "side": "muslim",
+      "event_name": "Fatwa",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Andalusians",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M11": {
+      "side": "muslim",
+      "event_name": "Al-Qadir balks at payment",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M12": {
+      "side": "muslim",
+      "event_name": "Taifa Marriage",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Al-Yazirat al-Hadra",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M13": {
+      "side": "muslim",
+      "event_name": "Severed Heads",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Siege Towers",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M14": {
+      "side": "muslim",
+      "event_name": "Devaluation",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M15": {
+      "side": "muslim",
+      "event_name": "Parias Revolt",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Saqalibah",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M16": {
+      "side": "muslim",
+      "event_name": "Galician Revolt",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Camels",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M17": {
+      "side": "muslim",
+      "event_name": "León y Castilla",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Arrada",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M18": {
+      "side": "muslim",
+      "event_name": "Refugees",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M19": {
+      "side": "muslim",
+      "event_name": "African Fleet",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Guadalquivir",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M20": {
+      "side": "muslim",
+      "event_name": "Mudéjares",
+      "event_persistence": "hold",
+      "no_event": false,
+      "capability_name": "Al-Rûm",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M21": {
+      "side": "muslim",
+      "event_name": "Al-Sumaisir",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": null,
+      "capability_scope": null,
+      "no_capability": true
+    },
+    "M22": {
+      "side": "muslim",
+      "event_name": "Massacre",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "War Drums",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M23": {
+      "side": "muslim",
+      "event_name": "Berenguer Ramon",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Count of Barcelona",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M24": {
+      "side": "muslim",
+      "event_name": "Al-Maghawir",
+      "event_persistence": "immediate",
+      "no_event": false,
+      "capability_name": "Al-Garada",
+      "capability_scope": "side_wide",
+      "no_capability": false
+    },
+    "M25": {
+      "side": "muslim",
+      "event_name": null,
+      "event_persistence": null,
+      "no_event": true,
+      "capability_name": "El Cid",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    },
+    "M26": {
+      "side": "muslim",
+      "event_name": null,
+      "event_persistence": null,
+      "no_event": true,
+      "capability_name": "Al-Faraj",
+      "capability_scope": "this_lord",
+      "no_capability": false
+    }
+  }
+}

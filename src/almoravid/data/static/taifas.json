@@ -1,0 +1,62 @@
+{
+  "_doc": "Seven Muslim Taifas plus two Christian Kingdoms. Sources: reference/Almoravid Map.txt (Part 4); reference/Almoravid Quick Reference.txt (Table 4).",
+  "taifas": {
+    "toledo": {
+      "name": "Toledo",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": true,
+      "vp_multiplier": 1
+    },
+    "badajoz": {
+      "name": "Badajoz",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": false,
+      "vp_multiplier": 1
+    },
+    "zaragoza": {
+      "name": "Zaragoza",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": false,
+      "vp_multiplier": 1
+    },
+    "lerida": {
+      "name": "Lérida",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": false,
+      "vp_multiplier": 1
+    },
+    "valencia": {
+      "name": "Valencia",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": false,
+      "vp_multiplier": 1
+    },
+    "sevilla": {
+      "name": "Sevilla",
+      "side": "muslim",
+      "status_boxes": 3,
+      "never_independent": false,
+      "vp_multiplier": 3
+    },
+    "granada": {
+      "name": "Granada",
+      "side": "muslim",
+      "status_boxes": 1,
+      "never_independent": false,
+      "vp_multiplier": 1
+    }
+  },
+  "christian_kingdoms": {
+    "leon": {
+      "name": "León"
+    },
+    "aragon": {
+      "name": "Aragón"
+    }
+  }
+}

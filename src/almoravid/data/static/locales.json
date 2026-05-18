@@ -1,0 +1,755 @@
+{
+  "_doc": "72 Locales. Source: reference/Almoravid Map.txt (Part 1, v13). Format: id, name, territory (taifa or kingdom), base_type, capacity (1-3, 0 for region), gardens (Y at Cities/Fortresses), port, reconquista_target, printed_seat_lord_ids.",
+  "locales": {
+    "coria": {
+      "name": "Coria",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "astorga": {
+      "name": "Astorga",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "leon": {
+      "name": "León",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "alfonso"
+      ]
+    },
+    "zamora": {
+      "name": "Zamora",
+      "territory": "leon",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "simancas": {
+      "name": "Simancas",
+      "territory": "leon",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "pedro_ansurez"
+      ]
+    },
+    "palencia": {
+      "name": "Palencia",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "penafiel": {
+      "name": "Peñafiel",
+      "territory": "leon",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "burgos": {
+      "name": "Burgos",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "alfonso",
+        "alvar_fanez"
+      ]
+    },
+    "gormaz": {
+      "name": "Gormaz",
+      "territory": "leon",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "najera": {
+      "name": "Najera",
+      "territory": "leon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "garcia_ordonez"
+      ]
+    },
+    "calahorra": {
+      "name": "Calahorra",
+      "territory": "leon",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "alava": {
+      "name": "Alava",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "sahagun": {
+      "name": "Sahagún",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "somosierra": {
+      "name": "Somosierra",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "guadarrama": {
+      "name": "Guadarrama",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "transduero": {
+      "name": "Transduero",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "tormes": {
+      "name": "Tormes",
+      "territory": "leon",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "pamplona": {
+      "name": "Pamplona",
+      "territory": "aragon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "eudes"
+      ]
+    },
+    "jaca": {
+      "name": "Jaca",
+      "territory": "aragon",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": [
+        "sancho"
+      ]
+    },
+    "medinaceli": {
+      "name": "Medinaceli",
+      "territory": "zaragoza",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "calatayud": {
+      "name": "Calatayud",
+      "territory": "zaragoza",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "tudela": {
+      "name": "Tudela",
+      "territory": "zaragoza",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "huesca": {
+      "name": "Huesca",
+      "territory": "zaragoza",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "zaragoza": {
+      "name": "Zaragoza",
+      "territory": "zaragoza",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": true,
+      "printed_seats": [
+        "al_mustain"
+      ]
+    },
+    "iberico": {
+      "name": "Ibérico",
+      "territory": "zaragoza",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "albarracin": {
+      "name": "Albarracín",
+      "territory": "zaragoza",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "alpuente": {
+      "name": "Alpuente",
+      "territory": "zaragoza",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "alicante": {
+      "name": "Alicante",
+      "territory": "lerida",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "denia": {
+      "name": "Denia",
+      "territory": "lerida",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "burriana": {
+      "name": "Burriana",
+      "territory": "lerida",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "tortosa": {
+      "name": "Tortosa",
+      "territory": "lerida",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "lerida": {
+      "name": "Lérida",
+      "territory": "lerida",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": true,
+      "printed_seats": [
+        "al_mundir"
+      ]
+    },
+    "barbastro": {
+      "name": "Barbastro",
+      "territory": "lerida",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "baniskula": {
+      "name": "Baniskula",
+      "territory": "lerida",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "jativa": {
+      "name": "Játiva",
+      "territory": "valencia",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "valencia": {
+      "name": "Valencia",
+      "territory": "valencia",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": true,
+      "printed_seats": [
+        "abu_bakr"
+      ]
+    },
+    "trujillo": {
+      "name": "Trujillo",
+      "territory": "toledo",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "talavera": {
+      "name": "Talavera",
+      "territory": "toledo",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "toledo": {
+      "name": "Toledo",
+      "territory": "toledo",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": true,
+      "printed_seats": []
+    },
+    "calatrava": {
+      "name": "Calatrava",
+      "territory": "toledo",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "madrid": {
+      "name": "Madrid",
+      "territory": "toledo",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "ucles": {
+      "name": "Uclés",
+      "territory": "toledo",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "cuenca": {
+      "name": "Cuenca",
+      "territory": "toledo",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "guadalajara": {
+      "name": "Guadalajara",
+      "territory": "toledo",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "muradal": {
+      "name": "Muradal",
+      "territory": "toledo",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "la_mancha": {
+      "name": "La Mancha",
+      "territory": "toledo",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "jucar": {
+      "name": "Júcar",
+      "territory": "toledo",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "zancara": {
+      "name": "Zancara",
+      "territory": "toledo",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "badajoz": {
+      "name": "Badajoz",
+      "territory": "badajoz",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": true,
+      "printed_seats": [
+        "al_mutawakkil"
+      ]
+    },
+    "merida": {
+      "name": "Mérida",
+      "territory": "badajoz",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "alcantara": {
+      "name": "Alcántara",
+      "territory": "badajoz",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "sagrajas": {
+      "name": "Sagrajas",
+      "territory": "badajoz",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "algeciras": {
+      "name": "Algeciras",
+      "territory": "sevilla",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": [
+        "yusuf",
+        "sir"
+      ]
+    },
+    "jerez": {
+      "name": "Jerez",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "huelva": {
+      "name": "Huelva",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "sevilla": {
+      "name": "Sevilla",
+      "territory": "sevilla",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": true,
+      "printed_seats": [
+        "al_mutamid"
+      ]
+    },
+    "cordoba": {
+      "name": "Córdoba",
+      "territory": "sevilla",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": true,
+      "printed_seats": [
+        "al_mutamid"
+      ]
+    },
+    "jaen": {
+      "name": "Jaén",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "baeza": {
+      "name": "Baeza",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "aledo": {
+      "name": "Aledo",
+      "territory": "sevilla",
+      "base_type": "castle",
+      "capacity": 1,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "lorca": {
+      "name": "Lorca",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "cartagena": {
+      "name": "Cartagena",
+      "territory": "sevilla",
+      "base_type": "town",
+      "capacity": 2,
+      "gardens": false,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "murcia": {
+      "name": "Murcia",
+      "territory": "sevilla",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": true,
+      "printed_seats": []
+    },
+    "moron": {
+      "name": "Morón",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "ardila": {
+      "name": "Ardila",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "firrish": {
+      "name": "Firrish",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "morena": {
+      "name": "Morena",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "alcaraz": {
+      "name": "Alcaraz",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "albacete": {
+      "name": "Albacete",
+      "territory": "sevilla",
+      "base_type": "region",
+      "capacity": 0,
+      "gardens": false,
+      "port": false,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "granada": {
+      "name": "Granada",
+      "territory": "granada",
+      "base_type": "city",
+      "capacity": 3,
+      "gardens": true,
+      "port": false,
+      "reconquista_target": true,
+      "printed_seats": [
+        "abd_allah"
+      ]
+    },
+    "malaga": {
+      "name": "Málaga",
+      "territory": "granada",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    },
+    "almeria": {
+      "name": "Almería",
+      "territory": "granada",
+      "base_type": "fortress",
+      "capacity": 2,
+      "gardens": true,
+      "port": true,
+      "reconquista_target": false,
+      "printed_seats": []
+    }
+  }
+}

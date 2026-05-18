@@ -1,0 +1,668 @@
+{
+  "_doc": "16 Lords (9 Muslim, 7 Christian). Source: reference/Almoravid Lords.txt (v4). Ratings: Fealty (die-roll to Muster, null = Call to Arms only), Service (Calendar boxes ahead at Muster/Disband), Lordship (Levy actions per Muster), Command (actions per Command card). Forces and Assets are starting values per the printed mat.",
+  "lords": {
+    "al_mustain": {
+      "name": "Al-Mustain II",
+      "side": "muslim",
+      "fealty": 4,
+      "service": 4,
+      "lordship": 1,
+      "command": 2,
+      "seats": [
+        "zaragoza"
+      ],
+      "forces": {
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "militia": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 2
+      },
+      "vassals": [
+        {
+          "name": "Huesca",
+          "forces": {
+            "sergeants": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Tudela",
+          "forces": {
+            "sergeants": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Al-Malik, Emir of Albarracín",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 1
+        },
+        {
+          "name": "Abd Allah, Emir of Alpuente",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 1
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "zaragoza",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": ""
+    },
+    "abu_bakr": {
+      "name": "Abu Bakr",
+      "side": "muslim",
+      "fealty": 2,
+      "service": 4,
+      "lordship": 1,
+      "command": 2,
+      "seats": [
+        "valencia"
+      ],
+      "forces": {
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "militia": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 2
+      },
+      "vassals": [
+        {
+          "name": "Jativa",
+          "forces": {
+            "militia": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "valencia",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": ""
+    },
+    "abd_allah": {
+      "name": "Abd Allah",
+      "side": "muslim",
+      "fealty": 3,
+      "service": 4,
+      "lordship": 1,
+      "command": 3,
+      "seats": [
+        "granada"
+      ],
+      "forces": {
+        "light_horse": 2,
+        "militia": 3
+      },
+      "assets": {
+        "cart": 2,
+        "mule": 1,
+        "coin": 2
+      },
+      "vassals": [
+        {
+          "name": "Muqatil al-Birzali el Royo",
+          "forces": {
+            "sergeants": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Al-Mutasim, Emir of Almeria",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 1
+        },
+        {
+          "name": "Tamim, Emir of Malaga",
+          "forces": {
+            "militia": 1
+          },
+          "service_cost": 1
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "granada",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": ""
+    },
+    "al_mutawakkil": {
+      "name": "Al-Mutawakkil",
+      "side": "muslim",
+      "fealty": 3,
+      "service": 4,
+      "lordship": 1,
+      "command": 2,
+      "seats": [
+        "badajoz"
+      ],
+      "forces": {
+        "light_horse": 2,
+        "militia": 3
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 2
+      },
+      "vassals": [
+        {
+          "name": "Evora",
+          "forces": {
+            "militia": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Lisboa",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "badajoz",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": ""
+    },
+    "al_mutamid": {
+      "name": "Al-Mutamid",
+      "side": "muslim",
+      "fealty": 5,
+      "service": 6,
+      "lordship": 2,
+      "command": 3,
+      "seats": [
+        "sevilla",
+        "cordoba"
+      ],
+      "forces": {
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "militia": 2
+      },
+      "assets": {
+        "cart": 2,
+        "mule": 1,
+        "coin": 3
+      },
+      "vassals": [
+        {
+          "name": "Abdullah ibn Abbad",
+          "forces": {
+            "sergeants": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Ibn Rashiq of Murcia",
+          "forces": {
+            "militia": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Al-Radi ibn Abbad of Algeciras",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "sevilla",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Most powerful Taifa Lord; longest Service, highest Fealty, most Coin."
+    },
+    "al_mundir": {
+      "name": "Al-Mundir",
+      "side": "muslim",
+      "fealty": 4,
+      "service": 4,
+      "lordship": 1,
+      "command": 3,
+      "seats": [
+        "lerida"
+      ],
+      "forces": {
+        "sergeants": 1,
+        "men_at_arms": 1,
+        "militia": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 2
+      },
+      "vassals": [
+        {
+          "name": "Denia",
+          "forces": {
+            "light_horse": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Tortosa",
+          "forces": {
+            "sergeants": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": true,
+      "home_taifa": "lerida",
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Lérida is the only non-City Reconquista target."
+    },
+    "yusuf": {
+      "name": "Yusuf ibn Tashufin",
+      "side": "muslim",
+      "fealty": null,
+      "service": 4,
+      "lordship": 2,
+      "command": 2,
+      "seats": [
+        "algeciras"
+      ],
+      "forces": {
+        "sergeants": 2,
+        "african_horse": 4,
+        "african_foot": 8,
+        "militia": 2
+      },
+      "assets": {
+        "mule": 1
+      },
+      "vassals": [],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": true,
+      "cylinder_color": null,
+      "notes": "Almoravid faction. Marshal (4 Command cards). Musters only via Call to Arms."
+    },
+    "sir": {
+      "name": "Sir ibn Abi Bakr",
+      "side": "muslim",
+      "fealty": null,
+      "service": 4,
+      "lordship": 1,
+      "command": 2,
+      "seats": [
+        "algeciras"
+      ],
+      "forces": {
+        "african_horse": 6,
+        "african_foot": 6,
+        "militia": 4
+      },
+      "assets": {
+        "mule": 1
+      },
+      "vassals": [],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Almoravid faction. Musters only via Call to Arms."
+    },
+    "rodrigo_al_sayyid": {
+      "name": "Rodrigo al-Sayyid",
+      "side": "muslim",
+      "fealty": null,
+      "service": 2,
+      "lordship": 2,
+      "command": 4,
+      "seats": [],
+      "forces": {
+        "knights": 1,
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "militia": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1
+      },
+      "vassals": [],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": "green",
+      "notes": "El Cid on the Muslim side. Musters via 'Employ Rodrigo' (3 Coin from Taifas box). Scenario F: on Winter Disband, cylinder goes to Calendar box 9."
+    },
+    "alfonso": {
+      "name": "Alfonso VI",
+      "side": "christian",
+      "fealty": 6,
+      "service": 4,
+      "lordship": 3,
+      "command": 4,
+      "seats": [
+        "leon",
+        "burgos"
+      ],
+      "forces": {
+        "knights": 1,
+        "men_at_arms": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 3,
+        "prov": 2
+      },
+      "vassals": [
+        {
+          "name": "Froila Bermudez",
+          "forces": {
+            "knights": 1,
+            "sergeants": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Vela Ovequez",
+          "forces": {
+            "sergeants": 1,
+            "militia": 1
+          },
+          "service_cost": 1
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": true,
+      "cylinder_color": null,
+      "notes": "King of León. Marshal (4 Command cards). CATHEDRALS capability: place Cathedral Seat at Conquered Cities (+1 VP, triggers +1 Jihad). Scenario F: prefers León as Muster Seat."
+    },
+    "alvar_fanez": {
+      "name": "Álvar Fáñez",
+      "side": "christian",
+      "fealty": 5,
+      "service": 4,
+      "lordship": 2,
+      "command": 4,
+      "seats": [
+        "burgos"
+      ],
+      "forces": {
+        "knights": 1,
+        "sergeants": 1,
+        "men_at_arms": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1,
+        "prov": 1
+      },
+      "vassals": [
+        {
+          "name": "Pelayo Pelaez",
+          "forces": {
+            "sergeants": 1,
+            "militia": 1
+          },
+          "service_cost": 1
+        },
+        {
+          "name": "Fernando Diaz",
+          "forces": {
+            "knights": 1,
+            "sergeants": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "King's Captain. Highest Command among non-Marshals (tied with Rodrigo)."
+    },
+    "garcia_ordonez": {
+      "name": "García Ordóñez",
+      "side": "christian",
+      "fealty": 4,
+      "service": 4,
+      "lordship": 2,
+      "command": 2,
+      "seats": [
+        "najera"
+      ],
+      "forces": {
+        "knights": 1,
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 1,
+        "prov": 2
+      },
+      "vassals": [
+        {
+          "name": "Gomez Gonzalez",
+          "forces": {
+            "sergeants": 1,
+            "militia": 1
+          },
+          "service_cost": 1
+        },
+        {
+          "name": "Gonzalo Nunez",
+          "forces": {
+            "knights": 1,
+            "sergeants": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Count of Najera et Calahorra. Scenario F: Disbanded on Curias trigger."
+    },
+    "pedro_ansurez": {
+      "name": "Pedro Ansúrez",
+      "side": "christian",
+      "fealty": 4,
+      "service": 4,
+      "lordship": 2,
+      "command": 2,
+      "seats": [
+        "simancas"
+      ],
+      "forces": {
+        "knights": 1,
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1,
+        "mule": 1,
+        "coin": 1,
+        "prov": 2
+      },
+      "vassals": [
+        {
+          "name": "Martin Flainez",
+          "forces": {
+            "knights": 1,
+            "sergeants": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Martin Alfonsez",
+          "forces": {
+            "sergeants": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 1
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Count of Carrion et Saldana. Scenario F: Disbanded on Curias trigger."
+    },
+    "sancho": {
+      "name": "Sancho Ramírez",
+      "side": "christian",
+      "fealty": 3,
+      "service": 3,
+      "lordship": 2,
+      "command": 3,
+      "seats": [
+        "jaca"
+      ],
+      "forces": {
+        "knights": 1,
+        "men_at_arms": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "mule": 1,
+        "coin": 1,
+        "prov": 1
+      },
+      "vassals": [
+        {
+          "name": "Garcia, Bishop of Jaca",
+          "forces": {
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Armengol IV of Urgell",
+          "forces": {
+            "knights": 1,
+            "men_at_arms": 1
+          },
+          "service_cost": 1
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "King of Aragón et Pamplona. Eligible for POPE GREGORY capability."
+    },
+    "eudes": {
+      "name": "Eudes I",
+      "side": "christian",
+      "fealty": null,
+      "service": 2,
+      "lordship": 2,
+      "command": 2,
+      "seats": [
+        "pamplona"
+      ],
+      "forces": {
+        "knights": 2,
+        "men_at_arms": 1
+      },
+      "assets": {
+        "cart": 2
+      },
+      "vassals": [
+        {
+          "name": "Raymond of Toulouse",
+          "forces": {
+            "knights": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Guillaume of Melun",
+          "forces": {
+            "knights": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Raymond of Amous",
+          "forces": {
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        },
+        {
+          "name": "Henri of Chalon",
+          "forces": {
+            "men_at_arms": 1
+          },
+          "service_cost": 2
+        }
+      ],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": null,
+      "notes": "Duke of Burgundy. Musters via Call to Arms ('Call for Crusade'). INDULGENCES/SONG OF ROLAND force Vassal Muster."
+    },
+    "rodrigo_campeador": {
+      "name": "Rodrigo Campeador",
+      "side": "christian",
+      "fealty": null,
+      "service": 2,
+      "lordship": 2,
+      "command": 4,
+      "seats": [],
+      "forces": {
+        "knights": 1,
+        "sergeants": 1,
+        "light_horse": 1,
+        "men_at_arms": 1,
+        "militia": 1,
+        "serfs": 1
+      },
+      "assets": {
+        "cart": 1
+      },
+      "vassals": [],
+      "is_taifa": false,
+      "home_taifa": null,
+      "marshal": false,
+      "cylinder_color": "yellow",
+      "notes": "El Cid on the Christian side. Musters via 'Employ Rodrigo' (2 Coin from Christian mats) or 'Reconcile with Rodrigo'. Scenario F: on Winter Disband, cylinder goes to Calendar box 9."
+    }
+  }
+}

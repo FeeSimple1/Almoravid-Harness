@@ -1,0 +1,550 @@
+{
+  "_doc": "109 Ways total: 72 Roads + 37 Passes. Source: reference/Almoravid Map.txt (Parts 2-3, v13). Each Way is undirected; way_type distinguishes Roads (open-country routes) from Passes (mountain/border routes). Stored as a list (not a dict keyed by (a,b)) because Pattern 4 from FUTURE_PROJECTS_LESSONS.md.",
+  "ways": [
+    {
+      "a": "leon",
+      "b": "astorga",
+      "way_type": "road"
+    },
+    {
+      "a": "leon",
+      "b": "zamora",
+      "way_type": "road"
+    },
+    {
+      "a": "leon",
+      "b": "sahagun",
+      "way_type": "road"
+    },
+    {
+      "a": "sahagun",
+      "b": "palencia",
+      "way_type": "road"
+    },
+    {
+      "a": "sahagun",
+      "b": "burgos",
+      "way_type": "road"
+    },
+    {
+      "a": "palencia",
+      "b": "burgos",
+      "way_type": "road"
+    },
+    {
+      "a": "zamora",
+      "b": "simancas",
+      "way_type": "road"
+    },
+    {
+      "a": "zamora",
+      "b": "transduero",
+      "way_type": "road"
+    },
+    {
+      "a": "simancas",
+      "b": "penafiel",
+      "way_type": "road"
+    },
+    {
+      "a": "simancas",
+      "b": "transduero",
+      "way_type": "road"
+    },
+    {
+      "a": "penafiel",
+      "b": "gormaz",
+      "way_type": "road"
+    },
+    {
+      "a": "burgos",
+      "b": "najera",
+      "way_type": "road"
+    },
+    {
+      "a": "najera",
+      "b": "calahorra",
+      "way_type": "road"
+    },
+    {
+      "a": "najera",
+      "b": "alava",
+      "way_type": "road"
+    },
+    {
+      "a": "transduero",
+      "b": "guadarrama",
+      "way_type": "road"
+    },
+    {
+      "a": "calahorra",
+      "b": "pamplona",
+      "way_type": "road"
+    },
+    {
+      "a": "calahorra",
+      "b": "tudela",
+      "way_type": "road"
+    },
+    {
+      "a": "coria",
+      "b": "alcantara",
+      "way_type": "road"
+    },
+    {
+      "a": "coria",
+      "b": "merida",
+      "way_type": "road"
+    },
+    {
+      "a": "coria",
+      "b": "talavera",
+      "way_type": "road"
+    },
+    {
+      "a": "tudela",
+      "b": "zaragoza",
+      "way_type": "road"
+    },
+    {
+      "a": "huesca",
+      "b": "zaragoza",
+      "way_type": "road"
+    },
+    {
+      "a": "zaragoza",
+      "b": "calatayud",
+      "way_type": "road"
+    },
+    {
+      "a": "zaragoza",
+      "b": "iberico",
+      "way_type": "road"
+    },
+    {
+      "a": "calatayud",
+      "b": "medinaceli",
+      "way_type": "road"
+    },
+    {
+      "a": "albarracin",
+      "b": "alpuente",
+      "way_type": "road"
+    },
+    {
+      "a": "huesca",
+      "b": "barbastro",
+      "way_type": "road"
+    },
+    {
+      "a": "huesca",
+      "b": "lerida",
+      "way_type": "road"
+    },
+    {
+      "a": "zaragoza",
+      "b": "lerida",
+      "way_type": "road"
+    },
+    {
+      "a": "medinaceli",
+      "b": "guadalajara",
+      "way_type": "road"
+    },
+    {
+      "a": "alpuente",
+      "b": "valencia",
+      "way_type": "road"
+    },
+    {
+      "a": "lerida",
+      "b": "barbastro",
+      "way_type": "road"
+    },
+    {
+      "a": "lerida",
+      "b": "tortosa",
+      "way_type": "road"
+    },
+    {
+      "a": "tortosa",
+      "b": "baniskula",
+      "way_type": "road"
+    },
+    {
+      "a": "burriana",
+      "b": "baniskula",
+      "way_type": "road"
+    },
+    {
+      "a": "alicante",
+      "b": "denia",
+      "way_type": "road"
+    },
+    {
+      "a": "burriana",
+      "b": "valencia",
+      "way_type": "road"
+    },
+    {
+      "a": "denia",
+      "b": "jativa",
+      "way_type": "road"
+    },
+    {
+      "a": "alicante",
+      "b": "murcia",
+      "way_type": "road"
+    },
+    {
+      "a": "alicante",
+      "b": "cartagena",
+      "way_type": "road"
+    },
+    {
+      "a": "valencia",
+      "b": "jativa",
+      "way_type": "road"
+    },
+    {
+      "a": "jativa",
+      "b": "jucar",
+      "way_type": "road"
+    },
+    {
+      "a": "toledo",
+      "b": "talavera",
+      "way_type": "road"
+    },
+    {
+      "a": "toledo",
+      "b": "calatrava",
+      "way_type": "road"
+    },
+    {
+      "a": "toledo",
+      "b": "madrid",
+      "way_type": "road"
+    },
+    {
+      "a": "toledo",
+      "b": "ucles",
+      "way_type": "road"
+    },
+    {
+      "a": "toledo",
+      "b": "zancara",
+      "way_type": "road"
+    },
+    {
+      "a": "madrid",
+      "b": "guadalajara",
+      "way_type": "road"
+    },
+    {
+      "a": "calatrava",
+      "b": "muradal",
+      "way_type": "road"
+    },
+    {
+      "a": "calatrava",
+      "b": "zancara",
+      "way_type": "road"
+    },
+    {
+      "a": "ucles",
+      "b": "zancara",
+      "way_type": "road"
+    },
+    {
+      "a": "la_mancha",
+      "b": "zancara",
+      "way_type": "road"
+    },
+    {
+      "a": "talavera",
+      "b": "trujillo",
+      "way_type": "road"
+    },
+    {
+      "a": "badajoz",
+      "b": "merida",
+      "way_type": "road"
+    },
+    {
+      "a": "badajoz",
+      "b": "sagrajas",
+      "way_type": "road"
+    },
+    {
+      "a": "sagrajas",
+      "b": "alcantara",
+      "way_type": "road"
+    },
+    {
+      "a": "merida",
+      "b": "trujillo",
+      "way_type": "road"
+    },
+    {
+      "a": "merida",
+      "b": "ardila",
+      "way_type": "road"
+    },
+    {
+      "a": "sevilla",
+      "b": "cordoba",
+      "way_type": "road"
+    },
+    {
+      "a": "sevilla",
+      "b": "jerez",
+      "way_type": "road"
+    },
+    {
+      "a": "sevilla",
+      "b": "huelva",
+      "way_type": "road"
+    },
+    {
+      "a": "sevilla",
+      "b": "moron",
+      "way_type": "road"
+    },
+    {
+      "a": "sevilla",
+      "b": "ardila",
+      "way_type": "road"
+    },
+    {
+      "a": "cordoba",
+      "b": "jaen",
+      "way_type": "road"
+    },
+    {
+      "a": "cordoba",
+      "b": "moron",
+      "way_type": "road"
+    },
+    {
+      "a": "jerez",
+      "b": "algeciras",
+      "way_type": "road"
+    },
+    {
+      "a": "jaen",
+      "b": "baeza",
+      "way_type": "road"
+    },
+    {
+      "a": "baeza",
+      "b": "alcaraz",
+      "way_type": "road"
+    },
+    {
+      "a": "aledo",
+      "b": "lorca",
+      "way_type": "road"
+    },
+    {
+      "a": "aledo",
+      "b": "murcia",
+      "way_type": "road"
+    },
+    {
+      "a": "aledo",
+      "b": "cartagena",
+      "way_type": "road"
+    },
+    {
+      "a": "moron",
+      "b": "malaga",
+      "way_type": "road"
+    },
+    {
+      "a": "pamplona",
+      "b": "jaca",
+      "way_type": "pass"
+    },
+    {
+      "a": "jaca",
+      "b": "huesca",
+      "way_type": "pass"
+    },
+    {
+      "a": "jaca",
+      "b": "barbastro",
+      "way_type": "pass"
+    },
+    {
+      "a": "astorga",
+      "b": "zamora",
+      "way_type": "pass"
+    },
+    {
+      "a": "burgos",
+      "b": "alava",
+      "way_type": "pass"
+    },
+    {
+      "a": "tormes",
+      "b": "coria",
+      "way_type": "pass"
+    },
+    {
+      "a": "transduero",
+      "b": "tormes",
+      "way_type": "pass"
+    },
+    {
+      "a": "somosierra",
+      "b": "madrid",
+      "way_type": "pass"
+    },
+    {
+      "a": "somosierra",
+      "b": "penafiel",
+      "way_type": "pass"
+    },
+    {
+      "a": "somosierra",
+      "b": "simancas",
+      "way_type": "pass"
+    },
+    {
+      "a": "somosierra",
+      "b": "guadarrama",
+      "way_type": "pass"
+    },
+    {
+      "a": "gormaz",
+      "b": "medinaceli",
+      "way_type": "pass"
+    },
+    {
+      "a": "guadarrama",
+      "b": "talavera",
+      "way_type": "pass"
+    },
+    {
+      "a": "iberico",
+      "b": "albarracin",
+      "way_type": "pass"
+    },
+    {
+      "a": "albarracin",
+      "b": "cuenca",
+      "way_type": "pass"
+    },
+    {
+      "a": "ucles",
+      "b": "cuenca",
+      "way_type": "pass"
+    },
+    {
+      "a": "cuenca",
+      "b": "jucar",
+      "way_type": "pass"
+    },
+    {
+      "a": "la_mancha",
+      "b": "jucar",
+      "way_type": "pass"
+    },
+    {
+      "a": "alicante",
+      "b": "jativa",
+      "way_type": "pass"
+    },
+    {
+      "a": "calatrava",
+      "b": "morena",
+      "way_type": "pass"
+    },
+    {
+      "a": "cordoba",
+      "b": "morena",
+      "way_type": "pass"
+    },
+    {
+      "a": "cordoba",
+      "b": "firrish",
+      "way_type": "pass"
+    },
+    {
+      "a": "merida",
+      "b": "firrish",
+      "way_type": "pass"
+    },
+    {
+      "a": "badajoz",
+      "b": "ardila",
+      "way_type": "pass"
+    },
+    {
+      "a": "muradal",
+      "b": "baeza",
+      "way_type": "pass"
+    },
+    {
+      "a": "la_mancha",
+      "b": "albacete",
+      "way_type": "pass"
+    },
+    {
+      "a": "la_mancha",
+      "b": "alcaraz",
+      "way_type": "pass"
+    },
+    {
+      "a": "algeciras",
+      "b": "malaga",
+      "way_type": "pass"
+    },
+    {
+      "a": "jaen",
+      "b": "granada",
+      "way_type": "pass"
+    },
+    {
+      "a": "moron",
+      "b": "granada",
+      "way_type": "pass"
+    },
+    {
+      "a": "granada",
+      "b": "lorca",
+      "way_type": "pass"
+    },
+    {
+      "a": "granada",
+      "b": "almeria",
+      "way_type": "pass"
+    },
+    {
+      "a": "lorca",
+      "b": "almeria",
+      "way_type": "pass"
+    },
+    {
+      "a": "aledo",
+      "b": "alcaraz",
+      "way_type": "pass"
+    },
+    {
+      "a": "murcia",
+      "b": "albacete",
+      "way_type": "pass"
+    },
+    {
+      "a": "ardila",
+      "b": "huelva",
+      "way_type": "pass"
+    },
+    {
+      "a": "malaga",
+      "b": "almeria",
+      "way_type": "pass"
+    }
+  ]
+}
