@@ -139,4 +139,34 @@ Mirroring the Nevsky harness convention. Subject to change as the project develo
 - Networked multiplayer or a GUI. The interface is a CLI plus structured state for an LLM to consume.
 - Variant rules, fan content, or unofficial errata beyond `Almoravid Errata.txt`.
 
-## Development Process: Bug-Pattern C
+## Development Process: Bug-Pattern Catalog
+
+Two architectural / process documents at the repo root inform development:
+
+- `FUTURE_PROJECTS_LESSONS.md` — the long catalog: 14 patterns from 114+ Nevsky SMOKEs with detection heuristics, audit checklists, and pre-built test ideas.
+- `CROSS_PROJECT_LESSONS.md` — the executive summary, plus newer lessons (SMOKE 118-122) that the long catalog predates. Its single biggest insight: **the action enumerator and the per-action handlers will diverge over time, and that divergence is the dominant source of late-stage bugs.** The recommended counter-measure is an enumerator/handler round-trip sweep test (§2 of that doc) plus defensive `try/except` around static-data loads in the enumerator (§1).
+
+Both are architectural / process documents about software patterns common to L&C harnesses, not about Nevsky's rules.
+
+Use them. Specifically:
+
+- Before writing or auditing any handler, skim the patterns that apply to that code area (state-set-but-unreachable, mirror gaps, stale per-Lord flags, parallel Ways, overlay markers, off-edge calendar, card-text fidelity, lifecycle leaks, rule-cite-but-no-enforce, no-target-no-op events, active-player desync, cap/floor enforcement, once-per-window flags, capability scope).
+- When implementing a feature, run the audit checklist for the patterns that could plausibly apply. Treat the checklists as part of the definition of done.
+- When designing tests, draw from the pre-built test ideas — they are battle-tested against the same kind of harness this project is building.
+- Land the CROSS_PROJECT_LESSONS §2 enumerator/handler round-trip sweep as a CI gate. Per the retrospective, that single test catches more divergence bugs than any other audit.
+- Use CROSS_PROJECT_LESSONS §1 defensive `try/except` around static-data lookups in `legal_moves`. Bias: suppress over offer.
+- Use CROSS_PROJECT_LESSONS §7 source-marker regression tests: leave a `SMOKE-NNN` (or `Pattern N`) comment in the source where a bug-class filter lives, and assert the marker is present so a silent refactor that drops the filter (and the comment) fails CI immediately.
+
+What these documents are NOT permitted to do:
+
+- They are not a source of Almoravid rules. Where they mention specific Nevsky cards, rules, or behaviors as examples (R10 Batu Khan, T17 Stonemasons, Calendar box 16, the levy_capability bug shapes), those are Nevsky-only illustrations. Do NOT carry the example's mechanics over to Almoravid. The same *pattern* may apply; the *content* does not.
+- They are not a substitute for reading Almoravid's references when implementing a specific mechanic.
+
+The boundary: Nevsky architecture and bug-patterns IN. Nevsky rules content OUT.
+
+## Working Cadence
+
+- Land changes in small, reviewable PRs.
+- Every encoded rule cites its source (file + section number) in a code comment or docstring.
+- Every Q-NNN cites the sources it checked.
+- `RULES_DECISIONS.md` is append-only; once a `[HOUSE RULE]` is decided, it stays decided unless explicitly revisited.

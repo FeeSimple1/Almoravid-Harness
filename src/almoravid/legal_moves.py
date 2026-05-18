@@ -181,29 +181,40 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.
-                from almoravid.effective import is_besieged
-                from almoravid.map import neighbors_via
-                from almoravid.campaign import _is_laden
-                if (not is_besieged(state, lord_id)
-                        and lord.cylinder.kind == "locale"):
-                    cost = 2 if _is_laden(lord) else 1
-                    if state.meta.actions_remaining >= cost:
-                        from_loc = lord.cylinder.locale_id
-                        for way_type in ("road", "pass"):
-                            for nbr in neighbors_via(from_loc, way_type):
-                                # Pattern 9: pre-check Cart-over-Pass
-                                # so legal_moves doesn't surface a
-                                # move that apply_action will reject.
-                                if (way_type == "pass"
-                                        and lord.assets.get("cart", 0) > 0
-                                        and lord.assets.get("prov", 0) > 0):
-                                    continue
-                                out.append({
-                                    "type": "cmd_march",
-                                    "side": active,
-                                    "target_locale_id": nbr,
-                                    "way_type": way_type,
-                                })
+                # CROSS_PROJECT_LESSONS.md §1: defensive try/except
+                # around static-data lookups in the enumerator. Bias:
+                # miss a legal move (the agent can still pass) over
+                # offering a phantom-legal move that the handler will
+                # reject.
+                try:
+                    from almoravid.effective import is_besieged
+                    from almoravid.map import neighbors_via
+                    from almoravid.campaign import _is_laden
+                    if (not is_besieged(state, lord_id)
+                            and lord.cylinder.kind == "locale"):
+                        cost = 2 if _is_laden(lord) else 1
+                        if state.meta.actions_remaining >= cost:
+                            from_loc = lord.cylinder.locale_id
+                            for way_type in ("road", "pass"):
+                                for nbr in neighbors_via(from_loc, way_type):
+                                    # Pattern 9 mirror: pre-check
+                                    # Cart-over-Pass so legal_moves
+                                    # doesn't surface a move that
+                                    # apply_action would reject.
+                                    if (way_type == "pass"
+                                            and lord.assets.get("cart", 0) > 0
+                                            and lord.assets.get("prov", 0) > 0):
+                                        continue
+                                    out.append({
+                                        "type": "cmd_march",
+                                        "side": active,
+                                        "target_locale_id": nbr,
+                                        "way_type": way_type,
+                                    })
+                except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                    # Safe: omit March moves; the agent can still
+                    # cmd_pass / end_card. CROSS_PROJECT_LESSONS.md §1.
+                    pass
             out.append({"type": "end_card", "side": active})
         return out
 
