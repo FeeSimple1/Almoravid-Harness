@@ -234,32 +234,33 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # CROSS_PROJECT_LESSONS.md §1 defensive try/except.
                 try:
                     from almoravid.effective import is_besieged
-                    from almoravid.campaign import _own_seats
-                    from almoravid.map import neighbors_via
+                    from almoravid.campaign import (
+                        _find_supply_routes,
+                        _own_seats,
+                    )
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
                             and state.meta.actions_remaining >= 1):
                         seats = _own_seats(state, lord_id)
                         here = lord.cylinder.locale_id
-                        # Supply options: at-Seat or 1-hop Road to Seat.
-                        for s in seats:
+                        # Multi-hop Supply (4.6.1): enumerate every reachable
+                        # Seat. Handler-mirror filter:
+                        #   - at-Seat is always offered (no Transport).
+                        #   - others require sufficient Cart+Mule and
+                        #     an unblocked BFS route.
+                        cart = lord.assets.get("cart", 0)
+                        mule = lord.assets.get("mule", 0)
+                        routes = _find_supply_routes(state, here, seats,
+                                                     active, lord)
+                        for s, route in routes.items():
                             if s == here:
                                 out.append({"type": "cmd_supply",
                                             "side": active,
                                             "source_seat": s})
-                            elif (s in neighbors_via(here, "road")
-                                  and (lord.assets.get("mule", 0) > 0
-                                       or lord.assets.get("cart", 0) > 0)):
-                                # Pre-check route-blocking from
-                                # _route_blocked_by_enemy via inline
-                                # check to match handler. Pattern 9
-                                # mirror.
-                                from almoravid.campaign import _route_blocked_by_enemy
-                                if not _route_blocked_by_enemy(state, [s], active):
-                                    out.append({"type": "cmd_supply",
-                                                "side": active,
-                                                "source_seat": s})
-                        # Tax: at own Seat, not Besieged. Uses entire card.
+                            elif route is not None and len(route) <= (cart + mule):
+                                out.append({"type": "cmd_supply",
+                                            "side": active,
+                                            "source_seat": s})
                         if here in seats:
                             out.append({"type": "cmd_tax", "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):

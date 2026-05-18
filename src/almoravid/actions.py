@@ -354,6 +354,37 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
 
 
+
+
+
+def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
+    """Shift a Lord's Service marker N boxes left (toward Disband).
+
+    Pattern 6 (off-edge): box can land at 0 (off_left_service). Per
+    rule, off-Calendar Service markers transition to off_left_service.
+    Multi-box shifts that would go below 0 are clamped at 0.
+
+    Returns the new box position (0..16, where 0 means off-left).
+    """
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == lord_id), None)
+    if sm is None:
+        # Already off-edge or no marker — append to off_left_service if not present
+        if lord_id not in state.calendar.off_left_service:
+            state.calendar.off_left_service.append(lord_id)
+        return 0
+    new_box = sm.box - boxes
+    if new_box <= 0:
+        # Goes off-left
+        state.calendar.service_markers = [
+            s for s in state.calendar.service_markers if s.lord_id != lord_id
+        ]
+        if lord_id not in state.calendar.off_left_service:
+            state.calendar.off_left_service.append(lord_id)
+        return 0
+    sm.box = new_box
+    return new_box
+
 def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
     """Errata p.12: where the Disbanding Lord's cylinder lands.
 

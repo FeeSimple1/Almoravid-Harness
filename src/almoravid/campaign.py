@@ -303,12 +303,49 @@ def _feed_lord(state: GameState, lord_id: str) -> dict[str, Any]:
             "use_prov": use_prov, "use_loot": use_loot}
 
 
+def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, Any]:
+    """Rule 4.8.3 / 3.3.2: auto-Disband when Lord's Service marker is
+    at or beyond the Campaign marker. Uses _compute_disband_target_box
+    so Errata p.12 'next box if Campaign' (Bug N) is honored.
+    """
+    from almoravid.actions import _compute_disband_target_box
+    from almoravid.state import Cylinder
+    lord = state.lords[lord_id]
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == lord_id), None)
+    # Service marker at-or-before current Campaign box -> at-Service-limit
+    if sm is None:
+        return {"no_op": True, "reason": "no service marker (already off-Calendar)"}
+    if sm.box > state.calendar.current_box:
+        return {"no_op": True, "reason": "not at service limit"}
+    new_box = _compute_disband_target_box(state, lord)
+    if new_box > 16:
+        new_box = 17
+        state.calendar.off_right.append(lord_id)
+    lord.cylinder = Cylinder(kind="calendar", box=new_box)
+    # Pattern 8: cleanup
+    lord.forces = {}
+    lord.assets = {}
+    lord.capabilities = []
+    lord.vassals = []
+    lord.in_stronghold = False
+    lord.moved_fought = False
+    lord.routed_units = {}
+    state.calendar.service_markers = [
+        s for s in state.calendar.service_markers if s.lord_id != lord_id
+    ]
+    return {"disbanded": lord_id, "to_box": new_box}
+
+
 def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """End the currently-active Lord's card. Runs the rule 4.8 cascade.
 
-    Phase 5h: auto-Feed via _feed_lord. Voluntary Pay/Disband during
-    the FPD step are deferred to a later commit — rule 4.8.2/4.8.3
-    allow each side to Pay or Disband Beyond-Service Lords here.
+    Phase 5h + deferred fix: auto-Feed via _feed_lord, then auto-
+    Disband if the Lord is at-or-beyond Service limit (rule 4.8.3 /
+    3.3.2). Voluntary Pay during the FPD step uses the same
+    pay_lord handler the Levy step uses but during Campaign is not
+    yet exposed via legal_moves; agent-driven Pay during FPD is a
+    Q-NNN candidate for when scenarios demand it.
     """
     side = _require_side(action)
     _require_campaign_step(state, "activation")
@@ -320,23 +357,31 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord = state.lords[lord_id]
     # 4.8.1 Feed
     feed_result = _feed_lord(state, lord_id)
+    # 4.8.3 auto-Disband at service limit (deferred fix landed here)
+    disband_result = _auto_disband_at_service_limit(state, lord_id)
     # Bookkeeping
     state.meta.active_lord_id = None
     state.meta.actions_remaining = 0
-    # Pattern 3 per-card flag reset
-    lord.lordship_used = 0
-    lord.first_march_used_this_card = False
-    lord.raiders_used_this_card = False
-    lord.moved_fought = False
+    # Pattern 3 per-card flag reset (only if Lord still exists in state
+    # — disband doesn't remove Lord from state.lords, just changes
+    # cylinder, so this is safe)
+    if lord.cylinder.kind == "locale":
+        lord.lordship_used = 0
+        lord.first_march_used_this_card = False
+        lord.raiders_used_this_card = False
+        lord.moved_fought = False
     _advance_or_end_campaign(state)
     _record(state, action,
             f"{side} ends {lord_id}'s card; Feed: "
             f"consumed={feed_result.get('consumed',0)} "
             f"short={feed_result.get('short',0)} "
             f"unfed={feed_result.get('unfed_penalty', False)}"
+            + (f"; auto-disband {disband_result}"
+               if disband_result.get('disbanded') else "")
             + (f" -> campaign_step={state.meta.campaign_step}"
                if state.meta.campaign_step != "activation" else ""))
     return {"ended": lord_id, "feed": feed_result,
+            "auto_disband": disband_result,
             "campaign_step": state.meta.campaign_step}
 
 
@@ -408,10 +453,34 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.meta.levy_step_completed_muslim = False
     state.meta.active_player = ACTOR_ORDER[0]
     state.meta.turn_index += 1
+
+    # Deferred fix: Scenario F Curias / Winter / Spring Muster auto-wire.
+    # When the Calendar advances into box 5 or 6 (Autumn 1085), run
+    # check_curias; if triggered, run apply_curias which advances the
+    # Levy marker to box 7. When advancing into box 7, run winter_disband.
+    # When advancing into box 9 (end of box 8 Spring Muster), run
+    # spring_muster.
+    auto_actions: list[dict[str, object]] = []
+    if state.meta.scenario_letter == "F":
+        if new_box in (5, 6):
+            r_curias = check_curias(state)
+            if r_curias["triggered"]:
+                applied = apply_curias(state, new_box)
+                auto_actions.append({"curias": applied})
+                new_box = state.calendar.current_box  # may have advanced to 7
+        if new_box == 7:
+            wd = winter_disband(state)
+            auto_actions.append({"winter_disband": wd})
+        if new_box == 9:
+            sm = spring_muster(state)
+            auto_actions.append({"spring_muster": sm})
+
     _record(state, action,
-            f"End Campaign; advanced box {prev_box} -> {new_box}; back to Levy")
+            f"End Campaign; advanced box {prev_box} -> {new_box}; back to Levy"
+            + (f"; auto: {auto_actions}" if auto_actions else ""))
     return {"phase": state.meta.phase, "current_box": new_box,
-            "turn_index": state.meta.turn_index}
+            "turn_index": state.meta.turn_index,
+            "auto_actions": auto_actions}
 
 
 # ---------------------------------------------------------------------------
@@ -1003,6 +1072,55 @@ def _route_blocked_by_enemy(state, route: list[str], side) -> bool:
     return False
 
 
+
+
+
+def _find_supply_routes(state, here: str, seats: list[str],
+                          side, lord) -> dict[str, list[str] | None]:
+    """BFS from `here` looking for an unblocked path to each Seat.
+
+    Returns {seat_id: route_locale_list_or_None}. The route list
+    excludes `here` and ends at the Seat. If no unblocked route
+    exists, the value is None.
+
+    Per 4.6.1: route may not include a Locale with an Enemy
+    Stronghold or Lord (unless Besieged or Bypassed by us).
+    Supply uses Road OR Pass — Mule can go either way; Cart can't
+    cross a Pass with Prov but for Supply the route doesn't carry
+    Prov, so Cart on Pass is allowed for Supply purposes.
+    """
+    from almoravid.map import neighbors_via
+    seat_set = set(seats)
+    target_routes: dict[str, list[str] | None] = {s: None for s in seats}
+    if here in seat_set:
+        target_routes[here] = []
+    # BFS; expand each node along Road + Pass; stop at a Seat or
+    # blocked Locale.
+    visited: dict[str, list[str]] = {here: []}
+    queue: list[str] = [here]
+    while queue:
+        node = queue.pop(0)
+        nbrs = (neighbors_via(node, "road")
+                + neighbors_via(node, "pass"))
+        for nbr in nbrs:
+            if nbr in visited:
+                continue
+            # Block on Enemy Stronghold / Lord per 4.6.1 (skip the
+            # destination Seat itself — by definition our own Seat,
+            # not Enemy).
+            if nbr in seat_set:
+                # Reached a Seat. Record route and continue (Seats
+                # don't propagate further as intervening Locales).
+                visited[nbr] = visited[node] + [nbr]
+                target_routes[nbr] = visited[nbr]
+                continue
+            # Not a Seat — check blocking
+            if _route_blocked_by_enemy(state, [nbr], side):
+                continue
+            visited[nbr] = visited[node] + [nbr]
+            queue.append(nbr)
+    return target_routes
+
 def _h_cmd_supply(state, action):
     """4.6 Supply: 1 action. Active Lord (not Besieged) supplies from
     one or more of his own Seats. For each Seat used as Source:
@@ -1046,68 +1164,65 @@ def _h_cmd_supply(state, action):
              code="no_own_seat")
 
     here = lord.cylinder.locale_id
-    seats_at_here = [s for s in seats if s == here]
-    seats_adjacent_road = []
-    for s in seats:
-        if s == here:
-            continue
-        # Phase 5b: only 1-hop Road routes (no Pass routes — Cart can't
-        # cross Pass with Prov anyway; 4.6.1 doesn't forbid Mule on Pass
-        # but the simplified route check is Road-only for now).
-        if s in neighbors_via(here, "road"):
-            seats_adjacent_road.append(s)
+    # Find the shortest unblocked route from `here` to each of `seats`,
+    # consuming 1 Cart/Mule per intervening Way (rule 4.6.1). Multi-hop
+    # via BFS. Lord at his Seat needs no Transport for that Seat.
+    routes = _find_supply_routes(state, here, seats, side, lord)
 
     used_seat = action.get("source_seat")
     if used_seat is None:
-        # Default: prefer at-here Seat, else first adjacent Road Seat.
-        if seats_at_here:
-            used_seat = seats_at_here[0]
-        elif seats_adjacent_road:
-            used_seat = seats_adjacent_road[0]
+        # Default: prefer at-here Seat (no Transport needed), else
+        # the shortest reachable route.
+        if here in seats:
+            used_seat = here
         else:
-            raise IllegalAction(
-                f"{lord_id} has no Supply-reachable Seat in Phase 5b "
-                f"(at-here or 1-hop Road). Multi-hop routes are Q-001 work.",
-                code="no_supply_route",
-            )
+            reachable = [(s, r) for s, r in routes.items() if r is not None]
+            if not reachable:
+                raise IllegalAction(
+                    f"{lord_id} has no reachable Seat for Supply "
+                    f"(no route found honoring 4.6.1 constraints)",
+                    code="no_supply_route",
+                )
+            reachable.sort(key=lambda kv: len(kv[1]))
+            used_seat = reachable[0][0]
     _require(used_seat in seats,
              f"{used_seat} is not an own Seat for {lord_id}",
              code="bad_seat")
 
     transport_consumed = None
     if used_seat == here:
-        # At own Seat — no Transport (rule 4.6.1).
+        # At own Seat — no Transport (rule 4.6.1 'at own Seat needs no Transport').
         pass
-    elif used_seat in seats_adjacent_road:
-        # Route blocking check (1-hop route is just [used_seat]).
-        if _route_blocked_by_enemy(state, [used_seat], side):
+    else:
+        route = routes.get(used_seat)
+        if route is None:
             raise IllegalAction(
-                f"Supply route via {used_seat} blocked by Enemy "
+                f"Supply route to {used_seat} is blocked by Enemy "
                 f"Stronghold or Lord (4.6.1)",
-                code="route_blocked",
+                code="no_supply_route",
             )
-        # Need 1 Cart or Mule for the intervening Way.
-        has_cart = lord.assets.get("cart", 0) > 0
-        has_mule = lord.assets.get("mule", 0) > 0
-        # Phase 5b: prefer Mule (lighter, won't be needed for Pass anyway).
-        if has_mule:
-            transport_consumed = "mule"
-        elif has_cart:
-            transport_consumed = "cart"
-        else:
+        # Need 1 Cart or Mule per intervening Way.
+        # Route excludes `here` (start) and includes used_seat (end).
+        hops = len(route)
+        has_cart = lord.assets.get("cart", 0)
+        has_mule = lord.assets.get("mule", 0)
+        # Phase 5+ baseline: prefer Mule, then Cart. Total transport
+        # required = hops. Transport is DEDICATED (not consumed
+        # permanently) per 4.6.1; we record what was used.
+        total_avail = has_cart + has_mule
+        if total_avail < hops:
             raise IllegalAction(
-                "Supply route needs 1 Cart or Mule for the intervening Way "
-                "(4.6.1)",
+                f"Supply route to {used_seat} needs {hops} Cart/Mule(s); "
+                f"have {has_cart} Cart + {has_mule} Mule (4.6.1)",
                 code="no_transport",
             )
-        # Note: Transport is DEDICATED to the route for this Supply
-        # action, not consumed permanently. Phase 5b doesn't model the
-        # Dedicate / restore cycle; left intact on the mat.
-    else:
-        raise IllegalAction(
-            f"Seat {used_seat} not reachable from {here} in Phase 5b",
-            code="no_supply_route",
-        )
+        # Choose the kind to log (preference: mule)
+        if has_mule >= hops:
+            transport_consumed = f"{hops} mule"
+        elif has_cart >= hops:
+            transport_consumed = f"{hops} cart"
+        else:
+            transport_consumed = f"{has_mule} mule + {hops - has_mule} cart"
 
     # Apply: +1 Provender (cap at 8 per Pattern 12 / rule 1.7.3).
     new_prov = min(8, lord.assets.get("prov", 0) + 1)
@@ -1331,9 +1446,20 @@ def _h_cmd_ravage(state, action):
         )
         if taifa_ravage_count % 2 == 1:
             enforcing_parias = True
-            # Phase 5c: log only. Service-shift implementation needs the
-            # Calendar mutators (shift_service_left, off-edge handling
-            # per Pattern 6 / SMOKE-062). Q-NNN candidate.
+            # Deferred fix: rule 4.7.2 — shift the Taifa Lord's Service
+            # 1 box left (NOT Yusuf / Sir / either Rodrigo per AoW
+            # reference text). Vassal Service markers also shift if
+            # advanced Vassal Service rule (3.4.2) is in use; that
+            # rule isn't yet active in this harness, so we shift the
+            # Lord's marker only.
+            from almoravid.actions import _shift_service_left
+            for tlid, tlord in state.lords.items():
+                if (tlord.is_taifa
+                        and tlord.home_taifa == loc.territory
+                        and tlid not in ("yusuf", "sir",
+                                         "rodrigo_campeador",
+                                         "rodrigo_al_sayyid")):
+                    _shift_service_left(state, tlid, 1)
 
     state.meta.actions_remaining -= 1
     _record(state, action,
