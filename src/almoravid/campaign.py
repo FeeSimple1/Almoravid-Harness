@@ -868,6 +868,91 @@ def _h_cmd_ravage(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
+
+# ---------------------------------------------------------------------------
+# 4.5.1 Siege (Phase 5d minimal-viable)
+# ---------------------------------------------------------------------------
+
+
+def _h_cmd_siege(state, action):
+    """4.5.1 Siege: end-of-card action.
+
+    Active Lord at an Enemy Stronghold (Locale with Stronghold not
+    Friendly to active side) — including with Bypass or existing Siege
+    markers — places one additional Siege marker of his color. Cap at
+    4 markers per side (SoP max_siege_markers: 4).
+
+    Phase 5d scope: Siegeworks bonus (extra marker when total Lords-
+    here meets the Stronghold's Capacity per 4.5.1) IS implemented;
+    Surrender check (dice vs siege+ravage markers) is Phase 5+ work,
+    pending the dice/Conquest mechanics that overlap with Battle.
+    Bypass-to-Siege transition is also Phase 5+.
+
+    Uses entire Command card per SoP §4.5.1.
+    """
+    from almoravid.effective import is_besieged, is_friendly_locale
+
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord cannot Siege (4.5.1)", code="besieged")
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not at a Locale", code="not_on_map")
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    _require(loc.base_type != "region",
+             f"Siege requires a Stronghold; {here} is a Region",
+             code="region_no_siege")
+    _require(not is_friendly_locale(state, here, side),
+             f"Cannot Siege Friendly Locale {here}",
+             code="friendly_locale")
+
+    color = "yellow" if side == "christian" else "green"
+    marker_field = "siege_yellow" if color == "yellow" else "siege_green"
+    current = getattr(loc, marker_field)
+    _require(current < 4,
+             f"{here} already has {current} {color} Siege markers (max 4)",
+             code="siege_cap_reached")
+
+    # Count Lords here on our side for Siegeworks Capacity check
+    lords_here_our_side = sum(
+        1 for other in state.lords.values()
+        if other.side == side
+        and other.cylinder.kind == "locale"
+        and other.cylinder.locale_id == here
+    )
+    from almoravid.static_data import load_strongholds
+    capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+    siegeworks = lords_here_our_side >= capacity
+
+    # Place +1 marker (or +2 if Siegeworks and room).
+    placed = 1
+    setattr(loc, marker_field, current + 1)
+    if siegeworks and current + 1 < 4:
+        setattr(loc, marker_field, current + 2)
+        placed = 2
+
+    # End-of-card: consume all remaining actions (SoP end_card_action).
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {lord_id} Siege {here}: placed {placed} {color} marker(s)"
+            f" (total {getattr(loc, marker_field)})"
+            + (f"; Siegeworks (capacity {capacity}, "
+               f"{lords_here_our_side} lords here)" if siegeworks else "")
+            + f"; card spent ({consumed} actions)")
+    return {"locale": here, "color": color, "placed": placed,
+            "total_markers": getattr(loc, marker_field),
+            "siegeworks": siegeworks, "actions_consumed": consumed}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -880,5 +965,6 @@ CAMPAIGN_HANDLERS = {
     "cmd_tax": _h_cmd_tax,
     "cmd_forage": _h_cmd_forage,
     "cmd_ravage": _h_cmd_ravage,
+    "cmd_siege": _h_cmd_siege,
     "end_campaign": _h_end_campaign,
 }

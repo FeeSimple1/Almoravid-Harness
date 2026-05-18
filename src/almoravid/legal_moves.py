@@ -280,6 +280,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                     and loc.ravaged != color):
                                 out.append({"type": "cmd_ravage",
                                             "side": active})
+                            # Siege: enemy Stronghold, marker cap not
+                            # reached. Uses entire card.
+                            if (loc.base_type != "region"
+                                    and not is_friendly_locale(state, here,
+                                                               active)):
+                                cur = (loc.siege_yellow
+                                       if active == "christian"
+                                       else loc.siege_green)
+                                if cur < 4:
+                                    out.append({"type": "cmd_siege",
+                                                "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
             out.append({"type": "end_card", "side": active})
