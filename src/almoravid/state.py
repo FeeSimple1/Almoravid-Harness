@@ -57,7 +57,7 @@ UnitType = Literal[
 # are Transport types per the Lord reference.
 AssetType = Literal["coin", "loot", "prov", "cart", "mule"]
 WayType = Literal["road", "pass"]
-Season = Literal["spring", "summer", "fall", "winter"]
+Season = Literal["spring", "summer", "autumn", "winter"]
 TurnType = Literal["levy", "campaign", "curias", "winter"]
 CardScope = Literal["this_lord", "side_wide"]
 RavagedState = Literal["none", "yellow", "green"]

@@ -1,18 +1,145 @@
 {
   "scenario_id": "toledo_beset",
   "scenario_letter": "A",
-  "name": "Toledo Beset",
+  "name": "Toledo Beset, Spring 1085",
   "start_box": 1,
   "end_box": 3,
   "starting_vp": {
     "christian": 5,
     "muslim": 8
   },
-  "active_player_at_start": "muslim",
-  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
-  "lords": [],
-  "locale_markers": [],
-  "calendar": {},
-  "taifa_status": {},
-  "special_rules": []
+  "active_player_at_start": "christian",
+  "taifa_status": {
+    "toledo": "parias",
+    "badajoz": "parias",
+    "zaragoza": "independent",
+    "lerida": "parias",
+    "valencia": "independent",
+    "sevilla": "independent",
+    "granada": "parias"
+  },
+  "locale_markers": [
+    {
+      "locale_id": "toledo",
+      "siege_yellow": 1,
+      "ravaged": "yellow",
+      "jihad_markers": 3
+    },
+    {
+      "locale_id": "talavera",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "calatrava",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "ucles",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "trujillo",
+      "jihad_markers": 1
+    }
+  ],
+  "mustered_lords": [
+    {
+      "lord_id": "alfonso",
+      "locale_id": "sahagun",
+      "capabilities": [
+        "C1"
+      ]
+    },
+    {
+      "lord_id": "pedro_ansurez",
+      "locale_id": "sahagun"
+    },
+    {
+      "lord_id": "garcia_ordonez",
+      "locale_id": "sahagun"
+    },
+    {
+      "lord_id": "alvar_fanez",
+      "locale_id": "toledo",
+      "capabilities": [
+        "C2"
+      ]
+    },
+    {
+      "lord_id": "sancho",
+      "locale_id": "jaca"
+    },
+    {
+      "lord_id": "al_mutamid",
+      "locale_id": "sevilla"
+    },
+    {
+      "lord_id": "al_mustain",
+      "locale_id": "zaragoza"
+    },
+    {
+      "lord_id": "abu_bakr",
+      "locale_id": "valencia"
+    }
+  ],
+  "set_aside_lord_ids": [
+    "eudes",
+    "rodrigo_campeador",
+    "rodrigo_al_sayyid",
+    "abd_allah",
+    "al_mutawakkil",
+    "al_mundir",
+    "yusuf",
+    "sir"
+  ],
+  "events_held": {
+    "muslim": [
+      "M12"
+    ]
+  },
+  "calendar": [
+    {
+      "box": 1,
+      "levy_campaign_marker": "levy"
+    },
+    {
+      "box": 3,
+      "scenario_end": true,
+      "service_markers": [
+        "sancho"
+      ]
+    },
+    {
+      "box": 4,
+      "service_markers": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "al_mustain",
+        "abu_bakr"
+      ]
+    },
+    {
+      "box": 5,
+      "victory_marker_color": "yellow"
+    },
+    {
+      "box": 6,
+      "service_markers": [
+        "al_mutamid"
+      ]
+    },
+    {
+      "box": 8,
+      "victory_marker_color": "green"
+    }
+  ],
+  "taifas_box": {
+    "conquered_green_1vp": 4
+  },
+  "special_rules": [
+    "no_call_to_arms"
+  ],
+  "source": "reference/Almoravid Scenario Reference.txt + Almoravid Errata.txt"
 }

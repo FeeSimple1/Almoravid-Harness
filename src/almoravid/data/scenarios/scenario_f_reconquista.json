@@ -1,18 +1,133 @@
 {
   "scenario_id": "reconquista_and_riposte",
   "scenario_letter": "F",
-  "name": "Reconquista and Riposte",
+  "name": "Reconquista and Riposte, 1085-1086",
   "start_box": 1,
   "end_box": 15,
   "starting_vp": {
     "christian": 7,
     "muslim": 10
   },
-  "active_player_at_start": "muslim",
-  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
-  "lords": [],
-  "locale_markers": [],
-  "calendar": {},
-  "taifa_status": {},
-  "special_rules": []
+  "active_player_at_start": "christian",
+  "taifa_status": {
+    "toledo": "parias",
+    "badajoz": "parias",
+    "zaragoza": "parias",
+    "lerida": "parias",
+    "valencia": "parias",
+    "sevilla": "independent",
+    "granada": "parias"
+  },
+  "locale_markers": [
+    {
+      "locale_id": "toledo",
+      "siege_yellow": 1,
+      "ravaged": "yellow",
+      "jihad_markers": 3
+    },
+    {
+      "locale_id": "talavera",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "calatrava",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "ucles",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "trujillo",
+      "jihad_markers": 1
+    }
+  ],
+  "mustered_lords": [
+    {
+      "lord_id": "alfonso",
+      "locale_id": "sahagun"
+    },
+    {
+      "lord_id": "pedro_ansurez",
+      "locale_id": "sahagun"
+    },
+    {
+      "lord_id": "garcia_ordonez",
+      "locale_id": "sahagun"
+    },
+    {
+      "lord_id": "alvar_fanez",
+      "locale_id": "toledo"
+    },
+    {
+      "lord_id": "al_mutamid",
+      "locale_id": "sevilla"
+    }
+  ],
+  "calendar": [
+    {
+      "box": 1,
+      "levy_campaign_marker": "levy",
+      "cylinders": [
+        "sancho",
+        "abu_bakr",
+        "al_mustain",
+        "al_mundir",
+        "al_mutawakkil",
+        "abd_allah",
+        "rodrigo_al_sayyid"
+      ]
+    },
+    {
+      "box": 4,
+      "service_markers": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez"
+      ]
+    },
+    {
+      "box": 6,
+      "service_markers": [
+        "al_mutamid"
+      ]
+    },
+    {
+      "box": 7,
+      "victory_marker_color": "yellow"
+    },
+    {
+      "box": 9,
+      "cylinders": [
+        "yusuf",
+        "sir"
+      ]
+    },
+    {
+      "box": 10,
+      "victory_marker_color": "green"
+    },
+    {
+      "box": 15,
+      "scenario_end": true
+    }
+  ],
+  "taifas_box": {
+    "conquered_green_1vp": 6
+  },
+  "set_aside_lord_ids": [],
+  "events_held": {
+    "muslim": [
+      "M12"
+    ]
+  },
+  "special_rules": [
+    "standard_call_to_arms",
+    "ruined_land_parias_coin",
+    "cathedrals_seats_blocked_until_yusuf_or_sir_muster",
+    "curias_and_winter_sequence",
+    "first_spring_levy_box_9_draw_capabilities_not_events"
+  ],
+  "source": "reference/Almoravid Scenario Reference.txt + Almoravid Errata.txt"
 }

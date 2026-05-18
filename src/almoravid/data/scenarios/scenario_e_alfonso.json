@@ -1,18 +1,171 @@
 {
   "scenario_id": "alfonso_and_almoravids",
   "scenario_letter": "E",
-  "name": "Alfonso and the Almoravids",
+  "name": "Alfonso and the Almoravids, 1086",
   "start_box": 9,
   "end_box": 15,
   "starting_vp": {
     "christian": 8,
     "muslim": 8
   },
-  "active_player_at_start": "muslim",
-  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
-  "lords": [],
-  "locale_markers": [],
-  "calendar": {},
-  "taifa_status": {},
-  "special_rules": []
+  "active_player_at_start": "christian",
+  "taifa_status": {
+    "toledo": "reconquista",
+    "badajoz": "independent",
+    "zaragoza": "independent",
+    "lerida": "independent",
+    "valencia": "parias",
+    "sevilla": "independent",
+    "granada": "independent"
+  },
+  "locale_markers": [
+    {
+      "locale_id": "toledo",
+      "conquered_yellow": 3,
+      "ravaged": "green"
+    },
+    {
+      "locale_id": "alcaraz",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "albacete",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "calatrava",
+      "jihad_markers": 3
+    },
+    {
+      "locale_id": "trujillo",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "jativa",
+      "jihad_markers": 2
+    }
+  ],
+  "mustered_lords": [
+    {
+      "lord_id": "alfonso",
+      "locale_id": "leon",
+      "assets_override": {
+        "coin": 1
+      }
+    },
+    {
+      "lord_id": "alvar_fanez",
+      "locale_id": "burgos",
+      "capabilities": [
+        "C24"
+      ]
+    },
+    {
+      "lord_id": "sancho",
+      "locale_id": "jaca"
+    },
+    {
+      "lord_id": "al_mutamid",
+      "locale_id": "cordoba",
+      "assets_override": {
+        "coin": 4
+      }
+    },
+    {
+      "lord_id": "al_mutawakkil",
+      "locale_id": "badajoz",
+      "assets_override": {
+        "coin": 4
+      }
+    },
+    {
+      "lord_id": "abd_allah",
+      "locale_id": "granada",
+      "assets_override": {
+        "coin": 4
+      }
+    },
+    {
+      "lord_id": "al_mustain",
+      "locale_id": "zaragoza",
+      "assets_override": {
+        "coin": 4
+      }
+    },
+    {
+      "lord_id": "al_mundir",
+      "locale_id": "lerida",
+      "assets_override": {
+        "coin": 4
+      }
+    }
+  ],
+  "calendar": [
+    {
+      "box": 8,
+      "victory_markers": [
+        "yellow",
+        "green"
+      ]
+    },
+    {
+      "box": 9,
+      "levy_campaign_marker": "levy",
+      "cylinders": [
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "yusuf",
+        "sir",
+        "rodrigo_al_sayyid"
+      ]
+    },
+    {
+      "box": 10,
+      "service_markers": [
+        "al_mutawakkil"
+      ]
+    },
+    {
+      "box": 11,
+      "service_markers": [
+        "sancho",
+        "abd_allah"
+      ]
+    },
+    {
+      "box": 12,
+      "service_markers": [
+        "alfonso",
+        "alvar_fanez",
+        "al_mustain"
+      ]
+    },
+    {
+      "box": 13,
+      "service_markers": [
+        "al_mundir"
+      ]
+    },
+    {
+      "box": 14,
+      "service_markers": [
+        "al_mutamid"
+      ]
+    },
+    {
+      "box": 15,
+      "scenario_end": true
+    }
+  ],
+  "taifas_box": {
+    "conquered_green_1vp": 4
+  },
+  "set_aside_lord_ids": [
+    "abu_bakr"
+  ],
+  "special_rules": [
+    "standard_call_to_arms",
+    "ruined_land_parias_coin"
+  ],
+  "source": "reference/Almoravid Scenario Reference.txt + Almoravid Errata.txt"
 }

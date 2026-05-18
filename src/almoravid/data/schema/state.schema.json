@@ -70,7 +70,7 @@
           "enum": [
             "spring",
             "summer",
-            "fall",
+            "autumn",
             "winter"
           ],
           "title": "Season",

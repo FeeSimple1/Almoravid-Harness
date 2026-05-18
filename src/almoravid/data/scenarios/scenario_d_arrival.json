@@ -1,18 +1,190 @@
 {
   "scenario_id": "arrival_of_the_africans",
   "scenario_letter": "D",
-  "name": "Arrival of the Africans",
+  "name": "Arrival of the Africans, mid-1086",
   "start_box": 12,
   "end_box": 15,
   "starting_vp": {
     "christian": 11,
     "muslim": 10
   },
-  "active_player_at_start": "muslim",
-  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
-  "lords": [],
-  "locale_markers": [],
-  "calendar": {},
-  "taifa_status": {},
-  "special_rules": []
+  "active_player_at_start": "christian",
+  "taifa_status": {
+    "toledo": "reconquista",
+    "badajoz": "independent",
+    "zaragoza": "independent",
+    "lerida": "parias",
+    "valencia": "parias",
+    "sevilla": "independent",
+    "granada": "independent"
+  },
+  "locale_markers": [
+    {
+      "locale_id": "toledo",
+      "conquered_yellow": 3,
+      "ravaged": "green"
+    },
+    {
+      "locale_id": "aledo",
+      "conquered_yellow": 1
+    },
+    {
+      "locale_id": "jativa",
+      "conquered_yellow": 1,
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "alcaraz",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "burriana",
+      "ravaged": "yellow"
+    },
+    {
+      "locale_id": "calatrava",
+      "jihad_markers": 3
+    },
+    {
+      "locale_id": "ucles",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "trujillo",
+      "jihad_markers": 1
+    },
+    {
+      "locale_id": "cuenca",
+      "jihad_markers": 1
+    },
+    {
+      "locale_id": "algeciras",
+      "seat_marker_lord_ids": [
+        "yusuf"
+      ]
+    }
+  ],
+  "mustered_lords": [
+    {
+      "lord_id": "alfonso",
+      "locale_id": "zaragoza",
+      "capabilities": [
+        "C6",
+        "C1"
+      ]
+    },
+    {
+      "lord_id": "pedro_ansurez",
+      "locale_id": "simancas"
+    },
+    {
+      "lord_id": "garcia_ordonez",
+      "locale_id": "tudela",
+      "bypass": true
+    },
+    {
+      "lord_id": "sancho",
+      "locale_id": "zaragoza"
+    },
+    {
+      "lord_id": "alvar_fanez",
+      "locale_id": "valencia"
+    },
+    {
+      "lord_id": "yusuf",
+      "locale_id": "algeciras",
+      "assets_override": {
+        "coin": 4
+      }
+    },
+    {
+      "lord_id": "al_mutamid",
+      "locale_id": "sevilla"
+    },
+    {
+      "lord_id": "al_mutawakkil",
+      "locale_id": "badajoz"
+    },
+    {
+      "lord_id": "abd_allah",
+      "locale_id": "granada"
+    },
+    {
+      "lord_id": "al_mustain",
+      "locale_id": "zaragoza",
+      "capabilities": [
+        "M17",
+        "M14"
+      ]
+    }
+  ],
+  "calendar": [
+    {
+      "box": 10,
+      "victory_marker_color": "green"
+    },
+    {
+      "box": 11,
+      "victory_marker_color": "yellow"
+    },
+    {
+      "box": 12,
+      "levy_campaign_marker": "levy",
+      "cylinders": [
+        "sir",
+        "rodrigo_al_sayyid"
+      ]
+    },
+    {
+      "box": 13,
+      "cylinders": [
+        "eudes"
+      ]
+    },
+    {
+      "box": 14,
+      "service_markers": [
+        "sancho"
+      ]
+    },
+    {
+      "box": 15,
+      "scenario_end": true,
+      "service_markers": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mustain",
+        "yusuf"
+      ]
+    },
+    {
+      "box": 16,
+      "service_markers": [
+        "al_mutamid"
+      ],
+      "cylinders": [
+        "al_mundir"
+      ]
+    }
+  ],
+  "taifas_box": {
+    "conquered_green_1vp": 6
+  },
+  "set_aside_lord_ids": [
+    "abu_bakr"
+  ],
+  "muslim_board_edge_cards": [
+    "M10",
+    "M12",
+    "M16"
+  ],
+  "special_rules": [
+    "standard_call_to_arms",
+    "first_levy_alfonso_and_almustain_may_muster_at_siege"
+  ],
+  "source": "reference/Almoravid Scenario Reference.txt + Almoravid Errata.txt"
 }

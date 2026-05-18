@@ -1,9 +1,4 @@
-"""Almoravid CLI entrypoint.
-
-Phase 0: only `version` and `scenarios` are functional. All gameplay
-commands raise NotImplementedError tagged with the phase that will
-implement them.
-"""
+"""Almoravid CLI entrypoint."""
 
 from __future__ import annotations
 
@@ -13,7 +8,7 @@ from pathlib import Path
 import typer
 
 from almoravid import __version__
-from almoravid.scenarios import list_scenarios, load_scenario_raw
+from almoravid.scenarios import list_scenarios, load_scenario, load_scenario_raw
 
 app = typer.Typer(
     name="almoravid",
@@ -38,49 +33,38 @@ def scenarios() -> None:
 
 @app.command(name="scenario-show")
 def scenario_show(name: str) -> None:
-    """Print a scenario's raw JSON (Phase 0: raw loader only)."""
+    """Print a scenario's raw JSON."""
     data = load_scenario_raw(name)
     typer.echo(json.dumps(data, indent=2))
 
 
 @app.command(name="new-game")
 def new_game(scenario: str, seed: int = 0) -> None:
-    """Create a new game state from a scenario.
-
-    Phase 1: scenario -> GameState conversion (static_data.py / scenarios.py).
-    """
-    raise NotImplementedError(
-        "Phase 1: scenario loader produces GameState. "
-        "See BRIEF.md 'Project Layout' for the build order."
-    )
+    """Create a new GameState from a scenario and print summary stats."""
+    state = load_scenario(scenario, seed=seed)
+    typer.echo(f"Scenario: {state.meta.scenario_letter} ({state.meta.scenario_id})")
+    typer.echo(f"Active player: {state.meta.active_player}")
+    typer.echo(f"Current Calendar box: {state.calendar.current_box}")
+    typer.echo(f"Lords: {len(state.lords)} ({sum(1 for l in state.lords.values() if l.cylinder.kind == 'locale')} mustered)")
+    typer.echo(f"Locales: {len(state.locales)}")
+    typer.echo(f"Taifas: {len(state.taifas)}")
+    typer.echo(f"Ways: {len(state.ways)}")
+    typer.echo(f"VP: Christian {state.score.christian} / Muslim {state.score.muslim}")
 
 
 @app.command(name="legal-moves")
 def legal_moves(state_file: Path) -> None:
-    """List legal moves for the side whose turn it is.
-
-    Phase 2: legal-moves enumeration (legal_moves.py).
-    """
-    raise NotImplementedError("Phase 2: see legal_moves.py (not yet created).")
+    raise NotImplementedError("Phase 2: legal_moves.py")
 
 
 @app.command()
 def do(state_file: Path, action: str) -> None:
-    """Execute an action against the state.
-
-    Phase 2: action dispatcher (actions.py).
-    """
-    raise NotImplementedError("Phase 2: see actions.py (not yet created).")
+    raise NotImplementedError("Phase 2: actions.py")
 
 
 @app.command(name="generate-schema")
 def generate_schema() -> None:
-    """Regenerate state.schema.json from the pydantic GameState model.
-
-    Mirrors `scripts/generate_schema.py` for convenience.
-    """
     from almoravid.state import GameState
-
     schema_path = Path(__file__).parent / "data" / "schema" / "state.schema.json"
     schema = GameState.model_json_schema()
     schema_path.write_text(json.dumps(schema, indent=2) + "\n")

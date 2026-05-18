@@ -1,18 +1,120 @@
 {
   "scenario_id": "quelling_of_tajo",
   "scenario_letter": "B",
-  "name": "Quelling of the Tajo",
+  "name": "Quelling of the Tajo, Summer 1085",
   "start_box": 3,
   "end_box": 5,
   "starting_vp": {
     "christian": 9,
     "muslim": 8
   },
-  "active_player_at_start": "muslim",
-  "_phase_0_note": "Phase 0 stub. Setup data (Lords, Locales, markers, mats, special rules) is filled in Phase 1 from the Scenario Reference and Scenario Adjustments.",
-  "lords": [],
-  "locale_markers": [],
-  "calendar": {},
-  "taifa_status": {},
-  "special_rules": []
+  "active_player_at_start": "christian",
+  "taifa_status": {
+    "toledo": "reconquista",
+    "badajoz": "parias",
+    "zaragoza": "independent",
+    "lerida": "parias",
+    "valencia": "independent",
+    "sevilla": "independent",
+    "granada": "parias"
+  },
+  "locale_markers": [
+    {
+      "locale_id": "toledo",
+      "conquered_yellow": 3,
+      "ravaged": "green"
+    },
+    {
+      "locale_id": "calatrava",
+      "jihad_markers": 3
+    },
+    {
+      "locale_id": "trujillo",
+      "jihad_markers": 2
+    },
+    {
+      "locale_id": "ucles",
+      "jihad_markers": 2
+    }
+  ],
+  "mustered_lords": [
+    {
+      "lord_id": "alfonso",
+      "locale_id": "toledo"
+    },
+    {
+      "lord_id": "alvar_fanez",
+      "locale_id": "toledo"
+    },
+    {
+      "lord_id": "al_mutamid",
+      "locale_id": "sevilla"
+    },
+    {
+      "lord_id": "abu_bakr",
+      "locale_id": "valencia"
+    },
+    {
+      "lord_id": "al_mustain",
+      "locale_id": "zaragoza"
+    }
+  ],
+  "calendar": [
+    {
+      "box": 3,
+      "levy_campaign_marker": "levy",
+      "cylinders": [
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "sancho",
+        "al_mutawakkil",
+        "abd_allah",
+        "al_mundir"
+      ]
+    },
+    {
+      "box": 5,
+      "scenario_end": true,
+      "service_markers": [
+        "al_mustain",
+        "abu_bakr"
+      ]
+    },
+    {
+      "box": 6,
+      "service_markers": [
+        "alfonso",
+        "alvar_fanez",
+        "al_mutamid"
+      ]
+    },
+    {
+      "box": 8,
+      "victory_marker_color": "green"
+    },
+    {
+      "box": 9,
+      "victory_marker_color": "yellow"
+    }
+  ],
+  "taifas_box": {
+    "conquered_green_1vp": 4
+  },
+  "set_aside_lord_ids": [
+    "eudes",
+    "yusuf",
+    "sir",
+    "rodrigo_campeador",
+    "rodrigo_al_sayyid"
+  ],
+  "events_held": {
+    "muslim": [
+      "M21"
+    ]
+  },
+  "special_rules": [
+    "no_call_to_arms",
+    "first_levy_muslim_double_lordship"
+  ],
+  "source": "reference/Almoravid Scenario Reference.txt + Almoravid Errata.txt"
 }
