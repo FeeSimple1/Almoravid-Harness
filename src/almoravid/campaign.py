@@ -752,6 +752,32 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
                 loc.siege_yellow = 0
                 loc.bypass_yellow = False
                 results["siege_removed"].append(lid)
+        # Bug A (mirror gap audit): RECONQUISTA -> INDEPENDENT —
+        # Muslim Lord at Christian Stronghold that goes Muslim:
+        # remove Siege/Bypass (1.4.3).
+        if (old_status == "reconquista"
+                and new_status == "independent"):
+            if present_muslim and (loc.siege_green > 0 or loc.bypass_green):
+                loc.siege_green = 0
+                loc.bypass_green = False
+                results["siege_removed"].append((lid, "muslim"))
+        # Bug B (mirror gap audit): RECONQUISTA -> PARIAS —
+        # Muslim Lord at Christian Stronghold that would go Neutral:
+        # OR clause (1.4.3). Phase 5l conservative resolution: remove
+        # Siege/Bypass rather than place Christian Conquered markers.
+        if (old_status == "reconquista" and new_status == "parias"):
+            if present_muslim and (loc.siege_green > 0 or loc.bypass_green):
+                loc.siege_green = 0
+                loc.bypass_green = False
+                results["siege_removed"].append((lid, "muslim_or_clause"))
+        # Bug C (mirror gap audit): INDEPENDENT -> PARIAS —
+        # Christian Lord at Muslim Stronghold that would go Neutral:
+        # OR clause (1.4.3). Conservative: remove Siege/Bypass.
+        if (old_status == "independent" and new_status == "parias"):
+            if present_christian and (loc.siege_yellow > 0 or loc.bypass_yellow):
+                loc.siege_yellow = 0
+                loc.bypass_yellow = False
+                results["siege_removed"].append((lid, "christian_or_clause"))
         # Christian Lord at Neutral Stronghold "would go Muslim": Conquer
         if going_neutral or (new_status == "independent"
                               and old_status != "independent"):

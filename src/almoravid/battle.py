@@ -305,6 +305,8 @@ def _resolve_step(
     attacker: BattleSide,
     defender: BattleSide,
     context: Literal["battle", "storm"] = "battle",
+    walls_range: tuple[int, int] | None = None,
+    siege_markers: int = 0,
 ) -> StepResolution:
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
@@ -312,12 +314,44 @@ def _resolve_step(
     rows = build_strike_rows(state, actor, context=context)
     raw = _step_hits(rows, step_type, unit_class)
     rounded = math.ceil(raw)
+
+    # Bug-fix E (Pattern 9 audit): rule 4.5.2 cap — in Storm each Lord
+    # adds at most 6 Melee Hits per Round; Missiles unlimited. Apply
+    # per-actor-side (single-Lord baseline; multi-Lord arrays are
+    # Phase 5e+ and will cap per Lord).
+    if context == "storm" and step_type == "melee":
+        rounded = min(rounded, 6)
+
     result = StepResolution(step=step_id, actor=actor_role,
                             raw_hits=raw, rounded_hits=rounded)
-    # Apply each Hit to the target, one at a time.
-    # Track losses for reporting.
+
+    # Bug-fix D (Pattern 9 audit): rule 4.4.2 ROLL WALLS — in Storm /
+    # Sally, side benefiting from Walls rolls dice = total Hits in
+    # this step; each die <= walls_range cancels 1 Hit. Siegeworks-as-
+    # Walls similarly. Defender side in Storm benefits from Walls;
+    # attacker side benefits from Siegeworks. We apply Walls to Hits
+    # FOR the side being struck (the target).
+    hits_to_apply = rounded
+    if walls_range is not None and rounded > 0:
+        # Which side benefits depends on direction:
+        # - If actor is attacker striking defender: Walls protect defender.
+        # - If actor is defender striking attacker: Siegeworks (Siege
+        #   markers acting as Walls) protect attacker.
+        if actor_role == "attacker":
+            wlo, whi = walls_range
+            dice = [roll_d6(state) for _ in range(rounded)]
+            canceled = sum(1 for d in dice if wlo <= d <= whi)
+            hits_to_apply = rounded - canceled
+        elif actor_role == "defender" and siege_markers > 0:
+            # Siegeworks: attacker rolls dice = total Hits; each <=
+            # siege_markers cancels 1 Hit (rule 4.4.2 / 4.5.2).
+            dice = [roll_d6(state) for _ in range(rounded)]
+            canceled = sum(1 for d in dice if d <= siege_markers)
+            hits_to_apply = rounded - canceled
+
+    # Apply each remaining Hit to the target.
     striker_kind: StrikeKind = "melee" if step_type == "melee" else "missiles"
-    for _ in range(rounded):
+    for _ in range(hits_to_apply):
         if not target.has_unrouted():
             break
         _, routed = _resolve_protection_roll(state, target, striker_kind)
@@ -561,12 +595,22 @@ def resolve_storm(
         ("2.b", "attacker", "melee", "horse"),
         ("2.b", "attacker", "melee", "foot"),
     ]
+    # Siegeworks count for attacker's protection (the besieger's Siege
+    # markers serve as Walls for the attacker during Storm — rule
+    # 4.5.2 'attacker_siegeworks_placement: place Siegeworks as Walls').
+    siegeworks_count = 0
+    if locale_id is not None:
+        loc = state.locales[locale_id]
+        siegeworks_count = (loc.siege_yellow if attacker.side == "christian"
+                            else loc.siege_green)
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
         for step_id, actor_role, step_type, unit_class in storm_steps:
             step_res = _resolve_step(
                 state, step_id, actor_role, step_type, unit_class,
                 attacker, defender, context="storm",
+                walls_range=walls_range,
+                siege_markers=siegeworks_count,
             )
             rnd.steps.append(step_res)
             if _battle_over(attacker, defender):
