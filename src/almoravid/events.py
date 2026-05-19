@@ -264,12 +264,7 @@ def _taifa_marriage(state, side, card_id, payload):
             "deferred": "phase_5"}
 
 
-@register("M21")  # Al-Sumaisir
-def _al_sumaisir(state, side, card_id, payload):
-    """AL-SUMAISIR (Muslim, scenario B): poet reproaches emirs. Phase 4b
-    records the play and defers effects (VP adjustment / mat flips)."""
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "deferred": "phase_5"}
+
 
 
 import math as _math
@@ -458,25 +453,14 @@ def _pope_gregory(state, side, card_id, payload):
 
 
 @register("C15")  # Cluniacs
-@register("M9")   # Maliki Islam
-@register("M20")  # Mudejares
 def _religious_hold(state, side, card_id, payload):
-    """Religious hold events: persistent through some window. Buffered
-    in this_levy_events; specific mechanics in Phase 5j+."""
+    """C15 Cluniacs (Hold): Lord Muster from Calendar, OR Service +1
+    right, OR Lordship +2 for this Levy. Phase 6j: parks in
+    this_levy_events; consumed by ad-hoc Levy action (TODO)."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
-@register("C16")  # Bernard de Sedirac
-@register("C17")  # Genoa & Pisa send fleets
-@register("C18")  # Runaway Slaves
-@register("C19")  # Fitna
-@register("C20")  # Al-Qadir
-@register("C21")  # Mozarabes
-@register("C22")  # Berbers
-@register("C23")  # Illness of the Emir
-@register("C24")  # Abu Bakr ibn Umar
 @register("M19")  # African Fleet
-@register("M24")  # Al-Maghawir
 def _generic_immediate(state, side, card_id, payload):
     """Immediate events with side-wide or scenario-specific effects.
 
@@ -808,3 +792,443 @@ def _m22_massacre(state, side, card_id, payload):
     return {"card_id": card_id, "side": side,
             "jihad_added": add, "locale_id": target_loc,
             "bonus": bonus}
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 6j: M9/M10/M20/M21 — Jihad-add variants.
+# ---------------------------------------------------------------------------
+
+
+def _yusuf_or_sir_in_status(state, statuses: tuple[str, ...]) -> bool:
+    """Check whether Yusuf or Sir is at a locale whose Taifa is in
+    `statuses`."""
+    for lid in ("yusuf", "sir"):
+        l = state.lords.get(lid)
+        if l is None or l.cylinder.kind != "locale":
+            continue
+        for t in state.taifas.values():
+            if l.cylinder.locale_id in t.locale_ids and t.status in statuses:
+                return True
+    return False
+
+
+def _yusuf_or_sir_in_kingdom(state) -> bool:
+    """Yusuf or Sir at a Christian Kingdom locale."""
+    for lid in ("yusuf", "sir"):
+        l = state.lords.get(lid)
+        if l is None or l.cylinder.kind != "locale":
+            continue
+        loc = state.locales.get(l.cylinder.locale_id)
+        if loc and loc.territory in ("leon", "aragon"):
+            return True
+    return False
+
+
+@register("M9")  # Maliki Islam
+def _m9_maliki_islam(state, side, card_id, payload):
+    """M9 (Hold): +2 Jihad if Yusuf/Sir in Reconquista Taifa, OR
+    +4 Jihad if in a Kingdom."""
+    add = 0
+    if _yusuf_or_sir_in_kingdom(state):
+        add = 4
+    elif _yusuf_or_sir_in_status(state, ("reconquista",)):
+        add = 2
+    if add == 0:
+        return _no_op_with_note(state, card_id, side,
+                                "Yusuf/Sir not in eligible Taifa")
+    target = payload.get("locale_id") or _first_jihad_eligible_locale(state)
+    if target is None:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Jihad locale")
+    state.locales[target].jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target}
+
+
+@register("M10")  # Fatwa
+def _m10_fatwa(state, side, card_id, payload):
+    """M10 (Hold): +1 Jihad OR +1 per (Yusuf/Sir in Kingdom, Eudes on
+    map, each Crusader Vassal Mustered on a Christian Lord)."""
+    bonus = 0
+    if _yusuf_or_sir_in_kingdom(state):
+        bonus += 1
+    eudes = state.lords.get("eudes")
+    if eudes is not None and eudes.cylinder.kind == "locale":
+        bonus += 1
+    for l in state.lords.values():
+        if l.side == "christian":
+            bonus += l.crusader_markers
+    add = max(1, bonus)
+    target = payload.get("locale_id") or _first_jihad_eligible_locale(state)
+    if target is None:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Jihad locale")
+    state.locales[target].jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target, "bonus": bonus}
+
+
+@register("M20")  # Mudejares
+def _m20_mudejares(state, side, card_id, payload):
+    """M20 (Hold): +1 Jihad in Reconquista Taifa, +2 at Jihad there,
+    +3 if Yusuf/Sir there."""
+    reconq = [t for t in state.taifas.values() if t.status == "reconquista"]
+    if not reconq:
+        return _no_op_with_note(state, card_id, side,
+                                "no Reconquista Taifa available")
+    target = payload.get("locale_id")
+    if target is None:
+        target = reconq[0].locale_ids[0]
+    loc = state.locales.get(target)
+    if loc is None:
+        return _no_op_with_note(state, card_id, side,
+                                f"unknown locale {target!r}")
+    add = 1
+    if loc.jihad_markers > 0:
+        add = 2
+    here_ids = [l.id for l in state.lords.values()
+                if l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == target]
+    if "yusuf" in here_ids or "sir" in here_ids:
+        add = 3
+    loc.jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target}
+
+
+@register("M21")  # Al-Sumaisir
+def _m21_al_sumaisir(state, side, card_id, payload):
+    """M21 (Hold): Muster a Taifa Lord from Calendar OR add 2 Jihad
+    in Parias Taifa — 4 Jihad if Yusuf/Sir there.
+
+    Phase 6j: greedy default = Jihad branch. payload['lord_id']
+    selects a Taifa Lord on the Calendar for the Muster branch.
+    """
+    target_lord_id = payload.get("lord_id")
+    if target_lord_id and target_lord_id in state.lords:
+        # Muster branch — for now, simply set cylinder to Lord's first
+        # Seat and copy starting forces/assets (mirrors muster_lord but
+        # bypasses Fealty and steps).
+        from almoravid.static_data import load_lords as _ll
+        l = state.lords[target_lord_id]
+        if l.is_taifa and l.side == "muslim" and l.cylinder.kind == "calendar":
+            rec = _ll()["lords"].get(target_lord_id, {})
+            seats = list(rec.get("seats", []))
+            if seats:
+                from almoravid.state import Cylinder
+                l.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+                l.forces = dict(rec.get("forces", {}))
+                l.assets = dict(rec.get("assets", {}))
+                l.just_arrived_this_levy = True
+                state.decks.discard.append(card_id)
+                return {"card_id": card_id, "side": side,
+                        "mustered": target_lord_id, "seat": seats[0]}
+    # Jihad branch (default).
+    parias = [t for t in state.taifas.values() if t.status == "parias"]
+    if not parias:
+        return _no_op_with_note(state, card_id, side,
+                                "no Parias Taifa available")
+    target_loc = payload.get("locale_id") or parias[0].locale_ids[0]
+    loc = state.locales.get(target_loc)
+    if loc is None:
+        return _no_op_with_note(state, card_id, side,
+                                f"unknown locale {target_loc!r}")
+    here_ids = [l.id for l in state.lords.values()
+                if l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == target_loc]
+    add = 4 if ("yusuf" in here_ids or "sir" in here_ids) else 2
+    loc.jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target_loc}
+
+
+# ---------------------------------------------------------------------------
+# Phase 6j: C16-C24 — Service-shift / Muster-ban / scenario events.
+# ---------------------------------------------------------------------------
+
+
+@register("C16")  # Bernard de Sedirac
+def _c16_bernard_de_sedirac(state, side, card_id, payload):
+    """C16: Shift a Lord's Service 1 box right OR Muster a Lord from
+    Calendar now. Levy Cathedrals (this card). Phase 6j: greedy
+    service-shift-right for the leftmost Christian Lord on the
+    Calendar. Cathedrals capability levying is a deferred follow-up.
+    """
+    from almoravid.actions import _shift_service_left
+    candidates = [
+        sm for sm in state.calendar.service_markers
+        if state.lords.get(sm.lord_id)
+        and state.lords[sm.lord_id].side == "christian"
+    ]
+    if not candidates:
+        return _no_op_with_note(state, card_id, side,
+                                "no Christian Lord on Calendar")
+    # Shift RIGHT (i.e., away from Disband) — implement as negative
+    # boxes via direct mutation since _shift_service_left only goes
+    # left. Bump box by 1, capped at 16.
+    target_sm = min(candidates, key=lambda sm: sm.box)
+    target_sm.box = min(16, target_sm.box + 1)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "shifted_right": target_sm.lord_id,
+            "new_service_box": target_sm.box}
+
+
+@register("C17")  # Genoa & Pisa
+def _c17_genoa_pisa(state, side, card_id, payload):
+    """C17 (Immediate): Place Ravaged at 2 Unravaged Enemy Ports where
+    no Muslim Lords. Total +1 Christian VP per card text Tips."""
+    from almoravid.effective import is_friendly_locale
+    ports: list[str] = []
+    for lid, loc in state.locales.items():
+        if not loc.has_port:
+            continue
+        if loc.ravaged != "none":
+            continue
+        if not is_friendly_locale(state, lid, "muslim"):
+            continue
+        muslim_here = any(
+            l.side == "muslim" and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id == lid
+            for l in state.lords.values()
+        )
+        if muslim_here:
+            continue
+        ports.append(lid)
+    placed: list[str] = []
+    for p in ports[:2]:
+        state.locales[p].ravaged = "yellow"  # Christian-placed
+        placed.append(p)
+    if not placed:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Muslim Port")
+    state.score.christian += 0.5 * len(placed)  # 1 VP per 2 markers
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "ravaged": placed}
+
+
+@register("C18")  # Runaway Slaves
+def _c18_runaway_slaves(state, side, card_id, payload):
+    """C18 (Hold played in Muster): Christian Lords restore Lost Foot
+    units + add Transport. Mirror of M18 Refugees for the Christian
+    Foot triumvirate (men_at_arms, militia, serfs)."""
+    from almoravid.effective import is_besieged
+    from almoravid.static_data import load_lords
+    statics = load_lords()["lords"]
+    restored: list[dict] = []
+    for lid, l in state.lords.items():
+        if l.side != "christian":
+            continue
+        if l.cylinder.kind != "locale":
+            continue
+        if is_besieged(state, lid):
+            continue
+        rec = statics.get(lid, {})
+        starting = dict(rec.get("forces", {}))
+        for v in l.vassals:
+            if v.ready:
+                continue
+            for ut, n in v.forces.items():
+                starting[ut] = starting.get(ut, 0) + n
+        added: dict[str, int] = {}
+        for ut in ("men_at_arms", "militia", "serfs"):
+            want = starting.get(ut, 0)
+            have = l.forces.get(ut, 0)
+            if want > have:
+                add = want - have
+                l.forces[ut] = have + add
+                added[ut] = add
+        l.assets["mule"] = l.assets.get("mule", 0) + 1
+        added["mule"] = 1
+        restored.append({"lord_id": lid, "added": added})
+    if not restored:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Christian Lord on map")
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "restored": restored}
+
+
+@register("C19")  # Fitna
+def _c19_fitna(state, side, card_id, payload):
+    """C19 (Immediate): Choose 2 Taifa Lords; Service -1 left each;
+    this Levy, no Muster of/by them."""
+    from almoravid.actions import _shift_service_left
+    taifa_lords = [lid for lid, l in state.lords.items()
+                   if l.is_taifa and l.side == "muslim"
+                   and any(sm.lord_id == lid
+                           for sm in state.calendar.service_markers)]
+    if not taifa_lords:
+        return _no_op_with_note(state, card_id, side,
+                                "no Taifa Lord on Calendar")
+    targets = sorted(taifa_lords)[:2]
+    shifted = []
+    for lid in targets:
+        new_box = _shift_service_left(state, lid, boxes=1)
+        shifted.append({"lord_id": lid, "new_service_box": new_box})
+        if lid not in state.meta.muster_banned_this_levy_lord_ids:
+            state.meta.muster_banned_this_levy_lord_ids.append(lid)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "shifted": shifted}
+
+
+@register("C20")  # Al-Qadir
+def _c20_al_qadir(state, side, card_id, payload):
+    """C20 (Hold): Remove 2 Jihad from a Reconquista or Parias Taifa
+    free of Muslim Lords."""
+    eligible = []
+    for t in state.taifas.values():
+        if t.status not in ("reconquista", "parias"):
+            continue
+        if any(
+            l.side == "muslim" and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id in t.locale_ids
+            for l in state.lords.values()
+        ):
+            continue
+        for lid in t.locale_ids:
+            if state.locales[lid].jihad_markers > 0:
+                eligible.append((t.id, lid))
+    if not eligible:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Taifa free of Muslim Lords")
+    removed = 0
+    for taifa_id, lid in eligible:
+        loc = state.locales[lid]
+        take = min(loc.jihad_markers, 2 - removed)
+        loc.jihad_markers -= take
+        removed += take
+        if removed >= 2:
+            break
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "jihad_removed": removed}
+
+
+_C22_LORDS = ("al_mutawakkil", "abd_allah", "yusuf", "sir")
+
+
+@register("C22")  # Berbers
+def _c22_berbers(state, side, card_id, payload):
+    """C22: Shift Service of al-Mutawakkil/Abd Allah/Yusuf/Sir 1 box;
+    this Levy, no Muster of/by any of them."""
+    from almoravid.actions import _shift_service_left
+    eligible = [lid for lid in _C22_LORDS
+                if lid in state.lords
+                and any(sm.lord_id == lid
+                        for sm in state.calendar.service_markers)]
+    target = payload.get("lord_id") if payload.get("lord_id") in _C22_LORDS         else None
+    if target is None and eligible:
+        target = min(eligible, key=lambda lid: next(
+            sm.box for sm in state.calendar.service_markers
+            if sm.lord_id == lid))
+    new_box = None
+    if target is not None:
+        new_box = _shift_service_left(state, target, boxes=1)
+    for lid in _C22_LORDS:
+        if (lid in state.lords
+                and lid not in state.meta.muster_banned_this_levy_lord_ids):
+            state.meta.muster_banned_this_levy_lord_ids.append(lid)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "service_shifted": target, "new_service_box": new_box}
+
+
+_C23_LORDS = ("abu_bakr", "al_mustain")
+
+
+@register("C23")  # Illness of the Emir
+def _c23_illness(state, side, card_id, payload):
+    """C23: On Calendar, shift cylinder OR Service of Abu Bakr OR
+    al-Mustain by 1 box; this Levy, no Muster of/by him."""
+    from almoravid.actions import _shift_service_left
+    eligible = [lid for lid in _C23_LORDS
+                if lid in state.lords
+                and any(sm.lord_id == lid
+                        for sm in state.calendar.service_markers)]
+    target = payload.get("lord_id") if payload.get("lord_id") in _C23_LORDS         else None
+    if target is None and eligible:
+        target = eligible[0]
+    new_box = None
+    if target is not None:
+        new_box = _shift_service_left(state, target, boxes=1)
+        if target not in state.meta.muster_banned_this_levy_lord_ids:
+            state.meta.muster_banned_this_levy_lord_ids.append(target)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "service_shifted": target, "new_service_box": new_box}
+
+
+@register("C24")  # Abu Bakr ibn Umar
+def _c24_abu_bakr(state, side, card_id, payload):
+    """C24: On Calendar, shift Service of Yusuf AND Sir each 1 box
+    left; this Levy, no Muster of/by either."""
+    from almoravid.actions import _shift_service_left
+    shifted = []
+    for lid in ("yusuf", "sir"):
+        if lid not in state.lords:
+            continue
+        if not any(sm.lord_id == lid
+                   for sm in state.calendar.service_markers):
+            continue
+        new_box = _shift_service_left(state, lid, boxes=1)
+        shifted.append({"lord_id": lid, "new_service_box": new_box})
+        if lid not in state.meta.muster_banned_this_levy_lord_ids:
+            state.meta.muster_banned_this_levy_lord_ids.append(lid)
+    if not shifted:
+        return _no_op_with_note(state, card_id, side,
+                                "neither Yusuf nor Sir on Calendar")
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "shifted": shifted}
+
+
+@register("M24")  # Al-Maghawir
+def _m24_al_maghawir(state, side, card_id, payload):
+    """M24 (Immediate): Unless C19 Caballeria Villana, place Ravaged at
+    2 Unravaged Enemy Locales adjacent to Friendly Locales."""
+    from almoravid.effective import is_friendly_locale
+    from almoravid.map import neighbors_via
+    # C19 Caballeria Villana (capability) blocks: check
+    # state.decks.capabilities_in_play.
+    for cip in state.decks.capabilities_in_play:
+        if cip.card_id == "C19":
+            return _no_op_with_note(state, card_id, side,
+                                    "blocked by C19 Caballeria Villana")
+    eligible: list[str] = []
+    for lid, loc in state.locales.items():
+        if loc.ravaged != "none":
+            continue
+        if not is_friendly_locale(state, lid, "christian"):
+            continue
+        # Adjacent to a Muslim-friendly locale?
+        all_n = set()
+        for wt in ("road", "pass"):
+            all_n.update(neighbors_via(lid, wt))
+        if any(is_friendly_locale(state, n, "muslim") for n in all_n):
+            eligible.append(lid)
+    placed: list[str] = []
+    for p in eligible[:2]:
+        state.locales[p].ravaged = "green"
+        placed.append(p)
+    if not placed:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Christian Locale")
+    state.score.muslim += 0.5 * len(placed)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "ravaged": placed}
+
+
+# C21 Mozarabes — Hold, consumed during Surrender roll (auto-success).
+# Park in this_levy_events; campaign.py cmd_siege Surrender path
+# already checks Spoils etc. but we don't wire auto-success here in
+# 6j (would require a payload from the holder at the moment of the
+# Surrender roll). Stays as immediate-discard-no-op for now.
+@register("C21")  # Mozarabes
+def _c21_mozarabes(state, side, card_id, payload):
+    """C21 (Hold): Play for a Surrender roll in a Reconquista Taifa to
+    succeed automatically. Phase 6j: parks in this_levy_events for
+    consumption by a future cmd_siege Mozarabes hook."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
