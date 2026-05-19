@@ -1748,6 +1748,12 @@ def _h_cmd_battle(state, action):
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     apply_aftermath(state, result)
+    # Phase 6c: Retreat aftermath. cmd_battle has no approach context;
+    # defender's blocked-Way and attacker-must-return-to-origin are
+    # skipped, but Service-shift rolls and Withdraw/Retreat/Removal
+    # still fire.
+    from almoravid.battle import apply_retreat_aftermath
+    retreat_summary = apply_retreat_aftermath(state, result)
 
     # Battle ends the card (rule 4.4.5).
     consumed = state.meta.actions_remaining
@@ -1763,6 +1769,7 @@ def _h_cmd_battle(state, action):
         "attacker_routed": dict(atk.routed_units),
         "defender_routed": dict(dfd.routed_units),
         "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
     }
 
 
@@ -2156,6 +2163,15 @@ def _h_respond_stand_battle(state, action):
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     apply_aftermath(state, result)
+    # Phase 6c: Retreat aftermath (Service-shift + movement). Pass
+    # the approach context so attacker's must-retreat-to-origin and
+    # defender's blocked-Way constraints fire.
+    from almoravid.battle import apply_retreat_aftermath
+    retreat_summary = apply_retreat_aftermath(
+        state, result,
+        approach_from_locale=payload.get("from_locale_id"),
+        approach_way_type=payload.get("via_way_type"),
+    )
 
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining
@@ -2171,6 +2187,7 @@ def _h_respond_stand_battle(state, action):
         "attacker_routed": dict(atk.routed_units),
         "defender_routed": dict(dfd.routed_units),
         "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
     }
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,

@@ -1156,3 +1156,202 @@ def _consume_camp_attack(
             f"Camp Attack ({ca_id}) fired by {side_key}: "
             f"spoils={total_spoils}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6c: Retreat aftermath — Service-shift roll per rule 4.4.3.
+# ---------------------------------------------------------------------------
+
+
+def apply_retreat_aftermath(
+    state: GameState,
+    result: BattleResult,
+    *,
+    approach_from_locale: str | None = None,
+    approach_way_type: str | None = None,
+) -> dict[str, Any]:
+    """Rule 4.4.3 retreat_withdraw_remove + service.
+
+    For each losing-side Lord:
+      1. Try Withdraw — Friendly Stronghold at Battle Locale, capacity OK.
+         Withdrawing Lord preserves Assets and does NOT shift Service.
+      2. Else try Retreat — any adjacent Locale with no Enemy Lord and
+         no Enemy Stronghold (unless Besieged or Bypassed).
+         Defender constraint: may not Retreat along the Way the
+         Attackers used to Approach (when known).
+         Marching Attacker constraint: must Retreat to Approach origin.
+         Sallying Attackers must Withdraw — they cannot Retreat (Phase
+         5f handled via resolve_sally / apply_sally_aftermath; this
+         helper does not engage for engagement=='sally' losers).
+         Each Retreating Lord rolls 1d6:
+           1-2 -> Service shift 1 box left
+           3-4 -> Service shift 2 boxes left
+           5-6 -> Service shift 3 boxes left
+         (Vassal markers shift only under advanced rule 3.4.2 — not yet.)
+      3. Else permanent removal (3.3.1).
+
+    Returns a per-Lord summary dict suitable for the result payload.
+    """
+    from almoravid.actions import _shift_service_left
+    from almoravid.effective import (
+        is_besieged, is_bypassed, is_friendly_locale,
+    )
+    from almoravid.map import neighbors_via
+    from almoravid.rng import roll_d6
+    from almoravid.state import Cylinder
+    from almoravid.static_data import load_strongholds
+
+    summary: dict[str, Any] = {
+        "winner": result.winner,
+        "losers": [],
+    }
+    if result.winner is None:
+        # Stalemate / inconclusive — no retreat aftermath (rule silent
+        # on stalemate; we treat as no-Service-shift, no move).
+        return summary
+
+    loser_side_obj = (result.attacker if result.winner == result.defender.side
+                      else result.defender)
+    if result.engagement == "sally":
+        # Sally has its own Withdraw-back logic in apply_sally_aftermath.
+        return summary
+
+    # Battle locale = first loser Lord's cylinder.locale_id.
+    battle_locale = None
+    for lid in loser_side_obj.lord_ids:
+        l = state.lords.get(lid)
+        if l is not None and l.cylinder.kind == "locale":
+            battle_locale = l.cylinder.locale_id
+            break
+    if battle_locale is None:
+        return summary
+
+    loc = state.locales[battle_locale]
+    has_stronghold = loc.base_type != "region"
+    if has_stronghold:
+        capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+    else:
+        capacity = 0
+    already_inside = sum(
+        1 for l in state.lords.values()
+        if l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == battle_locale
+        and l.in_stronghold
+    )
+
+    # Iterate losing Lords in stable order so RNG draws are
+    # deterministic across runs.
+    for lid in sorted(loser_side_obj.lord_ids):
+        lord = state.lords.get(lid)
+        if lord is None:
+            continue
+        loser_side = lord.side
+        entry: dict[str, Any] = {"lord_id": lid, "fate": None}
+
+        # Step 1: Withdraw if possible.
+        if (has_stronghold
+                and is_friendly_locale(state, battle_locale, loser_side)
+                and already_inside < capacity):
+            lord.in_stronghold = True
+            already_inside += 1
+            entry["fate"] = "withdraw"
+            entry["into_stronghold"] = battle_locale
+            summary["losers"].append(entry)
+            continue
+
+        # Step 2: Retreat.
+        retreat_target: str | None = None
+        retreat_way: str | None = None
+        # Marching attacker constraint: must Retreat to approach origin
+        # (only when both side is the attacker AND approach context known).
+        if (loser_side == result.attacker.side
+                and approach_from_locale is not None
+                and approach_way_type is not None
+                and approach_from_locale in neighbors_via(
+                    battle_locale, approach_way_type)):
+            target = approach_from_locale
+            if _retreat_target_clear(state, target, loser_side):
+                retreat_target = target
+                retreat_way = approach_way_type
+        else:
+            # Defender (or attacker without context): pick first clear
+            # neighbor. Defender may not use the Way the attackers came
+            # along (when known).
+            for way_type in ("road", "pass"):
+                for nbr in neighbors_via(battle_locale, way_type):
+                    if (loser_side == result.defender.side
+                            and approach_from_locale == nbr
+                            and approach_way_type == way_type):
+                        continue  # blocked Way
+                    if _retreat_target_clear(state, nbr, loser_side):
+                        retreat_target = nbr
+                        retreat_way = way_type
+                        break
+                if retreat_target is not None:
+                    break
+
+        if retreat_target is not None:
+            lord.cylinder = Cylinder(kind="locale", locale_id=retreat_target)
+            lord.in_stronghold = False
+            # Service-shift roll (1-2 -> 1 box, 3-4 -> 2, 5-6 -> 3).
+            d = roll_d6(state)
+            if d <= 2:
+                shift = 1
+            elif d <= 4:
+                shift = 2
+            else:
+                shift = 3
+            new_box = _shift_service_left(state, lid, boxes=shift)
+            entry["fate"] = "retreat"
+            entry["retreat_to"] = retreat_target
+            entry["retreat_way"] = retreat_way
+            entry["service_roll"] = d
+            entry["service_shift_boxes"] = shift
+            entry["new_service_box"] = new_box
+            summary["losers"].append(entry)
+            continue
+
+        # Step 3: Permanent removal (rule 3.3.1). Cleanup_on_removal
+        # contract handles per-field cleanup; we move the Lord off the
+        # map by setting cylinder to off_left_service marker (simplest
+        # representation — full removal calls _shift_service_left to
+        # off-edge and clears forces).
+        for field_name in lord.cleanup_on_removal_fields:
+            default = getattr(type(lord).model_fields[field_name], "default", None)
+            try:
+                setattr(lord, field_name, type(getattr(lord, field_name))())
+            except Exception:
+                pass
+        _shift_service_left(state, lid, boxes=20)  # force off-left
+        entry["fate"] = "removed"
+        summary["losers"].append(entry)
+
+    return summary
+
+
+def _retreat_target_clear(
+    state: GameState, locale_id: str, retreating_side: Side,
+) -> bool:
+    """Per rule 4.4.3 retreat requires: no Enemy Lord and no Enemy
+    Stronghold (unless Besieged or Bypassed)."""
+    from almoravid.effective import (
+        is_besieged, is_bypassed, is_friendly_locale,
+    )
+    other = "muslim" if retreating_side == "christian" else "christian"
+    for l in state.lords.values():
+        if (l.side == other and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == locale_id):
+            if not (is_besieged(state, l.id) or is_bypassed(state, l.id)):
+                return False
+    loc = state.locales[locale_id]
+    if loc.base_type != "region" and not is_friendly_locale(
+            state, locale_id, retreating_side):
+        # Enemy Stronghold blocks Retreat unless Besieged/Bypassed by
+        # the retreating side.
+        if retreating_side == "christian":
+            if not (loc.siege_yellow > 0 or loc.bypass_yellow):
+                return False
+        else:
+            if not (loc.siege_green > 0 or loc.bypass_green):
+                return False
+    return True
