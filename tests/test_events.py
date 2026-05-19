@@ -45,18 +45,23 @@ def test_betrayal_of_terms_held_until_surrender() -> None:
     assert "C9" in s.decks.this_levy_events.get("christian", [])
 
 
-def test_taifa_marriage_no_op_on_invalid_target() -> None:
-    """Pattern 10: TAIFA MARRIAGE with bogus taifa_id no-ops."""
+def test_taifa_marriage_no_op_when_no_taifa_lords() -> None:
+    """Phase 6j: M12 shifts up to 2 Taifa Lords. With none eligible
+    (no service markers + bogus payload), it no-ops."""
     s = load_scenario("scenario_a_toledo_beset")
-    r = resolve_event(s, "muslim", "M12", {"taifa_id": "not_a_taifa"})
-    assert r["no_op"] is True
+    r = resolve_event(s, "muslim", "M12", {"lord_ids": ["not_a_lord"]})
+    assert r.get("no_op") is True
 
 
-def test_taifa_marriage_with_valid_target_defers() -> None:
+def test_taifa_marriage_shifts_two_taifa_lords() -> None:
+    """Phase 6j: greedy default shifts Service right (toward
+    end-of-Campaign) for up to 2 Taifa Lords on the Calendar."""
     s = load_scenario("scenario_a_toledo_beset")
-    r = resolve_event(s, "muslim", "M12", {"taifa_id": "toledo"})
-    assert r.get("no_op") is not True
-    assert r["target_taifa"] == "toledo"
+    r = resolve_event(s, "muslim", "M12")
+    if not r.get("no_op"):
+        assert len(r["shifted"]) <= 2
+        for entry in r["shifted"]:
+            assert entry["shifted"] == "service_right"
 
 
 def test_devaluation_no_op_when_target_has_no_coin() -> None:

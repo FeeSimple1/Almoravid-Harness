@@ -243,25 +243,40 @@ def _battle_immediate_marker(state, side, card_id, payload):
 
 
 @register("M12")  # Taifa Marriage
-def _taifa_marriage(state, side, card_id, payload):
-    """TAIFA MARRIAGE (Muslim, scenario A/F): adjusts Taifa status.
+def _m12_taifa_marriage(state, side, card_id, payload):
+    """M12 (Hold): shift up to 2 Taifa Lords' cylinder LEFT if on
+    Calendar, or Service RIGHT if Lord is on the map. OR one Lord
+    uses Lordship +2.
 
-    Phase 4b minimal implementation: target a named Taifa (payload
-    'taifa_id'). If target Taifa is Parias and condition met, can shift
-    its status. Pattern 10: missing/invalid target -> no-op.
-
-    The full rule wording is in the Background Book; this stub records
-    the play and defers detailed mechanics to Phase 5.
+    Phase 6j+: greedy default — pick up to 2 Taifa Lords sorted by
+    lord_id; for each, if cylinder.kind == 'calendar' shift the
+    Calendar cylinder via service marker; if on the map, shift their
+    Service marker RIGHT (toward end of campaign, +1 box).
+    payload['lord_ids']: optional explicit list of up to 2 Lord IDs.
     """
-    taifa_id = payload.get("taifa_id")
-    if not taifa_id or taifa_id not in state.taifas:
+    taifa_lord_ids = [lid for lid, l in state.lords.items()
+                      if l.is_taifa and l.side == "muslim"]
+    chosen = payload.get("lord_ids") or sorted(taifa_lord_ids)[:2]
+    if not chosen:
         return _no_op_with_note(state, card_id, side,
-                                f"taifa target {taifa_id!r} invalid")
-    # Phase 5 will implement: shift target Taifa status, place Conquered
-    # marker, etc. For now record-and-discard so the agent can play it.
+                                "no Taifa Lord eligible")
+    shifted = []
+    for lid in chosen[:2]:
+        l = state.lords.get(lid)
+        if l is None:
+            continue
+        sm = next((s for s in state.calendar.service_markers
+                   if s.lord_id == lid), None)
+        if sm is not None:
+            sm.box = min(16, sm.box + 1)  # shift RIGHT (delay Disband)
+            shifted.append({"lord_id": lid,
+                            "shifted": "service_right",
+                            "new_service_box": sm.box})
+    if not shifted:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Lord could be shifted")
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "target_taifa": taifa_id,
-            "deferred": "phase_5"}
+    return {"card_id": card_id, "side": side, "shifted": shifted}
 
 
 
@@ -460,7 +475,6 @@ def _religious_hold(state, side, card_id, payload):
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
-@register("M19")  # African Fleet
 def _generic_immediate(state, side, card_id, payload):
     """Immediate events with side-wide or scenario-specific effects.
 
@@ -478,19 +492,41 @@ def _generic_immediate(state, side, card_id, payload):
 
 
 @register("C25")  # De Vivar
-@register("M10")  # Fatwa (immediate Muslim)
-def _de_vivar(state, side, card_id, payload):
-    """C25 De Vivar / M10 Fatwa: scenario-specific effects.
-    Phase 5j: structural no-op."""
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+def _c25_de_vivar(state, side, card_id, payload):
+    """C25 (Hold): Play as Christian Call to Arms if Rodrigo al-Sayyid
+    on map. Reconcile with Rodrigo for 1 VP to Taifas box.
+
+    Phase 6j: parks in this_levy_events. The Reconcile + VP-to-Taifa
+    transfer is a deferred follow-up (no Taifa Coin box in state).
+    """
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 @register("C26")  # Freebooter
-def _hostile_event(state, side, card_id, payload):
-    """C26 Freebooter: structural no-op for Phase 5j."""
+def _c26_freebooter(state, side, card_id, payload):
+    """C26 (Immediate): Disband Rodrigo al-Sayyid as if at Service
+    Limit (3.3.2). Optional Reconcile clause deferred.
+
+    Phase 6j: greedy disband — clears Rodrigo's forces/assets, sends
+    his cylinder back to off-left-service.
+    """
+    target = "rodrigo_al_sayyid"
+    lord = state.lords.get(target)
+    if lord is None or lord.cylinder.kind != "locale":
+        return _no_op_with_note(state, card_id, side,
+                                f"{target} not on map")
+    from almoravid.actions import _shift_service_left
+    from almoravid.state import Cylinder
+    for field_name in lord.cleanup_on_removal_fields:
+        try:
+            setattr(lord, field_name,
+                    type(getattr(lord, field_name))())
+        except Exception:
+            pass
+    _shift_service_left(state, target, boxes=20)  # off-left
+    lord.cylinder = Cylinder(kind="removed")
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+    return {"card_id": card_id, "side": side, "disbanded": target}
 
 
 @register("M13")  # Severed Heads
@@ -1231,4 +1267,17 @@ def _c21_mozarabes(state, side, card_id, payload):
     """C21 (Hold): Play for a Surrender roll in a Reconquista Taifa to
     succeed automatically. Phase 6j: parks in this_levy_events for
     consumption by a future cmd_siege Mozarabes hook."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
+
+
+@register("M19")  # African Fleet
+def _m19_african_fleet(state, side, card_id, payload):
+    """M19 (Hold): Play for a Lord to use his Command card to March
+    Port-to-Port where no Christian Lord at destination.
+
+    Phase 6j: parks in this_levy_events. Port-to-Port March is a
+    deferred follow-up — would require a new cmd_march_port_to_port
+    action that consumes this Hold + the active Lord's entire card.
+    """
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")

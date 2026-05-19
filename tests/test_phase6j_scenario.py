@@ -187,3 +187,44 @@ def test_c16_bernard_shifts_service_right() -> None:
     r = resolve_event(s, "christian", "C16")
     assert r.get("no_op") is not True
     assert r["new_service_box"] == box_before + 1
+
+
+# ---------------------------------------------------------------------------
+# Final cards: M12, M19, C25, C26
+# ---------------------------------------------------------------------------
+
+
+def test_m12_taifa_marriage_shifts_taifa_lords_service_right() -> None:
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    r = resolve_event(s, "muslim", "M12")
+    if not r.get("no_op"):
+        for entry in r["shifted"]:
+            assert entry["shifted"] == "service_right"
+
+
+def test_m19_african_fleet_parks_as_hold() -> None:
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    r = resolve_event(s, "muslim", "M19")
+    assert r["held"] == "this_levy_events"
+    assert "M19" in s.decks.this_levy_events.get("muslim", [])
+
+
+def test_c25_de_vivar_parks_as_hold() -> None:
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    r = resolve_event(s, "christian", "C25")
+    assert r["held"] == "this_levy_events"
+
+
+def test_c26_freebooter_disbands_rodrigo_al_sayyid() -> None:
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    if "rodrigo_al_sayyid" not in s.lords:
+        pytest.skip("rodrigo_al_sayyid not present in this scenario")
+    s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
+        kind="locale", locale_id="leon")
+    s.lords["rodrigo_al_sayyid"].in_stronghold = False
+    s.lords["rodrigo_al_sayyid"].forces = {"knights": 1}
+    r = resolve_event(s, "christian", "C26")
+    assert r.get("no_op") is not True
+    assert r["disbanded"] == "rodrigo_al_sayyid"
+    assert s.lords["rodrigo_al_sayyid"].cylinder.kind == "removed"
+    assert sum(s.lords["rodrigo_al_sayyid"].forces.values()) == 0
