@@ -239,24 +239,79 @@ def _al_sumaisir(state, side, card_id, payload):
     return {"card_id": card_id, "side": side, "deferred": "phase_5"}
 
 
-@register("C10")  # Devaluation (Christian)
-@register("M14")  # Devaluation (Muslim)
-def _devaluation(state, side, card_id, payload):
-    """Devaluation: target side discards Coin. Pattern 10: target side
-    has no Coin -> no-op."""
-    target_side: Side = "muslim" if side == "christian" else "christian"
-    target_lords = [l for l in state.lords.values()
-                    if l.side == target_side
-                    and l.cylinder.kind == "locale"
-                    and l.assets.get("coin", 0) > 0]
-    if not target_lords:
+import math as _math
+
+
+@register("C10")  # Devaluation (Christian-played, drains Muslim Coin)
+def _c10_devaluation_christian(state, side, card_id, payload):
+    """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
+    and Lords to 2/3 of the total (rounded up).'
+
+    Phase 6d: drains all Muslim Lords' Coin down to ceil(total * 2/3).
+    Taifas-box Coin is not modeled in state (no Taifa.assets field) so
+    only Lord-held Coin is affected. Pattern 10: no Coin -> no-op.
+    """
+    muslim_lords = [l for l in state.lords.values() if l.side == "muslim"]
+    total_before = sum(l.assets.get("coin", 0) for l in muslim_lords)
+    if total_before == 0:
         return _no_op_with_note(state, card_id, side,
-                                f"{target_side} has no Coin to devalue")
-    # Phase 5 will implement actual coin removal per rule text.
+                                "no Muslim Coin to devalue")
+    target = _math.ceil(total_before * 2 / 3)
+    to_remove = total_before - target
+    removed = 0
+    for l in sorted(muslim_lords, key=lambda x: x.id):
+        if removed >= to_remove:
+            break
+        have = l.assets.get("coin", 0)
+        take = min(have, to_remove - removed)
+        if take > 0:
+            l.assets["coin"] = have - take
+            if l.assets["coin"] == 0:
+                l.assets.pop("coin", None)
+            removed += take
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
-            "target_lord_ids": [l.id for l in target_lords],
-            "deferred": "phase_5"}
+            "coin_before": total_before, "coin_after": target,
+            "removed": removed}
+
+
+@register("M14")  # Devaluation (Muslim-played, drains Christian Coin)
+def _m14_devaluation_muslim(state, side, card_id, payload):
+    """M14 Devaluation: 'Each Locale where Christian Lords have Coin,
+    they reduce their total there to half (rounded up).'
+
+    Phase 6d: per-Locale halving for Christian Coin. Pattern 10: no
+    Coin -> no-op.
+    """
+    per_locale: dict[str, list] = {}
+    for l in state.lords.values():
+        if (l.side == "christian" and l.cylinder.kind == "locale"
+                and l.assets.get("coin", 0) > 0):
+            per_locale.setdefault(l.cylinder.locale_id, []).append(l)
+    if not per_locale:
+        return _no_op_with_note(state, card_id, side,
+                                "no Christian Coin at any Locale")
+    total_removed = 0
+    for locale_id, lords in per_locale.items():
+        total_before = sum(l.assets.get("coin", 0) for l in lords)
+        target = _math.ceil(total_before / 2)
+        to_remove = total_before - target
+        removed = 0
+        for l in sorted(lords, key=lambda x: x.id):
+            if removed >= to_remove:
+                break
+            have = l.assets.get("coin", 0)
+            take = min(have, to_remove - removed)
+            if take > 0:
+                l.assets["coin"] = have - take
+                if l.assets["coin"] == 0:
+                    l.assets.pop("coin", None)
+                removed += take
+        total_removed += removed
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "locales_affected": list(per_locale),
+            "total_removed": total_removed}
 
 
 # ---------------------------------------------------------------------------
@@ -366,9 +421,6 @@ def _religious_hold(state, side, card_id, payload):
 @register("C23")  # Illness of the Emir
 @register("C24")  # Abu Bakr ibn Umar
 @register("M11")  # Al-Qadir balks at payment
-@register("M15")  # Parias Revolt
-@register("M16")  # Galician Revolt
-@register("M17")  # Leon y Castilla
 @register("M18")  # Refugees
 @register("M19")  # African Fleet
 @register("M22")  # Massacre
@@ -405,3 +457,129 @@ def _hostile_event(state, side, card_id, payload):
     """C26 Freebooter / M13 Severed Heads: structural no-op for Phase 5j."""
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+
+
+# ---------------------------------------------------------------------------
+# Phase 6d: real effects for M15, M16, M17.
+# ---------------------------------------------------------------------------
+
+
+@register("M15")  # Parias Revolt
+def _m15_parias_revolt(state, side, card_id, payload):
+    """M15 Parias Revolt: 'Hold: Play to add 1 Jihad in Parias Taifa,
+    OR 2 Jihad at Jihad there, OR 3 Jihad if Yusuf or Sir there.'
+
+    Phase 6d: target a Parias Taifa locale via payload['locale_id'].
+    Bonuses stack per card text: +1 base, +1 if there's already
+    Jihad there, +1 if Yusuf or Sir is at that locale. Pattern 10:
+    no Parias Taifa -> no-op.
+    """
+    parias_taifas = [t for t in state.taifas.values()
+                     if t.status == "parias"]
+    if not parias_taifas:
+        return _no_op_with_note(state, card_id, side,
+                                "no Parias Taifa available")
+    locale_id = payload.get("locale_id")
+    if locale_id is None:
+        # Pick first Parias Taifa's first locale deterministically.
+        locale_id = parias_taifas[0].locale_ids[0]
+    loc = state.locales.get(locale_id)
+    if loc is None:
+        return _no_op_with_note(state, card_id, side,
+                                f"unknown locale {locale_id!r}")
+    # Validate the locale's territory is a Parias Taifa.
+    in_parias = any(locale_id in t.locale_ids for t in parias_taifas)
+    if not in_parias:
+        return _no_op_with_note(state, card_id, side,
+                                f"{locale_id} not in a Parias Taifa")
+    add = 1
+    if loc.jihad_markers > 0:
+        add = 2
+    here_lord_ids = [l.id for l in state.lords.values()
+                     if l.cylinder.kind == "locale"
+                     and l.cylinder.locale_id == locale_id]
+    if "yusuf" in here_lord_ids or "sir" in here_lord_ids:
+        add = 3
+    loc.jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "locale_id": locale_id, "jihad_added": add,
+            "new_jihad_total": loc.jihad_markers}
+
+
+_M16_LORDS = ("pedro_ansurez", "garcia_ordonez", "alvar_fanez")
+_M17_LORDS = ("pedro_ansurez", "garcia_ordonez", "alvar_fanez",
+              "rodrigo_campeador")
+
+
+def _shift_one_service_left(state, lord_id: str, boxes: int = 1) -> int:
+    from almoravid.actions import _shift_service_left
+    return _shift_service_left(state, lord_id, boxes=boxes)
+
+
+@register("M16")  # Galician Revolt
+def _m16_galician_revolt(state, side, card_id, payload):
+    """M16 Galician Revolt: 'Shift Service of Ansurez, Ordonez, OR
+    Fanez by 1 box left. This Levy, no Muster of or by Alfonso.'
+
+    Phase 6d: targets one of the 3 listed Lords via payload['lord_id'].
+    Defaults to whichever has the leftmost Service marker on the
+    Calendar. Bans Alfonso from being Mustered (the 'of' clause); the
+    'by' clause (Alfonso musters others) is approximated by the same
+    ban since our muster handler is the only Muster code path.
+    """
+    eligible = [lid for lid in _M16_LORDS
+                if lid in state.lords
+                and any(sm.lord_id == lid
+                        for sm in state.calendar.service_markers)]
+    target = payload.get("lord_id")
+    if target and target not in _M16_LORDS:
+        target = None
+    if target is None and eligible:
+        # Greedy: pick the leftmost (smallest box) — biggest threat.
+        target = min(eligible, key=lambda lid: next(
+            sm.box for sm in state.calendar.service_markers
+            if sm.lord_id == lid))
+    new_box = None
+    if target is not None:
+        new_box = _shift_one_service_left(state, target, boxes=1)
+    if ("alfonso" in state.lords
+            and "alfonso" not in
+            state.meta.muster_banned_this_levy_lord_ids):
+        state.meta.muster_banned_this_levy_lord_ids.append("alfonso")
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "service_shifted": target, "new_service_box": new_box,
+            "muster_ban": ["alfonso"]}
+
+
+@register("M17")  # Leon y Castilla
+def _m17_leon_y_castilla(state, side, card_id, payload):
+    """M17 Leon y Castilla: 'Shift Service of Ansurez, Ordonez, Fanez,
+    OR Rodrigo Campeador 1 box left. This Levy, no Muster of or by them.'
+
+    Phase 6d: targets one of the 4 listed Lords; bans Muster for all
+    four for the rest of the Levy.
+    """
+    eligible = [lid for lid in _M17_LORDS
+                if lid in state.lords
+                and any(sm.lord_id == lid
+                        for sm in state.calendar.service_markers)]
+    target = payload.get("lord_id")
+    if target and target not in _M17_LORDS:
+        target = None
+    if target is None and eligible:
+        target = min(eligible, key=lambda lid: next(
+            sm.box for sm in state.calendar.service_markers
+            if sm.lord_id == lid))
+    new_box = None
+    if target is not None:
+        new_box = _shift_one_service_left(state, target, boxes=1)
+    for lid in _M17_LORDS:
+        if (lid in state.lords
+                and lid not in state.meta.muster_banned_this_levy_lord_ids):
+            state.meta.muster_banned_this_levy_lord_ids.append(lid)
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "service_shifted": target, "new_service_box": new_box,
+            "muster_ban": list(_M17_LORDS)}

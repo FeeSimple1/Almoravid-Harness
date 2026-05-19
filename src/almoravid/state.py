@@ -112,6 +112,12 @@ class Meta(StrictModel):
     plan_index_christian: int = 0
     plan_index_muslim: int = 0
 
+    # Phase 6d: per-Levy Muster ban list (cards M16 Galician Revolt /
+    # M17 Leon y Castilla mark a Lord as un-Musterable for the rest of
+    # the current Levy). Cleared in _advance_step_if_both_done at the
+    # Levy->Campaign transition.
+    muster_banned_this_levy_lord_ids: list[str] = Field(default_factory=list)
+
 
 class Cylinder(StrictModel):
     """Where a Lord's cylinder currently is.

@@ -167,6 +167,7 @@ def _advance_step_if_both_done(state: GameState) -> None:
         state.meta.active_lord_id = None
         state.decks.plan = {"christian": [], "muslim": []}
         state.meta.first_levy_done = True
+        state.meta.muster_banned_this_levy_lord_ids = []  # Phase 6d
         state.meta.active_player = ACTOR_ORDER[0]
 
 
@@ -313,6 +314,11 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.fealty is not None,
              f"{lord_id} has no Fealty — must use Call to Arms",
              code="cta_only_lord")
+    # Phase 6d: M16/M17 ban Muster of/by specified Lord for the Levy.
+    _require(lord_id not in state.meta.muster_banned_this_levy_lord_ids,
+             f"{lord_id} cannot Muster this Levy "
+             f"(M16/M17 Revolt ban active)",
+             code="muster_banned")
     _require(lord.cylinder.kind == "calendar",
              f"{lord_id} is not on the Calendar (cylinder.kind={lord.cylinder.kind})",
              code="not_on_calendar")

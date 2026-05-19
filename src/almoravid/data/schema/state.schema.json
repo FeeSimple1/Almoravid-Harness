@@ -804,6 +804,13 @@
           "default": 0,
           "title": "Plan Index Muslim",
           "type": "integer"
+        },
+        "muster_banned_this_levy_lord_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Muster Banned This Levy Lord Ids",
+          "type": "array"
         }
       },
       "required": [

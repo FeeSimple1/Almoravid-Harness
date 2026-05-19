@@ -83,11 +83,21 @@ def test_devaluation_no_op_when_target_has_no_coin() -> None:
 
 
 def test_devaluation_with_target_coin_defers() -> None:
+    """C10 Devaluation: now wired in Phase 6d to actually drain Muslim
+    Coin to 2/3 of total (rounded up)."""
+    import math
     s = load_scenario("scenario_a_toledo_beset")
-    # Muslim Lords have coin in this scenario
+    total_before = sum(l.assets.get("coin", 0) for l in s.lords.values()
+                       if l.side == "muslim")
+    assert total_before > 0
     r = resolve_event(s, "christian", "C10")
     assert r.get("no_op") is not True
-    assert r["target_lord_ids"]  # non-empty
+    expected = math.ceil(total_before * 2 / 3)
+    assert r["coin_after"] == expected
+    assert r["coin_before"] == total_before
+    actual_after = sum(l.assets.get("coin", 0) for l in s.lords.values()
+                       if l.side == "muslim")
+    assert actual_after == expected
 
 
 def test_unregistered_card_raises_event_not_resolvable() -> None:
