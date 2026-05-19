@@ -26,6 +26,15 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Return the list of currently-legal action dicts."""
     moves: list[dict[str, Any]] = []
 
+    # Phase 6b: when a march_arrival_response decision is pending, the
+    # responder owes one of Avoid Battle / Withdraw / Stand & Fight
+    # before any other action can proceed. Pattern 11: only the
+    # waiting_on side may act.
+    if (state.pending is not None
+            and state.pending.kind == "march_arrival_response"):
+        moves.extend(_march_response_moves(state))
+        return moves
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.
@@ -357,5 +366,79 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
     if cstep == "end_campaign":
         out.append({"type": "end_campaign"})
         return out
+
+    return out
+
+
+def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
+    """Phase 6b: enumerate Avoid / Withdraw / Stand options for the
+    defender owing a march_arrival_response decision.
+
+    Pattern 9 mirror: every option pre-validates the same conditions the
+    handler checks (defensive try/except per CROSS_PROJECT_LESSONS §1).
+    Bias: omit a move rather than offer a phantom-legal one.
+    """
+    out: list[dict[str, Any]] = []
+    pd = state.pending
+    if pd is None:
+        return out
+    payload = pd.payload
+    side = pd.waiting_on
+    locale_id = payload.get("locale_id")
+    from_locale = payload.get("from_locale_id")
+    active_side = payload.get("active_side")
+    if not locale_id or not active_side:
+        return out
+
+    # Stand & Fight is always available (Battle resolution is the
+    # default outcome if nothing else fires).
+    out.append({"type": "respond_stand_battle", "side": side})
+
+    # Withdraw: friendly stronghold present, capacity check.
+    try:
+        from almoravid.effective import is_friendly_locale
+        from almoravid.static_data import load_strongholds
+        loc = state.locales.get(locale_id)
+        if (loc is not None and loc.base_type != "region"
+                and is_friendly_locale(state, locale_id, side)):
+            capacity = (load_strongholds()["strongholds"][loc.base_type]
+                        ["capacity"])
+            already_inside = sum(
+                1 for l in state.lords.values()
+                if l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == locale_id
+                and l.in_stronghold
+            )
+            incoming = len(payload.get("defender_lord_ids", []))
+            if already_inside + incoming <= capacity:
+                out.append({"type": "respond_withdraw", "side": side})
+    except (ImportError, KeyError, AttributeError, FileNotFoundError):
+        pass
+
+    # Avoid Battle: enumerate adjacent locales (not from_locale, no
+    # unbesieged active-side Lord present).
+    try:
+        from almoravid.effective import is_besieged
+        from almoravid.map import neighbors_via
+        for way_type in ("road", "pass"):
+            for nbr in neighbors_via(locale_id, way_type):
+                if nbr == from_locale:
+                    continue
+                blocked = False
+                for l in state.lords.values():
+                    if (l.side == active_side
+                            and l.cylinder.kind == "locale"
+                            and l.cylinder.locale_id == nbr
+                            and not is_besieged(state, l.id)):
+                        blocked = True
+                        break
+                if blocked:
+                    continue
+                out.append({
+                    "type": "respond_avoid_battle", "side": side,
+                    "target_locale_id": nbr, "way_type": way_type,
+                })
+    except (ImportError, KeyError, AttributeError, FileNotFoundError):
+        pass
 
     return out

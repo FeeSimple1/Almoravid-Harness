@@ -1027,9 +1027,19 @@ def _h_cmd_march(state, action):
     _record(state, action,
             f"{side} {lord_id} marches {from_loc} -> {target} via {way_type}"
             f" ({'Laden, 2 actions' if laden else '1 action'})")
-    return {"from": from_loc, "to": target, "way_type": way_type,
+
+    # Phase 6b — rule 4.3.4 Approach trigger. If an Unbesieged/Unbypassed
+    # enemy Lord (not inside a Stronghold) is at `target`, the defender
+    # owes a response: Avoid Battle, Withdraw, or Stand & Fight.
+    trigger = _check_approach_trigger(
+        state, target, side, from_loc, way_type, lord_id,
+    )
+    base = {"from": from_loc, "to": target, "way_type": way_type,
             "laden": laden, "cost": cost,
             "actions_remaining": state.meta.actions_remaining}
+    if trigger is not None:
+        base["pending"] = trigger
+    return base
 
 
 
@@ -1934,6 +1944,234 @@ def _h_cmd_sally(state, action):
             "actions_consumed": consumed}
 
 
+
+
+# ---------------------------------------------------------------------------
+# Phase 6b: rule 4.3.4 Approach / Avoid / Withdraw / Stand-and-Fight.
+# ---------------------------------------------------------------------------
+
+
+def _check_approach_trigger(
+    state, locale_id: str, active_side: Side,
+    from_locale_id: str, way_type: str, active_lord_id: str,
+) -> dict[str, Any] | None:
+    """If an Unbesieged/Unbypassed enemy Lord is at `locale_id` not
+    inside a Stronghold, set a PendingDecision and return the payload.
+    Otherwise return None.
+
+    Pattern 11 (active-player desync): swaps active_player to the
+    defender side so the response handler can be invoked.
+    """
+    from almoravid.effective import is_besieged, is_bypassed
+    from almoravid.state import PendingDecision
+    other = _other(active_side)
+    defenders = [
+        l.id for l in state.lords.values()
+        if l.side == other
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id
+        and not l.in_stronghold
+        and not is_besieged(state, l.id)
+        and not is_bypassed(state, l.id)
+    ]
+    if not defenders:
+        return None
+    payload = {
+        "locale_id": locale_id,
+        "from_locale_id": from_locale_id,
+        "via_way_type": way_type,
+        "active_lord_id": active_lord_id,
+        "active_side": active_side,
+        "defender_lord_ids": defenders,
+    }
+    state.pending = PendingDecision(
+        kind="march_arrival_response",
+        waiting_on=other,
+        payload=payload,
+    )
+    # Pattern 11: waiting_on == active_player while pending is set.
+    state.meta.active_player = other
+    return dict(payload)
+
+
+def _clear_approach_pending(state, original_active: Side) -> None:
+    """Clear the PendingDecision and restore active_player to the
+    marching side so their card continues."""
+    state.pending = None
+    state.meta.active_player = original_active
+
+
+def _require_pending(state, kind: str, side: Side):
+    pd = state.pending
+    _require(pd is not None and pd.kind == kind,
+             f"no pending {kind} decision", code="no_pending")
+    _require(pd.waiting_on == side,
+             f"pending decision waiting on {pd.waiting_on}, not {side}",
+             code="not_responder")
+    return pd
+
+
+def _h_respond_avoid_battle(state, action):
+    """4.3.4 Avoid Battle. Defender Lords move together to an adjacent
+    Locale that:
+      - is not the Locale the Active side came from (way_not_used_by_enemy_approach)
+      - has no Unbesieged enemy Lord
+      - is reachable via the requested way_type
+
+    Args:
+      side: defender side
+      target_locale_id: where to move to
+      way_type: 'road' | 'pass'
+    """
+    from almoravid.effective import is_besieged
+    from almoravid.map import neighbors_via
+    from almoravid.state import Cylinder
+
+    side = _require_side(action)
+    pd = _require_pending(state, "march_arrival_response", side)
+    payload = pd.payload
+    locale_id = payload["locale_id"]
+    from_locale = payload["from_locale_id"]
+    active_side = payload["active_side"]
+
+    target = action.get("target_locale_id")
+    way_type = action.get("way_type", "road")
+    _require(isinstance(target, str), "target_locale_id required",
+             code="bad_arg")
+    _require(way_type in ("road", "pass"),
+             "way_type must be road or pass", code="bad_arg")
+    _require(target != from_locale,
+             "Avoid Battle may not use the Way the Attacker Approached on",
+             code="avoid_blocked_by_approach_way")
+    nbrs = neighbors_via(locale_id, way_type)
+    _require(target in nbrs,
+             f"{target} not reachable from {locale_id} via {way_type}",
+             code="not_adjacent")
+    # Destination must not have an Unbesieged enemy Lord (of the
+    # defender — i.e., the marching side).
+    for l in state.lords.values():
+        if (l.side == active_side and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == target
+                and not is_besieged(state, l.id)):
+            raise IllegalAction(
+                f"Cannot Avoid into {target} — Unbesieged "
+                f"{active_side} Lord {l.id} present",
+                code="destination_has_enemy",
+            )
+    # Move all defender Lords. Avoid Battle does NOT mark
+    # moved_fought (SoP withdraw_definition / 4.3.4 — defender
+    # avoidance is reactive, not an action).
+    for lid in payload["defender_lord_ids"]:
+        if lid in state.lords:
+            l = state.lords[lid]
+            l.cylinder = Cylinder(kind="locale", locale_id=target)
+            l.in_stronghold = False
+    _record(state, action,
+            f"{side} avoids Battle: {payload['defender_lord_ids']} "
+            f"move {locale_id} -> {target} via {way_type}")
+    _clear_approach_pending(state, active_side)
+    return {"avoided_to": target, "lord_ids": payload["defender_lord_ids"]}
+
+
+def _h_respond_withdraw(state, action):
+    """4.3.4 Withdraw. Defender Lords enter Friendly Stronghold at the
+    Approach Locale, up to Siege Capacity (1.3.1). Does NOT mark
+    moved_fought (SoP withdraw_definition).
+    """
+    from almoravid.effective import is_friendly_locale
+    from almoravid.static_data import load_strongholds
+
+    side = _require_side(action)
+    pd = _require_pending(state, "march_arrival_response", side)
+    payload = pd.payload
+    locale_id = payload["locale_id"]
+    active_side = payload["active_side"]
+
+    loc = state.locales[locale_id]
+    _require(loc.base_type != "region",
+             f"{locale_id} has no Stronghold — Withdraw impossible",
+             code="no_stronghold")
+    _require(is_friendly_locale(state, locale_id, side),
+             f"{locale_id} not Friendly to {side} — Withdraw impossible",
+             code="stronghold_not_friendly")
+    capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+    # Count Lords already inside the Stronghold + the withdrawing group.
+    already_inside = sum(
+        1 for l in state.lords.values()
+        if l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id
+        and l.in_stronghold
+    )
+    incoming = len(payload["defender_lord_ids"])
+    _require(already_inside + incoming <= capacity,
+             f"Siege Capacity {capacity} at {locale_id} would be "
+             f"exceeded ({already_inside} inside + {incoming} withdrawing)",
+             code="exceeds_capacity")
+    for lid in payload["defender_lord_ids"]:
+        if lid in state.lords:
+            state.lords[lid].in_stronghold = True
+    _record(state, action,
+            f"{side} withdraws inside {locale_id} Stronghold "
+            f"({payload['defender_lord_ids']})")
+    _clear_approach_pending(state, active_side)
+    return {"withdrew_to_stronghold": locale_id,
+            "lord_ids": payload["defender_lord_ids"]}
+
+
+def _h_respond_stand_battle(state, action):
+    """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
+    on both sides at the Approach Locale. Battle ends the active side's
+    card (rule 4.4.5)."""
+    from almoravid.battle import (
+        apply_aftermath,
+        battleside_for_lords,
+        commit_forces_after_battle,
+        resolve_battle,
+    )
+
+    side = _require_side(action)
+    pd = _require_pending(state, "march_arrival_response", side)
+    payload = pd.payload
+    locale_id = payload["locale_id"]
+    active_side = payload["active_side"]
+    other = _other(active_side)
+
+    attacker_lord_ids = [
+        l.id for l in state.lords.values()
+        if l.side == active_side
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id
+        and not l.in_stronghold
+    ]
+    defender_lord_ids = list(payload["defender_lord_ids"])
+    _require(attacker_lord_ids, "no attacker Lords at Battle locale",
+             code="no_attacker")
+    _require(defender_lord_ids, "no defender Lords at Battle locale",
+             code="no_defender")
+
+    atk = battleside_for_lords(state, attacker_lord_ids, active_side,
+                               "attacker")
+    dfd = battleside_for_lords(state, defender_lord_ids, other, "defender")
+    result = resolve_battle(state, atk, dfd)
+    commit_forces_after_battle(state, atk)
+    commit_forces_after_battle(state, dfd)
+    apply_aftermath(state, result)
+
+    # End the active side's card (rule 4.4.5).
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _clear_approach_pending(state, active_side)
+
+    _record(state, action,
+            f"{side} stands; Battle at {locale_id}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}")
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+    }
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -1951,4 +2189,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_storm": _h_cmd_storm,
     "cmd_sally": _h_cmd_sally,
     "end_campaign": _h_end_campaign,
+    "respond_avoid_battle": _h_respond_avoid_battle,
+    "respond_withdraw": _h_respond_withdraw,
+    "respond_stand_battle": _h_respond_stand_battle,
 }
