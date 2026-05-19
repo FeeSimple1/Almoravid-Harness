@@ -80,6 +80,32 @@ class StrikeRow:
     card_ids: list[str] = field(default_factory=list)
 
 
+ArrayPosition = Literal["front_center", "front_left", "front_right",
+                        "reserve", "routed"]
+
+
+@dataclass
+class LordPosition:
+    """Per-Lord Array slot for multi-Lord Battles (Phase 6e).
+
+    Tracks the Lord's forces, capabilities, and position separately
+    so Pair-based Strike resolution and Reposition (rout-removal +
+    Reserve advance) can operate per-Lord rather than via pooled
+    forces. The pooled BattleSide.forces remains the source of truth
+    for single-Lord Battles and as the aggregate view used by
+    legacy code paths.
+    """
+
+    lord_id: str
+    position: ArrayPosition
+    forces: dict[UnitType, int]
+    capabilities_in_play: list[str] = field(default_factory=list)
+    routed_units: dict[UnitType, int] = field(default_factory=dict)
+
+    def has_unrouted(self) -> bool:
+        return any(v > 0 for v in self.forces.values())
+
+
 @dataclass
 class BattleSide:
     """One side of an engagement.
@@ -90,6 +116,14 @@ class BattleSide:
     resolve_storm; outside Storm context it's empty. When taking a
     Hit during Storm, the protection-roll helper drains garrison_forces
     before forces.
+
+    Phase 6e: `array` is the per-Lord position tracking for multi-Lord
+    Battles (rule 4.4.1). Single-Lord BattleSides leave it as None
+    (or as a one-entry list with position='front_center') and use the
+    legacy pooled resolution path. `conceded` is set when the side
+    declares Concede the Field at the start of a Round (rule 4.4.2);
+    that side's Strikes are halved for the Round and the Battle ends
+    after the Round.
     """
 
     side: Side
@@ -100,12 +134,12 @@ class BattleSide:
     routed_units: dict[UnitType, int] = field(default_factory=dict)
     # Garrison units split out for Storm absorption-order (Bug M).
     garrison_forces: dict[UnitType, int] = field(default_factory=dict)
-    # Bug T (Pattern 9) — M7 Spear Wall is per-marker on TWO Muslim
-    # Lords; for now we cap the total +1 Armor boosts at the sum of
-    # the two largest Muslim contributors' MaA + AfricanFoot counts.
-    # Initialized in resolve_battle when M7 is held; decremented on
-    # each consultation in _resolve_protection_roll.
+    # Bug T (Pattern 9) — M7 Spear Wall cap.
     m7_boosts_remaining: int = 0
+    # Phase 6e: per-Lord Array slots. None for single-Lord (legacy).
+    array: list[LordPosition] | None = None
+    # Phase 6e: Concede flag set this Round.
+    conceded: bool = False
 
     def has_unrouted(self) -> bool:
         return any(v > 0 for v in self.forces.values()) or any(
@@ -518,6 +552,13 @@ def _resolve_step(
             raw += float(eligible)
             by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
+    # Phase 6e: Concede halves the Conceding side's Strikes this Round
+    # (rule 4.4.2 concede_check + pursuit_marker — "halve first, then
+    # round up by step").
+    if actor.conceded:
+        raw = raw / 2.0
+        by_kind = {k: v / 2.0 for k, v in by_kind.items()}
+
     rounded = math.ceil(raw)
 
     # Bug E (Pattern 9): Storm 6-Melee cap per Lord per Round.
@@ -637,6 +678,10 @@ def resolve_battle(
     _consume_camp_attack(state, attacker, defender, result)
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
+        # Phase 6e Reposition (Round 2+ only — rule 4.4.2 skipped_round_1).
+        if round_idx > 1:
+            _reposition_array(attacker)
+            _reposition_array(defender)
         for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
             step_res = _resolve_step(state, step_id, actor_role, step_type,
                                       unit_class, attacker, defender,
@@ -646,13 +691,26 @@ def resolve_battle(
                 break
         result.rounds.append(rnd)
         # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills).
-        # Card text: "After Round 1, discard" (C8); M7 effect lasts one
-        # Round chosen by Muslim — greedy choice = Round 1.
         if round_idx == 1:
             _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        # Phase 6e: if either side Conceded this Round, end Battle now
+        # (rule 4.4.2 new_round_check end_battle_when).
+        if attacker.conceded or defender.conceded:
+            result.notes.append(
+                f"Round {round_idx} ended with Concede; Battle ends"
+            )
+            break
         if _battle_over(attacker, defender):
             break
-    if attacker.has_unrouted() and not defender.has_unrouted():
+        # Reset per-Round Concede flags — Concede is declared per-Round.
+        attacker.conceded = False
+        defender.conceded = False
+    # Phase 6e: Concede determines winner if both sides still have units.
+    if attacker.conceded and not defender.conceded:
+        result.winner = defender.side
+    elif defender.conceded and not attacker.conceded:
+        result.winner = attacker.side
+    elif attacker.has_unrouted() and not defender.has_unrouted():
         result.winner = attacker.side
     elif defender.has_unrouted() and not attacker.has_unrouted():
         result.winner = defender.side
@@ -738,17 +796,24 @@ def battleside_for_lord(
 
 def battleside_for_lords(
     state: GameState, lord_ids: list[str], side: Side, role: Role,
+    *,
+    active_lord_id: str | None = None,
 ) -> BattleSide:
-    """Aggregate multiple Lords into one BattleSide.
+    """Aggregate multiple Lords into one BattleSide and (Phase 6e)
+    populate the per-Lord `array` when multi-Lord.
 
-    Deferred-fix: lifts the Phase 5e single-Lord block. Forces are summed,
-    capabilities are concatenated, and lord_ids is preserved for the
-    aftermath distribution step.
+    Rule 4.4.1 attacker_arrays:
+      - Active Lord must occupy Front center.
+      - Up to one other Lord each in Front left and Front right.
+      - All other Attacker Lords go to Reserve.
+    Defender placement mirrors the attacker's populated Front
+    positions: one Defending Lord directly opposite each Attacking
+    Front Lord, beginning center, then left and/or right, as able.
+    Remainder to Reserve.
 
-    Note: per-Lord position-tracking (Front center/left/right, Reserve,
-    Flanking) is NOT modeled here — losses come back as a single pool and
-    get distributed by commit_forces_after_battle proportionally. Full
-    Array mechanics with Flanking and Concede are a future Phase 6 work.
+    For single-Lord BattleSides the pooled `forces` dict remains the
+    sole source of truth and `array` stays None — preserving Phase
+    5e/Phase 6c behavior verbatim.
     """
     forces: dict[UnitType, int] = {}
     caps: list[str] = []
@@ -757,10 +822,35 @@ def battleside_for_lords(
         for ut, n in l.forces.items():
             forces[ut] = forces.get(ut, 0) + n
         caps.extend(l.capabilities)
-    return BattleSide(
+
+    side_obj = BattleSide(
         side=side, role=role, lord_ids=list(lord_ids),
         forces=forces, capabilities_in_play=caps,
     )
+
+    # Phase 6e: populate per-Lord Array for multi-Lord Battles.
+    if len(lord_ids) > 1:
+        array: list[LordPosition] = []
+        positions_order = ["front_center", "front_left", "front_right"]
+        # Active Lord (or the first lord_id) occupies Front center.
+        center_lid = active_lord_id if (active_lord_id in lord_ids)             else lord_ids[0]
+        others = [lid for lid in lord_ids if lid != center_lid]
+        slots = [(center_lid, "front_center")]
+        for i, lid in enumerate(others):
+            if i < 2:
+                slots.append((lid, positions_order[i + 1]))
+            else:
+                slots.append((lid, "reserve"))
+        for lid, pos in slots:
+            l = state.lords[lid]
+            array.append(LordPosition(
+                lord_id=lid, position=pos,
+                forces=dict(l.forces),
+                capabilities_in_play=list(l.capabilities),
+            ))
+        side_obj.array = array
+
+    return side_obj
 
 
 def commit_forces_after_battle(state: GameState, side: BattleSide) -> None:
@@ -1423,3 +1513,86 @@ def _retreat_target_clear(
             if not (loc.siege_green > 0 or loc.bypass_green):
                 return False
     return True
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 6e: Concede + Reposition + Flanking hooks.
+# ---------------------------------------------------------------------------
+
+
+def declare_concede(result: BattleResult, conceder_side: Side) -> None:
+    """Rule 4.4.2 concede_check: declared at start of a Round, before
+    Reposition / Strike. Conceding side loses end-of-Round but Strikes
+    halved this Round; Enemy gains Pursuit advantage (modeled by the
+    halving — Pursuit marker semantics).
+
+    Caller must invoke before _resolve_step is run for any substep
+    of that Round.
+    """
+    if result.attacker.side == conceder_side:
+        result.attacker.conceded = True
+    elif result.defender.side == conceder_side:
+        result.defender.conceded = True
+    result.notes.append(
+        f"Concede declared by {conceder_side}: Strikes halved this Round"
+    )
+
+
+def _reposition_array(side: BattleSide) -> None:
+    """Rule 4.4.2 reposition (Round 2+):
+      1. rout_removal: Lord whose forces are empty -> position='routed'.
+      2. advance: one Reserve Lord into each empty Front position.
+      3. center: if Front center still empty after Advance, mandatory
+         slide from Front left or Front right into center.
+    No-op when array is None.
+    """
+    if side.array is None:
+        return
+    # Step 1: rout removal.
+    for lp in side.array:
+        if lp.position not in ("reserve", "routed") and not lp.has_unrouted():
+            lp.position = "routed"
+    # Step 2: advance Reserves into empty Front positions (one-for-one).
+    front_slots = ("front_center", "front_left", "front_right")
+    filled = {lp.position for lp in side.array if lp.position in front_slots}
+    empties = [s for s in front_slots if s not in filled]
+    reserves = [lp for lp in side.array if lp.position == "reserve"
+                and lp.has_unrouted()]
+    for slot, lp in zip(empties, reserves):
+        lp.position = slot
+    # Step 3: center-fill (mandatory slide from left/right if center empty).
+    has_center = any(lp.position == "front_center" for lp in side.array)
+    if not has_center:
+        for cand_pos in ("front_left", "front_right"):
+            cand = next((lp for lp in side.array
+                         if lp.position == cand_pos and lp.has_unrouted()),
+                        None)
+            if cand is not None:
+                cand.position = "front_center"
+                break
+
+
+def _flanking_contribution(side: BattleSide, opposite: BattleSide) -> int:
+    """Phase 6e structural hook for Flanking.
+
+    Returns the count of `side`'s Front Lords whose directly-opposed
+    Front position on `opposite` is empty (or whose Lord has Routed).
+    Those Lords' Strikes become Flanking contributions per rule 4.4.2.
+
+    Hook only — the existing pooled Strike resolution already counts
+    all Front + Reserve forces, so Flanking does not change Hit totals
+    in the current single-pool model. Phase 6f pair-resolution will
+    use this to route Hits between target groups correctly.
+    """
+    if side.array is None or opposite.array is None:
+        return 0
+    opp_filled = {lp.position for lp in opposite.array
+                  if lp.position in ("front_center", "front_left",
+                                     "front_right")
+                  and lp.has_unrouted()}
+    count = 0
+    for lp in side.array:
+        if lp.position in ("front_center", "front_left", "front_right")                 and lp.has_unrouted()                 and lp.position not in opp_filled:
+            count += 1
+    return count
