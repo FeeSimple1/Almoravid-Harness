@@ -279,6 +279,7 @@ def _resolve_protection_roll(
     *,
     context: Literal["battle", "storm"] = "battle",
     striker_selects: bool = False,
+    striker_unit_class: UnitClass | None = None,
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -371,6 +372,18 @@ def _resolve_protection_roll(
     canceled = False
     if ptype == "armored":
         lo, hi = unit["protection"]["range"]
+        # M7 Spear Wall (Phase 6a) — Muslim defenders' Armored Foot
+        # (Men-at-Arms, African Foot) get Armor +1 vs Christian Horse
+        # Melee in Battle (not Storm, not vs Missiles, not vs Foot
+        # strikers). Applied while M7 sits in this_levy_events; the
+        # Battle round loop discards it after Round 1.
+        if (target_side.side == "muslim"
+                and "M7" in state.decks.this_levy_events.get("muslim", [])
+                and chosen in ("men_at_arms", "african_foot")
+                and striker_unit_class == "horse"
+                and striker_kind == "melee"
+                and context == "battle"):
+            hi = hi + 1
         if lo <= rng <= hi:
             canceled = True
     elif ptype == "unarmored":
@@ -410,6 +423,7 @@ def _resolve_step(
     context: Literal["battle", "storm"] = "battle",
     walls_range: tuple[int, int] | None = None,
     siege_markers: int = 0,
+    round_index: int = 0,
 ) -> StepResolution:
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
@@ -448,6 +462,27 @@ def _resolve_step(
                              "slingers", "javelins"):
                         share = bonus * by_kind[k] / current_missile_total
                         by_kind[k] = by_kind[k] + share
+
+    # C8 Cantador (Phase 6a) — Christian-side Round-1 Melee Strike +1
+    # per Knight/Sergeant, up to 4 units total. Card text: "Round 1,
+    # up to 4 of his Knights AND Sergeants Melee Strike +1." Knights
+    # x2 -> 3 Hits each (effective +1 on each unit's Strike); Sergeants
+    # x1 -> 2 Hits each. We add `eligible_units` full Hits to raw and
+    # route them to by_kind["melee"]. After Round 1, the Battle/Storm
+    # loop discards C8 from this_levy_events.
+    if (step_type == "melee"
+            and round_index == 1
+            and actor.side == "christian"
+            and "C8" in state.decks.this_levy_events.get("christian", [])):
+        eligible = 0
+        for r in rows:
+            if r.kind == "melee" and r.unit_type in ("knights", "sergeants"):
+                if _unit_class(r.unit_type) == unit_class:
+                    eligible += r.count
+        eligible = min(4, eligible)
+        if eligible > 0:
+            raw += float(eligible)
+            by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
     rounded = math.ceil(raw)
 
@@ -521,6 +556,7 @@ def _resolve_step(
                 state, target, protroll_kind,
                 context=context,
                 striker_selects=striker_selects_target,
+                striker_unit_class=unit_class,
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
@@ -559,15 +595,24 @@ def resolve_battle(
         attacker=attacker,
         defender=defender,
     )
+    # Camp Attack (C2/M2) consumed at Battle start (before Round 1).
+    # C7 Baggage Parapet on the Christian side cancels Muslim M2.
+    _consume_camp_attack(state, attacker, defender, result)
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
         for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
             step_res = _resolve_step(state, step_id, actor_role, step_type,
-                                      unit_class, attacker, defender)
+                                      unit_class, attacker, defender,
+                                      round_index=round_idx)
             rnd.steps.append(step_res)
             if _battle_over(attacker, defender):
                 break
         result.rounds.append(rnd)
+        # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills).
+        # Card text: "After Round 1, discard" (C8); M7 effect lasts one
+        # Round chosen by Muslim — greedy choice = Round 1.
+        if round_idx == 1:
+            _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
         if _battle_over(attacker, defender):
             break
     if attacker.has_unrouted() and not defender.has_unrouted():
@@ -911,11 +956,16 @@ def resolve_storm(
                 attacker, defender, context="storm",
                 walls_range=walls_range,
                 siege_markers=siegeworks_count,
+                round_index=round_idx,
             )
             rnd.steps.append(step_res)
             if _battle_over(attacker, defender):
                 break
         result.rounds.append(rnd)
+        # C8 Cantador also works in Storm per card text — discard after
+        # Round 1. M7 / Hills do NOT apply in Storm.
+        if round_idx == 1:
+            _discard_round1_events(state, ["C8"])
         if _battle_over(attacker, defender):
             break
     # Rule 4.5.2: 'Rounds completed >= Siege markers there (Attacker loses)'
@@ -984,3 +1034,125 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
         f"Sally raid: {sallying_side} withdrew, siege at {locale_id} "
         f"reduced to 1"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6a helpers: combat-event discards + Camp Attack consumption.
+# ---------------------------------------------------------------------------
+
+
+def _discard_round1_events(state: GameState, card_ids: list[str]) -> None:
+    """Move one-Round Hold events out of this_levy_events to discard.
+
+    Card text places C8 (Cantador) and M7 (Spear Wall) on a single
+    Round; per rule 4.4.5 they go to discard at the end of that Round
+    rather than waiting for Battle aftermath. Hills (C1/M1) also discard
+    here so they don't carry over to a subsequent Battle in the same
+    Levy — they're a single-engagement effect per card text.
+    """
+    for side_key in list(state.decks.this_levy_events.keys()):
+        bucket = state.decks.this_levy_events.get(side_key, [])
+        for cid in card_ids:
+            while cid in bucket:
+                bucket.remove(cid)
+                state.decks.discard.append(cid)
+        if not bucket:
+            state.decks.this_levy_events.pop(side_key, None)
+
+
+def _consume_camp_attack(
+    state: GameState,
+    attacker: BattleSide,
+    defender: BattleSide,
+    result: BattleResult,
+) -> None:
+    """Consume Camp Attack (C2/M2) at the outset of Battle.
+
+    Rule (card-text fidelity, Pattern 7):
+      * Each side may have played its own Camp Attack into
+        this_campaign_events during prior Plan/Activation; both fire
+        at Battle start.
+      * C7 Baggage Parapet (in this_levy_events on the Christian side)
+        CANCELS Muslim Camp Attack (M2) only. C7 does NOT cancel
+        Christian Camp Attack (C2). C2 is never cancelled.
+      * Effect: take 2 Assets from each Enemy Lord as Spoils,
+        remove 2 more from each. Assets are transferred to the
+        friendly side; Spoils distribution among friendly Lords is
+        a Phase 6 follow-up (full Spoils mechanics couple with
+        Retreat/Aftermath in Phase 6c).
+      * Camp Attack does NOT apply in Storm — resolve_storm does not
+        call this helper.
+    """
+    for side_key in ("christian", "muslim"):
+        ca_id = "C2" if side_key == "christian" else "M2"
+        camp_bucket = state.decks.this_campaign_events.get(side_key, [])
+        if ca_id not in camp_bucket:
+            continue
+        # Check for Baggage Parapet cancellation (Muslim CA only).
+        cancelled = False
+        if side_key == "muslim":
+            christian_hold = state.decks.this_levy_events.get("christian", [])
+            if "C7" in christian_hold:
+                cancelled = True
+                christian_hold.remove("C7")
+                state.decks.discard.append("C7")
+                if not christian_hold:
+                    state.decks.this_levy_events.pop("christian", None)
+                result.notes.append(
+                    "Camp Attack (M2) cancelled by Baggage Parapet (C7)"
+                )
+        # Discard Camp Attack regardless (it triggered or was cancelled).
+        camp_bucket.remove(ca_id)
+        state.decks.discard.append(ca_id)
+        if not camp_bucket:
+            state.decks.this_campaign_events.pop(side_key, None)
+        if cancelled:
+            continue
+        # Apply the effect: transfer up to 2 Assets per Enemy Lord as
+        # Spoils to the friendly side, then remove 2 more per Enemy
+        # Lord. We drain in a deterministic preference order so the
+        # behavior is reproducible under self-play.
+        friendly = attacker if attacker.side == side_key else defender
+        enemy = defender if friendly is attacker else attacker
+        ASSET_DRAIN_ORDER = ("coin", "loot", "prov", "cart", "mule")
+        total_spoils: dict[str, int] = {}
+        for elid in enemy.lord_ids:
+            elord = state.lords.get(elid)
+            if elord is None:
+                continue
+            # Phase 1: take 2 as Spoils.
+            taken = 0
+            for atype in ASSET_DRAIN_ORDER:
+                if taken >= 2:
+                    break
+                have = elord.assets.get(atype, 0)
+                take = min(have, 2 - taken)
+                if take > 0:
+                    elord.assets[atype] = have - take
+                    if elord.assets[atype] == 0:
+                        elord.assets.pop(atype, None)
+                    total_spoils[atype] = total_spoils.get(atype, 0) + take
+                    taken += take
+            # Phase 2: remove 2 more.
+            removed = 0
+            for atype in ASSET_DRAIN_ORDER:
+                if removed >= 2:
+                    break
+                have = elord.assets.get(atype, 0)
+                take = min(have, 2 - removed)
+                if take > 0:
+                    elord.assets[atype] = have - take
+                    if elord.assets[atype] == 0:
+                        elord.assets.pop(atype, None)
+                    removed += take
+        # Distribute Spoils to the first friendly Lord (simplification —
+        # full per-Lord Spoils share-out lands with Phase 6c Aftermath).
+        if total_spoils and friendly.lord_ids:
+            recipient = state.lords.get(friendly.lord_ids[0])
+            if recipient is not None:
+                for atype, n in total_spoils.items():
+                    recipient.assets[atype] = recipient.assets.get(atype, 0) + n
+        result.notes.append(
+            f"Camp Attack ({ca_id}) fired by {side_key}: "
+            f"spoils={total_spoils}"
+        )
