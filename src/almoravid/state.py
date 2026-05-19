@@ -121,6 +121,11 @@ class Meta(StrictModel):
     # triggers, this stores the lord_id whose current Command card has
     # March blocked for its remainder. Cleared in _h_end_card.
     swollen_river_blocked_card_lord_id: str | None = None
+    # Phase 6i: Surprise (C6) consumed on March into empty Enemy
+    # Stronghold — payload tells the next cmd_storm to use Walls-1
+    # and applies +2 Siege markers (already placed by the cmd_march
+    # auto-trigger).
+    surprise_storm_pending_locale_id: str | None = None
 
 
 class Cylinder(StrictModel):
@@ -267,6 +272,11 @@ class Lord(StrictModel):
     first_march_used_this_card: bool = False
     raiders_used_this_card: bool = False
     routed_units: dict[UnitType, int] = Field(default_factory=dict)
+    # Phase 6i: Crusader marker count placed by C11 Indulgences /
+    # C12 Song of Roland. Each marker is a transient resource with
+    # 2 Knights "attached" (modeled by adding 2 Knights to forces
+    # on placement). Removed when the marker is consumed.
+    crusader_markers: int = 0
 
     # Lifecycle cleanup contract (Pattern 8). Class-level, not a field.
     cleanup_on_removal_fields: ClassVar[tuple[str, ...]] = (
@@ -281,6 +291,7 @@ class Lord(StrictModel):
         "first_march_used_this_card",
         "raiders_used_this_card",
         "routed_units",
+        "crusader_markers",
     )
 
 

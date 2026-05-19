@@ -1051,13 +1051,36 @@ def _h_cmd_march(state, action):
     if arid_id in enemy_hold:
         enemy_hold.remove(arid_id)
         state.decks.discard.append(arid_id)
-        # Force-Feed the active Lord (and one other Marching Lord —
-        # Phase 6h ships single-Lord-feed; "2 Marching Lords" with
-        # group March would require multi-Lord plumbing).
         _feed_lord(state, lord_id, force=True)
         _record(state, action,
                 f"{enemy} Arid Terrain ({arid_id}) forces "
                 f"{lord_id} to Feed before March")
+
+    # Phase 6i: C6 Surprise auto-trigger for Christian attacker.
+    # When Christian holds C6 AND Marches to an Enemy Stronghold
+    # locale that contains NO Lord (either side), place 2 Siege
+    # markers and queue a forced Storm with Walls -1 via
+    # state.meta.surprise_storm_pending_locale_id.
+    if side == "christian" and "C6" in state.decks.this_levy_events.get(
+            "christian", []):
+        target_loc = state.locales[target]
+        from almoravid.effective import is_friendly_locale
+        is_enemy_stronghold = (target_loc.base_type != "region"
+                               and not is_friendly_locale(state, target,
+                                                          "christian"))
+        any_lord_there = any(
+            l.cylinder.kind == "locale" and l.cylinder.locale_id == target
+            for l in state.lords.values()
+        )
+        if is_enemy_stronghold and not any_lord_there:
+            state.decks.this_levy_events["christian"].remove("C6")
+            state.decks.discard.append("C6")
+            # Place 2 Siege markers (instead of usual 1 from Bypass).
+            target_loc.siege_yellow = min(4, target_loc.siege_yellow + 2)
+            state.meta.surprise_storm_pending_locale_id = target
+            _record(state, action,
+                    f"christian Surprise (C6) at {target}: placed 2 Siege, "
+                    f"forced Storm with Walls -1 pending")
 
     # Execute March.
     from almoravid.state import Cylinder
@@ -1696,8 +1719,36 @@ def _h_cmd_siege(state, action):
         if cancellations == sh_value:
             # Surrender succeeds — Conquest
             conq_result = _conquer_stronghold(state, here, side)
+            # Phase 6i: C9 Betrayal of Terms opt-in (Christian only).
+            # Held in this_levy_events; auto-fire greedy double-Spoils.
+            from almoravid.static_data import load_strongholds
+            from almoravid.battle import distribute_spoils_round_robin
+            sh = load_strongholds()["strongholds"][loc.base_type]
+            base_spoils = {k: v for k, v in sh.get("spoils", {}).items()
+                           if k in ("coin", "loot", "prov")}
+            c9_held = (side == "christian" and "C9" in
+                       state.decks.this_levy_events.get("christian", []))
+            multiplier = 2 if c9_held else 1
+            spoils = {k: v * multiplier for k, v in base_spoils.items()}
+            friendly_here = [
+                l.id for l in state.lords.values()
+                if l.side == side and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == here
+            ]
+            if friendly_here and spoils:
+                distribute_spoils_round_robin(state, friendly_here, spoils)
+            if c9_held:
+                state.decks.this_levy_events["christian"].remove("C9")
+                state.decks.discard.append("C9")
+                # Muslims add 1 Jihad if able.
+                from almoravid.events import _first_jihad_eligible_locale
+                jloc = _first_jihad_eligible_locale(state)
+                if jloc is not None:
+                    state.locales[jloc].jihad_markers += 1
             surrender_result = {"dice": dice, "threshold": threshold,
-                                "succeeded": True, "conquest": conq_result}
+                                "succeeded": True, "conquest": conq_result,
+                                "spoils": spoils,
+                                "c9_betrayal_used": c9_held}
         else:
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": False}
@@ -1896,7 +1947,16 @@ def _h_cmd_storm(state, action):
             forces={},
             capabilities_in_play=[],
         )
-    result = resolve_storm(state, atk, dfd)
+    # Phase 6i: C6 Surprise pending → modify walls_range to -1.
+    surprise_loc = state.meta.surprise_storm_pending_locale_id
+    if surprise_loc == here:
+        from almoravid.static_data import load_strongholds
+        base_walls = load_strongholds()["strongholds"][loc.base_type]["walls_range"]
+        modified_walls = (base_walls[0], max(0, base_walls[1] - 1))
+        result = resolve_storm(state, atk, dfd, walls_range_override=modified_walls)
+        state.meta.surprise_storm_pending_locale_id = None
+    else:
+        result = resolve_storm(state, atk, dfd)
     commit_forces_after_battle(state, atk)
     # Defender: only commit back if single-Lord (Phase 5f limit)
     if len(dfd.lord_ids) == 1:

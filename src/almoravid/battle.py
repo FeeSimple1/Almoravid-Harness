@@ -715,7 +715,28 @@ def resolve_battle(
         if round_idx > 1:
             _reposition_array(attacker)
             _reposition_array(defender)
-        for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
+        # Phase 6i: M6 Feigned Retreat reorders Round 2 melee steps:
+        # all Muslim Melee Strikes before all Christian Melee, regardless
+        # of who is Attacker (rule: "On Round 2, all Muslim Melee Strikes
+        # before all Christian Melee").
+        if (round_idx == 2
+                and "M6" in state.decks.this_levy_events.get("muslim", [])):
+            muslim_side: Role = ("attacker" if attacker.side == "muslim"
+                                 else "defender")
+            christian_side: Role = ("attacker" if attacker.side == "christian"
+                                    else "defender")
+            steps_this_round: list[tuple[str, Role, str, UnitClass | None]] = [
+                ("1.a", "defender", "missile", None),
+                ("1.b", "attacker", "missile", None),
+                # Muslim Melee first (both horse + foot), then Christian.
+                ("2.a", muslim_side, "melee", "horse"),
+                ("2.b", muslim_side, "melee", "foot"),
+                ("2.c", christian_side, "melee", "horse"),
+                ("2.d", christian_side, "melee", "foot"),
+            ]
+        else:
+            steps_this_round = _BATTLE_STEPS
+        for step_id, actor_role, step_type, unit_class in steps_this_round:
             step_res = _resolve_step(state, step_id, actor_role, step_type,
                                       unit_class, attacker, defender,
                                       round_index=round_idx)
@@ -726,6 +747,9 @@ def resolve_battle(
         # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills).
         if round_idx == 1:
             _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
+        if round_idx == 2:
+            _discard_round1_events(state, ["M6"])
         # Phase 6e: if either side Conceded this Round, end Battle now
         # (rule 4.4.2 new_round_check end_battle_when).
         if attacker.conceded or defender.conceded:
@@ -1044,6 +1068,7 @@ def resolve_storm(
     defender: BattleSide,
     *,
     max_rounds: int | None = None,
+    walls_range_override: tuple[int, int] | None = None,
 ) -> BattleResult:
     """4.5.2 Storm. Attacker assaults the Stronghold's Garrison + any
     defending Lord units inside.
@@ -1083,6 +1108,9 @@ def resolve_storm(
             walls_range = tuple(
                 load_strongholds()["strongholds"][loc.base_type]["walls_range"]
             )
+    # Phase 6i: C6 Surprise / C6 Siege Towers override (Walls -1).
+    if walls_range_override is not None:
+        walls_range = walls_range_override
         # Storm cap = Siege markers our side has (rule 4.5.2)
         if max_rounds is None:
             siege = (loc.siege_yellow if attacker.side == "christian"
@@ -1383,9 +1411,23 @@ def apply_retreat_aftermath(
         "losers": [],
     }
     if result.winner is None:
-        # Stalemate / inconclusive — no retreat aftermath (rule silent
-        # on stalemate; we treat as no-Service-shift, no move).
         return summary
+
+    # Phase 6i: M13 Severed Heads — when Christians lose (Retreat
+    # branch fires), Muslim side may add 4 Jihad. Auto-fire greedy.
+    loser_side_obj = (result.attacker if result.winner == result.defender.side
+                      else result.defender)
+    if (loser_side_obj.side == "christian"
+            and "M13" in state.decks.this_levy_events.get("muslim", [])):
+        from almoravid.events import _first_jihad_eligible_locale
+        jloc = _first_jihad_eligible_locale(state)
+        if jloc is not None:
+            state.locales[jloc].jihad_markers += 4
+            state.decks.this_levy_events["muslim"].remove("M13")
+            state.decks.discard.append("M13")
+            summary["m13_severed_heads_jihad"] = {
+                "locale_id": jloc, "added": 4,
+            }
 
     loser_side_obj = (result.attacker if result.winner == result.defender.side
                       else result.defender)

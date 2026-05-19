@@ -36,25 +36,13 @@ def test_camp_attack_held_in_this_campaign_bucket() -> None:
     assert r["held"] == "this_campaign_events"
 
 
-def test_betrayal_of_terms_no_op_when_no_siege() -> None:
-    """Pattern 10: C9 Betrayal of Terms with no active Siege -> no-op."""
-    s = load_scenario("scenario_b_quelling_of_tajo")  # no Siege markers
-    # Sanity: confirm no Siege markers in this scenario
-    for loc in s.locales.values():
-        assert loc.siege_yellow == 0
-        assert loc.siege_green == 0
+def test_betrayal_of_terms_held_until_surrender() -> None:
+    """Phase 6i: C9 Betrayal of Terms is a Hold event; parks in
+    this_levy_events until a Surrender fires."""
+    s = load_scenario("scenario_a_toledo_beset")
     r = resolve_event(s, "christian", "C9")
-    assert r["no_op"] is True
-    assert "C9" in s.decks.discard
-
-
-def test_betrayal_of_terms_active_when_siege_present() -> None:
-    """Same card, with a Siege marker on the map, defers to Phase 5
-    instead of no-op."""
-    s = load_scenario("scenario_a_toledo_beset")  # Toledo has siege_yellow=1
-    r = resolve_event(s, "christian", "C9")
-    assert r.get("no_op") is not True
-    assert r.get("deferred") == "phase_5"
+    assert r["held"] == "this_levy_events"
+    assert "C9" in s.decks.this_levy_events.get("christian", [])
 
 
 def test_taifa_marriage_no_op_on_invalid_target() -> None:

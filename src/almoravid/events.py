@@ -211,19 +211,12 @@ def _cantador(state, side, card_id, payload):
 
 
 @register("C9")  # Betrayal of Terms
-def _betrayal_of_terms(state, side, card_id, payload):
-    """Immediate event affecting a Siege. Pattern 10: no active Siege ->
-    no-op. Phase 5 will check Siege markers; for now we no-op-and-note."""
-    has_siege = any(
-        (loc.siege_yellow or loc.siege_green) > 0
-        for loc in state.locales.values()
-    )
-    if not has_siege:
-        return _no_op_with_note(state, card_id, side,
-                                "no active Siege; immediate event discards")
-    # Phase 5 implements the actual effect; for now place in immediate-discard
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "deferred": "phase_5"}
+def _c9_betrayal_of_terms(state, side, card_id, payload):
+    """C9 (Hold): Play upon Surrender to take Spoils as if Sack, OR
+    take double and Muslims add 1 Jihad. Phase 6i: parked in
+    this_levy_events; consumed by the Surrender hook in _h_cmd_siege.
+    """
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 # ---------------------------------------------------------------------------
@@ -408,19 +401,21 @@ def _berenguer_ramon(state, side, card_id, payload):
 @register("C11")  # Indulgences
 @register("C12")  # Song of Roland
 def _crusader_event(state, side, card_id, payload):
-    """C11 Indulgences / C12 Song of Roland: immediate, Muster 1
-    Crusaders marker onto any unbesieged Christian Lord. Also forces
-    Eudes (if on map and Unbesieged) to Muster all Ready Vassals.
+    """C11 Indulgences / C12 Song of Roland: Place 1 Crusader marker
+    on an Unbesieged Christian Lord with 2 Knights attached (modeled
+    by incrementing lord.crusader_markers + adding 2 Knights to forces).
 
-    Phase 5j: validates a target Christian Lord; records the
-    intent. Crusader-marker placement and forced-Eudes-Vassal-Muster
-    are Phase 5j+ once the Crusaders model lands in state.
+    Phase 6i: Eudes-Muster-all-Ready-Vassals clause only fires if
+    Eudes is on the map AND has Ready Vassals. We auto-Muster any
+    Ready Vassals of Eudes (3.4.2 ARTS OF WAR) when triggered.
     """
+    from almoravid.effective import is_besieged
     target_lord_id = payload.get("target_lord_id")
     available_christians = [
         l.id for l in state.lords.values()
         if l.side == "christian"
         and l.cylinder.kind == "locale"
+        and not is_besieged(state, l.id)
     ]
     if not available_christians:
         return _no_op_with_note(state, card_id, side,
@@ -428,10 +423,30 @@ def _crusader_event(state, side, card_id, payload):
     if target_lord_id and target_lord_id not in available_christians:
         return _no_op_with_note(state, card_id, side,
                                 f"target {target_lord_id} not eligible")
+    target = target_lord_id or available_christians[0]
+    target_lord = state.lords[target]
+    target_lord.crusader_markers += 1
+    target_lord.forces["knights"] = target_lord.forces.get("knights", 0) + 2
+
+    # Eudes Muster-Ready-Vassals clause.
+    eudes_mustered: list[str] = []
+    eudes = state.lords.get("eudes")
+    if (eudes is not None and eudes.cylinder.kind == "locale"
+            and not is_besieged(state, "eudes")):
+        for v in eudes.vassals:
+            if v.ready:
+                continue
+            v.ready = True
+            for ut, n in v.forces.items():
+                eudes.forces[ut] = eudes.forces.get(ut, 0) + n
+            eudes_mustered.append(v.id)
+
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
-            "target": target_lord_id or available_christians[0],
-            "deferred": "phase_5j_plus"}
+            "target": target,
+            "crusader_markers_now": target_lord.crusader_markers,
+            "knights_added": 2,
+            "eudes_vassals_mustered": eudes_mustered}
 
 
 @register("C14")  # Pope Gregory
@@ -488,11 +503,24 @@ def _de_vivar(state, side, card_id, payload):
 
 
 @register("C26")  # Freebooter
-@register("M13")  # Severed Heads
 def _hostile_event(state, side, card_id, payload):
-    """C26 Freebooter / M13 Severed Heads: structural no-op for Phase 5j."""
+    """C26 Freebooter: structural no-op for Phase 5j."""
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side, "deferred": "phase_5j_plus"}
+
+
+@register("M13")  # Severed Heads
+def _m13_severed_heads(state, side, card_id, payload):
+    """M13 (Hold): multi-trigger event.
+      - Play as Ravaging to shift 1 Taifa Lord's cylinder or Service
+        2 boxes OR add 2 Jihad.
+      - Play if Christians Retreat or Sacked for 2 Lords OR 4 Jihad.
+
+    Phase 6i: parked in this_levy_events; consumed by
+    apply_retreat_aftermath when Christians Retreat (+4 Jihad bonus
+    branch fires automatically).
+    """
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 # ---------------------------------------------------------------------------

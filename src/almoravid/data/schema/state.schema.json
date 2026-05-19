@@ -639,6 +639,11 @@
           },
           "title": "Routed Units",
           "type": "object"
+        },
+        "crusader_markers": {
+          "default": 0,
+          "title": "Crusader Markers",
+          "type": "integer"
         }
       },
       "required": [
@@ -823,6 +828,18 @@
           ],
           "default": null,
           "title": "Swollen River Blocked Card Lord Id"
+        },
+        "surprise_storm_pending_locale_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Surprise Storm Pending Locale Id"
         }
       },
       "required": [
