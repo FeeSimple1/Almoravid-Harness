@@ -150,11 +150,51 @@ def _swollen_river(state, side, card_id, payload):
 
 @register("C4")  # Arid Terrain
 @register("M4")
-@register("C5")  # Drought
-@register("M5")
-def _arid_or_drought(state, side, card_id, payload):
-    """Hold-event terrain modifiers. Phase 5 combat / supply hooks."""
+def _arid_terrain(state, side, card_id, payload):
+    """Hold-event: triggers when enemy Marches (Phase 6h hook in
+    _h_cmd_march). Buffered in this_levy_events until that fires."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
+
+@register("C5")  # Drought
+@register("M5")  # Drought
+def _drought(state, side, card_id, payload):
+    """Drought: Immediate. The TARGET side (opposite of the side that
+    drew) immediately Feeds 2 of their Lords not at Friendly Gardens
+    or Seat. Phase 6h: pick deterministically (first two on the map
+    who don't qualify for Gardens/Seat exemption).
+
+    Note: per card text, the side that DRAWS Drought triggers it
+    against the OTHER side ("Unless Muslims discard Camels, they
+    immediately Feed 2"). C5 drawn by Christian targets Muslims;
+    M5 drawn by Muslim targets Christians.
+    """
+    from almoravid.campaign import _feed_lord
+    from almoravid.effective import has_gardens, is_friendly_locale
+    target_side: Side = "muslim" if card_id == "C5" else "christian"
+    candidates: list[str] = []
+    for l in state.lords.values():
+        if l.side != target_side:
+            continue
+        if l.cylinder.kind != "locale":
+            continue
+        loc_id = l.cylinder.locale_id
+        gardens_ok = has_gardens(state, loc_id)
+        seat_ok = loc_id in state.lords[l.id].seats
+        friendly = is_friendly_locale(state, loc_id, target_side)
+        if (gardens_ok or seat_ok) and friendly:
+            continue
+        candidates.append(l.id)
+    if not candidates:
+        return _no_op_with_note(state, card_id, side,
+                                f"no eligible {target_side} Lord to Feed")
+    fed = []
+    for lid in sorted(candidates)[:2]:
+        r = _feed_lord(state, lid, force=True)
+        fed.append({"lord_id": lid, **r})
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "target_side": target_side, "fed_lords": fed}
 
 
 @register("C7")  # Baggage Parapet
@@ -420,12 +460,8 @@ def _religious_hold(state, side, card_id, payload):
 @register("C22")  # Berbers
 @register("C23")  # Illness of the Emir
 @register("C24")  # Abu Bakr ibn Umar
-@register("M11")  # Al-Qadir balks at payment
-@register("M18")  # Refugees
 @register("M19")  # African Fleet
-@register("M22")  # Massacre
 @register("M24")  # Al-Maghawir
-@register("M8")   # Ahmad Ibn Rumayla
 def _generic_immediate(state, side, card_id, payload):
     """Immediate events with side-wide or scenario-specific effects.
 
@@ -583,3 +619,164 @@ def _m17_leon_y_castilla(state, side, card_id, payload):
     return {"card_id": card_id, "side": side,
             "service_shifted": target, "new_service_box": new_box,
             "muster_ban": list(_M17_LORDS)}
+
+
+# ---------------------------------------------------------------------------
+# Phase 6h: Tier-A event resolvers with real effects.
+# ---------------------------------------------------------------------------
+
+
+def _first_jihad_eligible_locale(
+    state: GameState, taifa_filter: tuple[str, ...] = ("parias", "reconquista")
+) -> str | None:
+    """Pick the first locale (deterministic) in a Taifa matching filter.
+
+    Used by M8/M11/M22 for Jihad placement when no payload target is
+    provided. Returns None when no eligible locale exists.
+    """
+    for taifa in state.taifas.values():
+        if taifa.status not in taifa_filter:
+            continue
+        for lid in taifa.locale_ids:
+            return lid
+    return None
+
+
+@register("M8")  # Ahmad Ibn Rumayla
+def _m8_ahmad_ibn_rumayla(state, side, card_id, payload):
+    """M8 (Hold): Play in Taifa with Yusuf, Sir, or al-Mutamid to
+    remove Conquered from empty Town OR add 2 Jihad.
+
+    Phase 6h: default to add-2-Jihad branch (greedy/deterministic).
+    Allow payload['mode']='remove_conquered' with a target locale_id
+    for the alternative.
+    """
+    mode = payload.get("mode", "add_jihad")
+    if mode == "remove_conquered":
+        loc_id = payload.get("locale_id")
+        loc = state.locales.get(loc_id) if loc_id else None
+        if loc is None or loc.base_type != "town" or loc.conquered_markers == 0:
+            return _no_op_with_note(state, card_id, side,
+                                    "no eligible empty Conquered Town")
+        # Must be empty (no Lords either side).
+        if any(l.cylinder.kind == "locale" and l.cylinder.locale_id == loc_id
+               for l in state.lords.values()):
+            return _no_op_with_note(state, card_id, side,
+                                    f"{loc_id} is not empty")
+        loc.conquered_markers = max(0, loc.conquered_markers - 1)
+        state.decks.discard.append(card_id)
+        return {"card_id": card_id, "side": side,
+                "removed_conquered_from": loc_id}
+    # add_jihad branch
+    target_loc = payload.get("locale_id")         or _first_jihad_eligible_locale(state)
+    if target_loc is None or target_loc not in state.locales:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Jihad locale")
+    state.locales[target_loc].jihad_markers += 2
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": 2, "locale_id": target_loc}
+
+
+@register("M11")  # Al-Qadir balks at payment
+def _m11_al_qadir(state, side, card_id, payload):
+    """M11 (Hold): Add 1 Jihad OR — if Yusuf or Sir in any Reconquista
+    or Parias Taifa or Kingdom — 3 Jihad.
+    """
+    bonus_active = False
+    for lid in ("yusuf", "sir"):
+        l = state.lords.get(lid)
+        if l is None or l.cylinder.kind != "locale":
+            continue
+        loc = state.locales.get(l.cylinder.locale_id)
+        if loc is None:
+            continue
+        # Check Taifa status if in a Taifa.
+        for t in state.taifas.values():
+            if l.cylinder.locale_id in t.locale_ids                     and t.status in ("reconquista", "parias"):
+                bonus_active = True
+                break
+        else:
+            # Not in a Taifa — check if in a Kingdom (territory "leon"
+            # or "aragon"). Treat any non-Taifa territory as Kingdom.
+            if loc.territory in ("leon", "aragon"):
+                bonus_active = True
+        if bonus_active:
+            break
+    add = 3 if bonus_active else 1
+    target_loc = payload.get("locale_id")         or _first_jihad_eligible_locale(state)
+    if target_loc is None or target_loc not in state.locales:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Jihad locale")
+    state.locales[target_loc].jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target_loc,
+            "bonus": bonus_active}
+
+
+@register("M18")  # Refugees
+def _m18_refugees(state, side, card_id, payload):
+    """M18 (Hold played in Muster): each Unbesieged Taifa Lord
+    restores Lost Unarmored units (Light Horse + Militia) to their
+    starting Forces + Vassal Mustered units, AND adds 1 Transport
+    (Cart or Mule — pick Mule deterministically).
+    """
+    from almoravid.effective import is_besieged
+    from almoravid.static_data import load_lords
+    statics = load_lords()["lords"]
+    restored: list[dict] = []
+    for lid, l in state.lords.items():
+        if not l.is_taifa or l.side != "muslim":
+            continue
+        if l.cylinder.kind != "locale":
+            continue
+        if is_besieged(state, lid):
+            continue
+        rec = statics.get(lid, {})
+        starting = dict(rec.get("forces", {}))
+        for v in l.vassals:
+            if v.ready:
+                continue  # Not Mustered
+            for ut, n in v.forces.items():
+                starting[ut] = starting.get(ut, 0) + n
+        added: dict[str, int] = {}
+        for ut in ("light_horse", "militia"):
+            want = starting.get(ut, 0)
+            have = l.forces.get(ut, 0)
+            if want > have:
+                add = want - have
+                l.forces[ut] = have + add
+                added[ut] = add
+        # Add 1 Transport (Mule).
+        l.assets["mule"] = l.assets.get("mule", 0) + 1
+        added["mule"] = 1
+        restored.append({"lord_id": lid, "added": added})
+    if not restored:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Taifa Lord on map")
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "restored": restored}
+
+
+@register("M22")  # Massacre
+def _m22_massacre(state, side, card_id, payload):
+    """M22: If Eudes or Crusaders on map, Muster a Taifa Lord OR add 3
+    Jihad. If not, add 1 Jihad.
+
+    Phase 6h: Crusaders model (lord.crusader_markers) lands in Phase
+    6i; for now "on map" means Eudes is at a locale. Add-Jihad
+    branch fires deterministically.
+    """
+    eudes = state.lords.get("eudes")
+    bonus = (eudes is not None and eudes.cylinder.kind == "locale")
+    add = 3 if bonus else 1
+    target_loc = payload.get("locale_id")         or _first_jihad_eligible_locale(state)
+    if target_loc is None or target_loc not in state.locales:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Jihad locale")
+    state.locales[target_loc].jihad_markers += add
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "jihad_added": add, "locale_id": target_loc,
+            "bonus": bonus}

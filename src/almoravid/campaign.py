@@ -271,14 +271,19 @@ def _advance_or_end_campaign(state: GameState) -> None:
         state.meta.active_player = other
 
 
-def _feed_lord(state: GameState, lord_id: str) -> dict[str, Any]:
+def _feed_lord(state: GameState, lord_id: str, *,
+                force: bool = False) -> dict[str, Any]:
     """Rule 4.8.1 Feed: a Lord who Moved/Fought this card consumes
     ceil((units + mules) / 6) Provender or Loot. Unfed -> Service
     marker shifts 1 box left.
+
+    Phase 6h: `force=True` bypasses the moved_fought guard so event
+    cards (C4/M4 Arid Terrain, C5/M5 Drought) can compel an immediate
+    Feed regardless of whether the Lord has acted yet.
     """
     import math
     lord = state.lords[lord_id]
-    if not lord.moved_fought:
+    if not force and not lord.moved_fought:
         return {"skipped": "did_not_move_fight", "consumed": 0}
     units = sum(lord.forces.values())
     mules = lord.assets.get("mule", 0)
@@ -337,6 +342,11 @@ def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, 
     return {"disbanded": lord_id, "to_box": new_box}
 
 
+def _clear_per_card_event_flags(state) -> None:
+    """Phase 6h: clear card-scope event flags at end_card."""
+    state.meta.swollen_river_blocked_card_lord_id = None
+
+
 def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """End the currently-active Lord's card. Runs the rule 4.8 cascade.
 
@@ -370,6 +380,7 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         lord.first_march_used_this_card = False
         lord.raiders_used_this_card = False
         lord.moved_fought = False
+    _clear_per_card_event_flags(state)
     _advance_or_end_campaign(state)
     _record(state, action,
             f"{side} ends {lord_id}'s card; Feed: "
@@ -1013,6 +1024,40 @@ def _h_cmd_march(state, action):
             "Discard Provender or use a Road.",
             code="cart_over_pass_with_prov",
         )
+
+    # Phase 6h: enemy Hold-event auto-triggers on March.
+    enemy = _other(side)
+    enemy_hold = state.decks.this_levy_events.get(enemy, [])
+    # C3/M3 Swollen River: blocks this and any further March on the
+    # current Command card by this Lord.
+    if state.meta.swollen_river_blocked_card_lord_id == lord_id:
+        raise IllegalAction(
+            f"Swollen River already blocked {lord_id}'s March on this card",
+            code="swollen_river_blocked",
+        )
+    swollen_id = "C3" if enemy == "christian" else "M3"
+    if swollen_id in enemy_hold:
+        enemy_hold.remove(swollen_id)
+        state.decks.discard.append(swollen_id)
+        state.meta.swollen_river_blocked_card_lord_id = lord_id
+        raise IllegalAction(
+            f"Swollen River ({swollen_id}) played by {enemy} blocks "
+            f"{lord_id}'s March on this card (4.3.4)",
+            code="swollen_river_blocked",
+        )
+    # C4/M4 Arid Terrain: forces an immediate Feed on the Marching Lord
+    # BEFORE the March (per Tips). Discards regardless of Feed outcome.
+    arid_id = "C4" if enemy == "christian" else "M4"
+    if arid_id in enemy_hold:
+        enemy_hold.remove(arid_id)
+        state.decks.discard.append(arid_id)
+        # Force-Feed the active Lord (and one other Marching Lord —
+        # Phase 6h ships single-Lord-feed; "2 Marching Lords" with
+        # group March would require multi-Lord plumbing).
+        _feed_lord(state, lord_id, force=True)
+        _record(state, action,
+                f"{enemy} Arid Terrain ({arid_id}) forces "
+                f"{lord_id} to Feed before March")
 
     # Execute March.
     from almoravid.state import Cylinder

@@ -117,6 +117,10 @@ class Meta(StrictModel):
     # the current Levy). Cleared in _advance_step_if_both_done at the
     # Levy->Campaign transition.
     muster_banned_this_levy_lord_ids: list[str] = Field(default_factory=list)
+    # Phase 6h: Swollen River (C3/M3) — when the holding side's card
+    # triggers, this stores the lord_id whose current Command card has
+    # March blocked for its remainder. Cleared in _h_end_card.
+    swollen_river_blocked_card_lord_id: str | None = None
 
 
 class Cylinder(StrictModel):

@@ -811,6 +811,18 @@
           },
           "title": "Muster Banned This Levy Lord Ids",
           "type": "array"
+        },
+        "swollen_river_blocked_card_lord_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Swollen River Blocked Card Lord Id"
         }
       },
       "required": [
