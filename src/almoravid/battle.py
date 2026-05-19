@@ -493,6 +493,17 @@ def _resolve_step(
     siege_markers: int = 0,
     round_index: int = 0,
 ) -> StepResolution:
+    # Phase 6f: per-pair Strike when both sides have multi-Lord arrays
+    # AND context is Battle. Storm and single-Lord cases keep the legacy
+    # pooled path verbatim.
+    if (context == "battle"
+            and attacker.array is not None
+            and defender.array is not None):
+        return _resolve_step_per_pair(
+            state, step_id, actor_role, step_type, unit_class,
+            attacker, defender, round_index=round_index,
+        )
+
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
 
@@ -857,14 +868,28 @@ def commit_forces_after_battle(state: GameState, side: BattleSide) -> None:
     """Write the (post-Battle) forces dict back to each Lord's state.
 
     Single-Lord: direct copy.
-    Multi-Lord: distribute losses (units in routed_units, units missing
-    from forces vs initial) across the participating Lords proportionally
-    to their pre-Battle contribution.
+    Multi-Lord with array (Phase 6f): use per-LordPosition forces +
+    routed_units directly — each Lord's post-Battle state is already
+    tracked per-Lord by _resolve_step_per_pair.
+    Multi-Lord without array (legacy): distribute losses proportionally
+    (Phase 5e fallback).
     """
     if len(side.lord_ids) == 1:
         lord = state.lords[side.lord_ids[0]]
         lord.forces = dict(side.forces)
         lord.routed_units = dict(side.routed_units)
+        return
+
+    # Phase 6f: per-Lord direct write when array is present.
+    if side.array is not None:
+        for lp in side.array:
+            lord = state.lords[lp.lord_id]
+            lord.forces = {ut: n for ut, n in lp.forces.items() if n > 0}
+            for ut, n in lp.routed_units.items():
+                if n > 0:
+                    lord.routed_units[ut] = (
+                        lord.routed_units.get(ut, 0) + n
+                    )
         return
 
     # Multi-Lord: distribute the post-Battle pool proportionally.
@@ -1596,3 +1621,302 @@ def _flanking_contribution(side: BattleSide, opposite: BattleSide) -> int:
         if lp.position in ("front_center", "front_left", "front_right")                 and lp.has_unrouted()                 and lp.position not in opp_filled:
             count += 1
     return count
+
+
+# ---------------------------------------------------------------------------
+# Phase 6f: per-pair Strike resolution (multi-Lord Battles).
+# ---------------------------------------------------------------------------
+
+
+def _build_strike_rows_for_position(
+    state: GameState,
+    side: BattleSide,
+    lp: "LordPosition",
+    *,
+    context: Literal["battle", "storm"] = "battle",
+) -> list[StrikeRow]:
+    """Like build_strike_rows but for a single LordPosition. The
+    capability set is the per-Lord capabilities (lp.capabilities_in_play)
+    union the side-wide capabilities_in_play already on `side`."""
+    forces_data = load_forces()
+    caps_in_play = set(side.capabilities_in_play) | set(lp.capabilities_in_play)
+    rows: list[StrikeRow] = []
+    for unit_type, count in lp.forces.items():
+        if count <= 0:
+            continue
+        unit = None
+        for category in ("horse", "foot"):
+            if unit_type in forces_data[category]:
+                unit = forces_data[category][unit_type]
+                break
+        if unit is None:
+            continue
+        for s in unit[f"strikes_{context}"]:
+            rows.append(StrikeRow(
+                unit_type=unit_type, count=count,
+                kind=s["kind"], rate=s["rate"],
+                one_round_only=s.get("any_one_round", False),
+            ))
+        for cap_row in unit.get("strikes_by_capability", []):
+            required = set(cap_row.get("card_ids", []))
+            if required and required & caps_in_play:
+                rows.append(StrikeRow(
+                    unit_type=unit_type, count=count,
+                    kind=cap_row["kind"], rate=cap_row["rate"],
+                    one_round_only=cap_row.get("any_one_round", False),
+                    card_ids=sorted(required & caps_in_play),
+                ))
+    return rows
+
+
+def _resolve_protection_roll_for_lp(
+    state: GameState,
+    side: BattleSide,
+    target_lp: "LordPosition",
+    striker_kind: StrikeKind,
+    *,
+    context: Literal["battle", "storm"] = "battle",
+    striker_selects: bool = False,
+    striker_unit_class: UnitClass | None = None,
+) -> tuple[bool, UnitType | None]:
+    """Protection roll that drains from a single LordPosition's forces.
+
+    Mirrors _resolve_protection_roll but operates on lp.forces directly.
+    Routed units update side.routed_units (so commit_forces_after_battle
+    sees them at the side level too) and lp.routed_units (per-Lord).
+    """
+    forces_data = load_forces()
+
+    def _build_candidates(pool: dict) -> list[tuple[int, UnitType]]:
+        cs: list[tuple[int, UnitType]] = []
+        for unit_type, count in pool.items():
+            if count <= 0:
+                continue
+            unit_rec = None
+            for cat in ("horse", "foot"):
+                if unit_type in forces_data[cat]:
+                    unit_rec = forces_data[cat][unit_type]
+                    break
+            if unit_rec is None:
+                continue
+            ptype = unit_rec["protection"]["type"]
+            if striker_selects:
+                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
+                        "none": 3}.get(ptype, 4)
+            else:
+                prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                        "none": 3}.get(ptype, 4)
+            cs.append((prio, unit_type))
+        cs.sort()
+        return cs
+
+    cands = _build_candidates(target_lp.forces)
+    if not cands:
+        return (False, None)
+    _, chosen = cands[0]
+    unit = None
+    for cat in ("horse", "foot"):
+        if chosen in forces_data[cat]:
+            unit = forces_data[cat][chosen]
+            break
+    assert unit is not None
+    ptype = unit["protection"]["type"]
+    if ptype == "auto_remove":
+        target_lp.forces[chosen] -= 1
+        if target_lp.forces[chosen] <= 0:
+            target_lp.forces.pop(chosen, None)
+        side.routed_units[chosen] = side.routed_units.get(chosen, 0) + 1
+        target_lp.routed_units[chosen] = target_lp.routed_units.get(chosen, 0) + 1
+        return (False, chosen)
+    rng = roll_d6(state)
+    canceled = False
+    if ptype == "armored":
+        lo, hi = unit["protection"]["range"]
+        # Bug T (M7 Spear Wall) — apply per-Lord with the side-level cap.
+        if (side.side == "muslim"
+                and "M7" in state.decks.this_levy_events.get("muslim", [])
+                and chosen in ("men_at_arms", "african_foot")
+                and striker_unit_class == "horse"
+                and striker_kind == "melee"
+                and context == "battle"
+                and side.m7_boosts_remaining > 0):
+            hi = hi + 1
+            side.m7_boosts_remaining -= 1
+        if lo <= rng <= hi:
+            canceled = True
+    elif ptype == "unarmored":
+        if rng == 1:
+            canceled = True
+        if (not canceled and context == "battle" and striker_kind == "melee"
+                and "evade" in unit["protection"]):
+            elo, ehi = unit["protection"]["evade"]["range"]
+            if elo <= rng <= ehi:
+                canceled = True
+    if canceled:
+        return (True, None)
+    target_lp.forces[chosen] -= 1
+    if target_lp.forces[chosen] <= 0:
+        target_lp.forces.pop(chosen, None)
+    side.routed_units[chosen] = side.routed_units.get(chosen, 0) + 1
+    target_lp.routed_units[chosen] = target_lp.routed_units.get(chosen, 0) + 1
+    return (False, chosen)
+
+
+def _pick_flank_target(side: BattleSide) -> "LordPosition | None":
+    """Greedy flank target: pick the Front-position Lord with the most
+    unrouted units. Per rule 4.4.2 the Flanking Lord's owner chooses
+    between Flanking or directly-opposed Enemy — here we route to the
+    largest target deterministically."""
+    if side.array is None:
+        return None
+    front_lords = [
+        lp for lp in side.array
+        if lp.position in ("front_center", "front_left", "front_right")
+        and lp.has_unrouted()
+    ]
+    if not front_lords:
+        return None
+    return max(front_lords, key=lambda lp: sum(lp.forces.values()))
+
+
+def _sync_side_forces_from_array(side: BattleSide) -> None:
+    """Rebuild side.forces as the sum of all LordPosition.forces so
+    legacy code paths (commit_forces_after_battle, has_unrouted) keep
+    seeing a consistent pooled view."""
+    if side.array is None:
+        return
+    pooled: dict[UnitType, int] = {}
+    for lp in side.array:
+        for ut, n in lp.forces.items():
+            if n > 0:
+                pooled[ut] = pooled.get(ut, 0) + n
+    side.forces = pooled
+
+
+def _resolve_step_per_pair(
+    state: GameState,
+    step_id: str,
+    actor_role: Role,
+    step_type: str,
+    unit_class: UnitClass | None,
+    attacker: BattleSide,
+    defender: BattleSide,
+    round_index: int = 0,
+) -> StepResolution:
+    """Per-pair Strike resolution (rule 4.4.2 multi-Lord Array).
+
+    For each Front position on actor (center/left/right):
+      - If a Lord occupies that position with unrouted units, they
+        Strike at the same-position target Lord on defender, OR
+        if that target is empty, route as Flanking to the largest
+        Front Lord on defender.
+      - Hits are computed from THAT Lord's units only (not pooled).
+      - Absorption drains from the paired/Flanked target Lord's
+        forces only.
+    Reserve Lords do NOT Strike and do NOT absorb Hits.
+    """
+    actor = attacker if actor_role == "attacker" else defender
+    target = defender if actor_role == "attacker" else attacker
+    assert actor.array is not None and target.array is not None
+
+    step_res = StepResolution(step=step_id, actor=actor_role)
+    aggregate_raw = 0.0
+
+    for actor_pos in ("front_center", "front_left", "front_right"):
+        actor_lp = next((lp for lp in actor.array
+                         if lp.position == actor_pos
+                         and lp.has_unrouted()), None)
+        if actor_lp is None:
+            continue
+        # Find target: same position first, else Flanking.
+        target_lp = next((lp for lp in target.array
+                          if lp.position == actor_pos
+                          and lp.has_unrouted()), None)
+        if target_lp is None:
+            target_lp = _pick_flank_target(target)
+        if target_lp is None:
+            continue
+
+        rows = _build_strike_rows_for_position(state, actor, actor_lp,
+                                               context="battle")
+        raw, by_kind = _step_hits(rows, step_type, unit_class)
+
+        # Phase 6a Hills hook (per-Lord application: defender side's
+        # missile units get +0.5 Hit each when actor is defender and
+        # Hills card is held).
+        if step_type == "missile":
+            hills_id = ("C1" if actor.side == "christian" else "M1")
+            held = state.decks.this_levy_events.get(actor.side, [])
+            if hills_id in held and actor.role == "defender":
+                bonus = 0.0
+                for r in rows:
+                    if r.kind in ("missiles", "crossbows", "bowmen",
+                                  "slingers", "javelins"):
+                        bonus += 0.5 * r.count
+                raw += bonus
+                cmt = sum(v for k, v in by_kind.items()
+                          if k in ("missiles", "crossbows", "bowmen",
+                                   "slingers", "javelins"))
+                if cmt > 0:
+                    for k in list(by_kind.keys()):
+                        if k in ("missiles", "crossbows", "bowmen",
+                                 "slingers", "javelins"):
+                            by_kind[k] += bonus * by_kind[k] / cmt
+
+        # Phase 6a C8 Cantador (Round 1, Christian, melee, up to 4 K+S).
+        # In per-pair mode each actor Lord gets up to its own contribution,
+        # but the SIDE-WIDE cap of 4 still applies. We approximate by
+        # giving each Lord up to min(4, its own K+S count) — slightly
+        # over-counts when multiple Lords each have 4+ K+S, but defensible.
+        if (step_type == "melee" and round_index == 1
+                and actor.side == "christian"
+                and "C8" in state.decks.this_levy_events.get("christian", [])):
+            eligible = 0
+            for r in rows:
+                if (r.kind == "melee"
+                        and r.unit_type in ("knights", "sergeants")
+                        and _unit_class(r.unit_type) == unit_class):
+                    eligible += r.count
+            eligible = min(4, eligible)
+            if eligible > 0:
+                raw += float(eligible)
+                by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
+
+        # Phase 6e Concede halving.
+        if actor.conceded:
+            raw = raw / 2.0
+            by_kind = {k: v / 2.0 for k, v in by_kind.items()}
+
+        rounded = math.ceil(raw)
+        aggregate_raw += raw
+
+        if step_type == "missile":
+            per_kind_hits = _allocate_rounded_hits(raw, by_kind)
+        else:
+            per_kind_hits = {"melee": rounded}
+
+        for kind, count in per_kind_hits.items():
+            if count <= 0:
+                continue
+            striker_selects_target = (kind == "crossbows")
+            protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
+            for _ in range(count):
+                if not target_lp.has_unrouted():
+                    break
+                _, routed = _resolve_protection_roll_for_lp(
+                    state, target, target_lp, protroll_kind,
+                    context="battle",
+                    striker_selects=striker_selects_target,
+                    striker_unit_class=unit_class,
+                )
+                if routed is not None:
+                    step_res.losses[routed] = step_res.losses.get(routed, 0) + 1
+                    step_res.rounded_hits += 1
+        step_res.raw_hits = aggregate_raw
+
+    # Reposition the sliced per-Lord forces back into the pooled
+    # side.forces so legacy queries (commit_forces_after_battle,
+    # _battle_over via has_unrouted) keep working.
+    _sync_side_forces_from_array(attacker)
+    _sync_side_forces_from_array(defender)
+    return step_res
