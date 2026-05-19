@@ -126,6 +126,10 @@ class Meta(StrictModel):
     # and applies +2 Siege markers (already placed by the cmd_march
     # auto-trigger).
     surprise_storm_pending_locale_id: str | None = None
+    # Phase 6k: Count of Barcelona faction — toggled by C13/M23
+    # Berenguer Ramon events. Default is the Christian side (Sancho
+    # or Eudes can buy the C13 capability units).
+    count_of_barcelona_side: Side | None = "christian"
 
 
 class Cylinder(StrictModel):

@@ -396,13 +396,83 @@ def unresolved_event_cards() -> list[str]:
 # These cards persist through Battle resolution; Phase 5 Battle code
 # (battle.py) can consult state.decks.this_levy_events to apply effects.
 
-@register("C13")  # Berenguer Ramon (Count of Barcelona / event side)
-@register("M23")  # Berenguer Ramon (Muslim side)
-def _berenguer_ramon(state, side, card_id, payload):
-    """Berenguer Ramon: Count of Barcelona event. Held in this_levy
-    bucket; Phase 5 Battle resolver consults for force-modifier bonus.
+@register("C13")  # Berenguer Ramon — Christian event
+def _c13_berenguer_ramon(state, side, card_id, payload):
+    """C13 (Immediate): If Count of Barcelona with Muslims, discard.
+    Otherwise a named Christian Lord may pay 1 Asset and Levy this
+    card and its units (2 Knights + 2 Men-at-Arms per Capability text).
+
+    Phase 6k: if Count of Barcelona is with Muslim side, discard
+    no-effect. Otherwise the target Lord gains +2 Knights + +2 MaA
+    once (payload['target_lord_id']; default = first eligible
+    Sancho/Eudes/al-Mustain/al-Mundir). Pay 1 Asset (coin) when
+    available.
     """
-    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+    if state.meta.count_of_barcelona_side == "muslim":
+        state.decks.discard.append(card_id)
+        return {"card_id": card_id, "side": side,
+                "discarded_no_effect": True,
+                "reason": "Count of Barcelona with Muslims"}
+    eligible = [lid for lid in ("sancho", "eudes",
+                                 "al_mustain", "al_mundir")
+                if lid in state.lords
+                and state.lords[lid].cylinder.kind == "locale"]
+    target = payload.get("target_lord_id")
+    if target and target not in eligible:
+        target = None
+    if target is None:
+        target = eligible[0] if eligible else None
+    if target is None:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Lord on map")
+    lord = state.lords[target]
+    # Pay 1 Coin if available.
+    paid = False
+    if lord.assets.get("coin", 0) > 0:
+        lord.assets["coin"] -= 1
+        if lord.assets["coin"] == 0:
+            lord.assets.pop("coin", None)
+        paid = True
+    lord.forces["knights"] = lord.forces.get("knights", 0) + 2
+    lord.forces["men_at_arms"] = lord.forces.get("men_at_arms", 0) + 2
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "target": target,
+            "knights_added": 2, "men_at_arms_added": 2,
+            "asset_paid": paid}
+
+
+@register("M23")  # Berenguer Ramon — Muslim event (mirror)
+def _m23_berenguer_ramon(state, side, card_id, payload):
+    """M23: mirror of C13 — if Count of Barcelona with Christians,
+    discard no-effect. Otherwise a Muslim Lord gets 2 Knights + 2 MaA
+    by paying 1 Asset (coin).
+    """
+    if state.meta.count_of_barcelona_side == "christian":
+        state.decks.discard.append(card_id)
+        return {"card_id": card_id, "side": side,
+                "discarded_no_effect": True,
+                "reason": "Count of Barcelona with Christians"}
+    eligible = [lid for lid in ("al_mustain", "al_mundir",
+                                 "sancho", "eudes")
+                if lid in state.lords
+                and state.lords[lid].cylinder.kind == "locale"]
+    target = payload.get("target_lord_id") if payload.get("target_lord_id")         in eligible else (eligible[0] if eligible else None)
+    if target is None:
+        return _no_op_with_note(state, card_id, side,
+                                "no eligible Lord on map")
+    lord = state.lords[target]
+    paid = False
+    if lord.assets.get("coin", 0) > 0:
+        lord.assets["coin"] -= 1
+        if lord.assets["coin"] == 0:
+            lord.assets.pop("coin", None)
+        paid = True
+    lord.forces["knights"] = lord.forces.get("knights", 0) + 2
+    lord.forces["men_at_arms"] = lord.forces.get("men_at_arms", 0) + 2
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side, "target": target,
+            "knights_added": 2, "men_at_arms_added": 2,
+            "asset_paid": paid}
 
 
 # --- Immediate events with side-wide state effects ---

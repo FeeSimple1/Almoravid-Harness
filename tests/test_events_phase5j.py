@@ -32,11 +32,15 @@ def test_indulgences_records_intent_with_target() -> None:
     assert r["target"] == "alfonso"
 
 
-def test_berenguer_ramon_holds_in_levy_bucket() -> None:
+def test_berenguer_ramon_immediate_in_phase_6k() -> None:
+    """Phase 6k: C13 is now Immediate — discards no-effect when Count
+    of Barcelona is with Muslims, else grants units to a target Lord."""
     s = load_scenario("scenario_a_toledo_beset")
+    # Default count_of_barcelona_side is "christian", so the units-
+    # granting branch fires (not the discard-no-effect branch).
     r = resolve_event(s, "christian", "C13")
-    assert r["held"] == "this_levy_events"
-    assert "C13" in s.decks.this_levy_events["christian"]
+    assert r.get("held") is None
+    assert "C13" in s.decks.discard
 
 
 def test_pope_gregory_holds_in_levy_bucket() -> None:

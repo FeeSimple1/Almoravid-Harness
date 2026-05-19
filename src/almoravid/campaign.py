@@ -1712,10 +1712,24 @@ def _h_cmd_siege(state, action):
     if do_surrender:
         from almoravid.static_data import load_strongholds
         sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
-        dice = roll_d6_n(state, sh_value)
-        threshold = (getattr(loc, marker_field)
-                     + _ravaged_count_in_taifa_for_side(state, here, side))
-        cancellations = sum(1 for d in dice if d <= threshold)
+        # Phase 6k: C21 Mozarabes auto-success when Christian holds
+        # and target locale is in a Reconquista Taifa.
+        c21_held = (side == "christian" and "C21" in
+                    state.decks.this_levy_events.get("christian", []))
+        target_taifa = state.taifas.get(loc.territory)
+        c21_eligible = (c21_held and target_taifa is not None
+                        and target_taifa.status == "reconquista")
+        if c21_eligible:
+            state.decks.this_levy_events["christian"].remove("C21")
+            state.decks.discard.append("C21")
+            dice = []
+            cancellations = sh_value  # auto-success
+            threshold = "auto_mozarabes"
+        else:
+            dice = roll_d6_n(state, sh_value)
+            threshold = (getattr(loc, marker_field)
+                         + _ravaged_count_in_taifa_for_side(state, here, side))
+            cancellations = sum(1 for d in dice if d <= threshold)
         if cancellations == sh_value:
             # Surrender succeeds — Conquest
             conq_result = _conquer_stronghold(state, here, side)
@@ -2304,6 +2318,214 @@ def _h_respond_stand_battle(state, action):
         "actions_consumed": consumed,
         "retreat_summary": retreat_summary,
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6k: Hold-card consumer actions.
+# ---------------------------------------------------------------------------
+
+
+def _h_play_pope_gregory(state, action):
+    """C14 (Hold) Pope Gregory: Play on Sancho or Eudes to
+    Muster him from Calendar, OR shift his Service 2 boxes right,
+    OR for Lordship +2.
+
+    Args:
+      side: 'christian'
+      mode: 'muster_from_calendar' | 'service_shift_right' |
+            'lordship_plus_2'
+      lord_id: 'sancho' | 'eudes'
+    """
+    side = _require_side(action)
+    _require(side == "christian", "C14 is a Christian event",
+             code="wrong_side")
+    _require("C14" in state.decks.this_levy_events.get("christian", []),
+             "C14 not held in this_levy_events", code="card_not_held")
+    lord_id = action.get("lord_id")
+    _require(lord_id in ("sancho", "eudes"),
+             "lord_id must be sancho or eudes", code="bad_arg")
+    _require(lord_id in state.lords, f"{lord_id} not in scenario",
+             code="unknown_lord")
+    mode = action.get("mode", "service_shift_right")
+    lord = state.lords[lord_id]
+    result: dict[str, Any] = {"lord_id": lord_id, "mode": mode}
+    if mode == "muster_from_calendar":
+        _require(lord.cylinder.kind == "calendar",
+                 f"{lord_id} not on Calendar", code="not_on_calendar")
+        from almoravid.static_data import load_lords as _ll
+        from almoravid.state import Cylinder
+        rec = _ll()["lords"].get(lord_id, {})
+        seats = list(rec.get("seats", []))
+        _require(seats, f"{lord_id} has no Seats", code="no_seat")
+        lord.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+        lord.forces = dict(rec.get("forces", {}))
+        lord.assets = dict(rec.get("assets", {}))
+        lord.just_arrived_this_levy = True
+        result["mustered_at"] = seats[0]
+    elif mode == "service_shift_right":
+        sm = next((s for s in state.calendar.service_markers
+                   if s.lord_id == lord_id), None)
+        if sm is not None:
+            sm.box = min(16, sm.box + 2)
+            result["new_service_box"] = sm.box
+    elif mode == "lordship_plus_2":
+        # Phase 6k: record + grant a +2 Lordship for this Lord this
+        # Levy. The Lordship action consumer would consult this.
+        # For now, just bump lordship_rating temporarily.
+        lord.lordship_rating += 2
+        result["lordship_rating_now"] = lord.lordship_rating
+    else:
+        raise IllegalAction(f"unknown mode {mode!r}", code="bad_arg")
+    state.decks.this_levy_events["christian"].remove("C14")
+    state.decks.discard.append("C14")
+    _record(state, action, f"Christian plays C14 Pope Gregory on "
+            f"{lord_id} ({mode})")
+    return result
+
+
+def _h_play_cluniacs(state, action):
+    """C15 (Hold) Cluniacs: Play on a Lord to Muster from Calendar,
+    OR shift Service +1 right, OR Lordship +2.
+
+    Args:
+      side: 'christian'
+      mode: 'muster_from_calendar' | 'service_shift_right' |
+            'lordship_plus_2'
+      lord_id: any Christian Lord
+    """
+    side = _require_side(action)
+    _require(side == "christian", "C15 is a Christian event",
+             code="wrong_side")
+    _require("C15" in state.decks.this_levy_events.get("christian", []),
+             "C15 not held in this_levy_events", code="card_not_held")
+    lord_id = action.get("lord_id")
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == "christian", f"{lord_id} not Christian",
+             code="wrong_side")
+    mode = action.get("mode", "service_shift_right")
+    result: dict[str, Any] = {"lord_id": lord_id, "mode": mode}
+    if mode == "muster_from_calendar":
+        _require(lord.cylinder.kind == "calendar",
+                 f"{lord_id} not on Calendar", code="not_on_calendar")
+        from almoravid.static_data import load_lords as _ll
+        from almoravid.state import Cylinder
+        rec = _ll()["lords"].get(lord_id, {})
+        seats = list(rec.get("seats", []))
+        _require(seats, f"{lord_id} has no Seats", code="no_seat")
+        lord.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+        lord.forces = dict(rec.get("forces", {}))
+        lord.assets = dict(rec.get("assets", {}))
+        lord.just_arrived_this_levy = True
+        result["mustered_at"] = seats[0]
+    elif mode == "service_shift_right":
+        sm = next((s for s in state.calendar.service_markers
+                   if s.lord_id == lord_id), None)
+        if sm is not None:
+            sm.box = min(16, sm.box + 1)
+            result["new_service_box"] = sm.box
+    elif mode == "lordship_plus_2":
+        lord.lordship_rating += 2
+        result["lordship_rating_now"] = lord.lordship_rating
+    else:
+        raise IllegalAction(f"unknown mode {mode!r}", code="bad_arg")
+    state.decks.this_levy_events["christian"].remove("C15")
+    state.decks.discard.append("C15")
+    _record(state, action, f"Christian plays C15 Cluniacs on "
+            f"{lord_id} ({mode})")
+    return result
+
+
+def _h_play_de_vivar_reconcile(state, action):
+    """C25 (Hold) De Vivar: Reconcile with Rodrigo (3.5.1) — Rodrigo
+    al-Sayyid leaves the map; Muslim side gains 1 VP "to Taifas box"
+    (modeled as +1 Muslim score).
+
+    Args:
+      side: 'christian'
+    """
+    side = _require_side(action)
+    _require(side == "christian", "C25 is a Christian event",
+             code="wrong_side")
+    _require("C25" in state.decks.this_levy_events.get("christian", []),
+             "C25 not held in this_levy_events", code="card_not_held")
+    sayyid = state.lords.get("rodrigo_al_sayyid")
+    _require(sayyid is not None and sayyid.cylinder.kind == "locale",
+             "Rodrigo al-Sayyid not on map", code="not_on_map")
+    # Reconcile: remove al-Sayyid from the map; Muslim +1 VP.
+    from almoravid.state import Cylinder
+    for field_name in sayyid.cleanup_on_removal_fields:
+        try:
+            setattr(sayyid, field_name,
+                    type(getattr(sayyid, field_name))())
+        except Exception:
+            pass
+    sayyid.cylinder = Cylinder(kind="removed")
+    from almoravid.actions import _shift_service_left as _ssl
+    _ssl(state, "rodrigo_al_sayyid", boxes=20)
+    state.score.muslim += 1.0
+    state.decks.this_levy_events["christian"].remove("C25")
+    state.decks.discard.append("C25")
+    _record(state, action, "Christian Reconciles Rodrigo via C25 "
+            "(al-Sayyid removed; +1 VP to Muslim)")
+    return {"reconciled": True, "muslim_vp_delta": 1.0}
+
+
+def _h_cmd_march_port_to_port(state, action):
+    """M19 (Hold) African Fleet: Lord uses entire Command card to
+    March between two Ports where no Christian Lord at destination.
+
+    Args:
+      side: acting (Muslim)
+      target_locale_id: destination Port
+    """
+    from almoravid.state import Cylinder
+    from almoravid.effective import is_besieged
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(side == "muslim", "M19 African Fleet is a Muslim event",
+             code="wrong_side")
+    _require("M19" in state.decks.this_levy_events.get("muslim", []),
+             "M19 not held", code="card_not_held")
+    lord_id = state.meta.active_lord_id
+    _require(lord_id is not None, "no active Lord", code="no_active_lord")
+    lord = state.lords[lord_id]
+    _require(lord.cylinder.kind == "locale", f"{lord_id} not at Locale",
+             code="not_on_map")
+    _require(not is_besieged(state, lord_id),
+             "Besieged Lord may only Sally/Forage/Pass",
+             code="besieged")
+    from_loc = lord.cylinder.locale_id
+    _require(state.locales[from_loc].has_port,
+             f"{from_loc} is not a Port", code="not_port")
+    target = action.get("target_locale_id")
+    _require(target in state.locales, f"unknown locale {target!r}",
+             code="unknown_locale")
+    _require(state.locales[target].has_port,
+             f"{target} is not a Port", code="not_port")
+    # No Christian Lord at target.
+    for l in state.lords.values():
+        if (l.side == "christian" and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == target):
+            raise IllegalAction(
+                f"Christian Lord {l.id} at {target} — blocked",
+                code="destination_has_enemy",
+            )
+    # Execute Port-to-Port March.
+    lord.cylinder = Cylinder(kind="locale", locale_id=target)
+    lord.in_stronghold = False
+    lord.moved_fought = True
+    state.decks.this_levy_events["muslim"].remove("M19")
+    state.decks.discard.append("M19")
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0  # consumes entire card per Tips
+    _record(state, action,
+            f"muslim {lord_id} African Fleet (M19): {from_loc} -> "
+            f"{target} (Port to Port, card spent)")
+    return {"from": from_loc, "to": target,
+            "actions_consumed": consumed}
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -2324,4 +2546,8 @@ CAMPAIGN_HANDLERS = {
     "respond_avoid_battle": _h_respond_avoid_battle,
     "respond_withdraw": _h_respond_withdraw,
     "respond_stand_battle": _h_respond_stand_battle,
+    "play_pope_gregory": _h_play_pope_gregory,
+    "play_cluniacs": _h_play_cluniacs,
+    "play_de_vivar_reconcile": _h_play_de_vivar_reconcile,
+    "cmd_march_port_to_port": _h_cmd_march_port_to_port,
 }

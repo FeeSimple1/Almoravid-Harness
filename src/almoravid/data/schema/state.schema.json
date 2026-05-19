@@ -840,6 +840,22 @@
           ],
           "default": null,
           "title": "Surprise Storm Pending Locale Id"
+        },
+        "count_of_barcelona_side": {
+          "anyOf": [
+            {
+              "enum": [
+                "christian",
+                "muslim"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "christian",
+          "title": "Count Of Barcelona Side"
         }
       },
       "required": [
