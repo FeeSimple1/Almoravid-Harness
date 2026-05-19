@@ -416,28 +416,41 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
         pass
 
     # Avoid Battle: enumerate adjacent locales (not from_locale, no
-    # unbesieged active-side Lord present).
+    # Unbesieged/Unbypassed active-side Lord present).
+    # Bug Q fix (Pattern 9): omit Avoid options when any defender Lord
+    # is Laden (SoP requires Unladen).
+    # Bug S fix (Pattern 2 mirror): destination check matches trigger
+    # by also filtering Bypassed enemy Lords.
     try:
-        from almoravid.effective import is_besieged
+        from almoravid.effective import is_besieged, is_bypassed
         from almoravid.map import neighbors_via
-        for way_type in ("road", "pass"):
-            for nbr in neighbors_via(locale_id, way_type):
-                if nbr == from_locale:
-                    continue
-                blocked = False
-                for l in state.lords.values():
-                    if (l.side == active_side
-                            and l.cylinder.kind == "locale"
-                            and l.cylinder.locale_id == nbr
-                            and not is_besieged(state, l.id)):
-                        blocked = True
-                        break
-                if blocked:
-                    continue
-                out.append({
-                    "type": "respond_avoid_battle", "side": side,
-                    "target_locale_id": nbr, "way_type": way_type,
-                })
+        from almoravid.campaign import _is_laden
+        # Pre-check Laden across the whole defender group.
+        any_laden = any(
+            _is_laden(state.lords[lid])
+            for lid in payload.get("defender_lord_ids", [])
+            if lid in state.lords
+        )
+        if not any_laden:
+            for way_type in ("road", "pass"):
+                for nbr in neighbors_via(locale_id, way_type):
+                    if nbr == from_locale:
+                        continue
+                    blocked = False
+                    for l in state.lords.values():
+                        if (l.side == active_side
+                                and l.cylinder.kind == "locale"
+                                and l.cylinder.locale_id == nbr
+                                and not is_besieged(state, l.id)
+                                and not is_bypassed(state, l.id)):
+                            blocked = True
+                            break
+                    if blocked:
+                        continue
+                    out.append({
+                        "type": "respond_avoid_battle", "side": side,
+                        "target_locale_id": nbr, "way_type": way_type,
+                    })
     except (ImportError, KeyError, AttributeError, FileNotFoundError):
         pass
 

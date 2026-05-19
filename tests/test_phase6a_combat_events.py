@@ -16,6 +16,7 @@ from almoravid.battle import (
     _consume_camp_attack,
     _discard_round1_events,
     _resolve_step,
+    init_m7_cap,
     resolve_battle,
     resolve_storm,
 )
@@ -128,6 +129,7 @@ def test_m7_spear_wall_extends_armor_against_horse_melee() -> None:
             dfd = BattleSide(side="muslim", role="defender",
                              lord_ids=["al_mutamid"],
                              forces={"men_at_arms": 8})
+            init_m7_cap(s, dfd)
             _resolve_step(s, "2.b", "attacker", "melee", "horse",
                           atk, dfd, round_index=1)
             survivors = sum(dfd.forces.values())
@@ -161,6 +163,7 @@ def test_m7_does_not_apply_against_foot_strikers() -> None:
             dfd = BattleSide(side="muslim", role="defender",
                              lord_ids=["al_mutamid"],
                              forces={"men_at_arms": 6})
+            init_m7_cap(s, dfd)
             _resolve_step(s, "2.d", "attacker", "melee", "foot",
                           atk, dfd, round_index=1)
             survivors = sum(dfd.forces.values())
@@ -187,6 +190,7 @@ def test_m7_does_not_apply_in_storm() -> None:
             dfd = BattleSide(side="muslim", role="defender",
                              lord_ids=["al_mutamid"],
                              forces={"men_at_arms": 6})
+            init_m7_cap(s, dfd)
             _resolve_step(s, "2.b", "attacker", "melee", "horse",
                           atk, dfd, round_index=1, context="storm")
             survivors = sum(dfd.forces.values())
@@ -219,9 +223,12 @@ def test_c7_cancels_muslim_camp_attack() -> None:
     result = BattleResult(engagement="battle", attacker=atk, defender=dfd)
     _consume_camp_attack(s, atk, dfd, result)
     assert "M2" in s.decks.discard
-    assert "C7" in s.decks.discard
+    # Bug P fix (Pattern 9): C7 has TWO effects (cancel + Retreat
+    # opt-out). It stays in this_levy_events post-cancel so
+    # apply_retreat_aftermath can also consult it. apply_aftermath
+    # later moves it to discard.
+    assert "C7" in s.decks.this_levy_events.get("christian", [])
     assert "M2" not in s.decks.this_campaign_events.get("muslim", [])
-    assert "C7" not in s.decks.this_levy_events.get("christian", [])
     # Cancelled: assets unchanged.
     assert s.lords["alfonso"].assets == pre_christian
     assert s.lords["al_mutamid"].assets == pre_muslim

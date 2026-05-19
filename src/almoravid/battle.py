@@ -100,6 +100,12 @@ class BattleSide:
     routed_units: dict[UnitType, int] = field(default_factory=dict)
     # Garrison units split out for Storm absorption-order (Bug M).
     garrison_forces: dict[UnitType, int] = field(default_factory=dict)
+    # Bug T (Pattern 9) — M7 Spear Wall is per-marker on TWO Muslim
+    # Lords; for now we cap the total +1 Armor boosts at the sum of
+    # the two largest Muslim contributors' MaA + AfricanFoot counts.
+    # Initialized in resolve_battle when M7 is held; decremented on
+    # each consultation in _resolve_protection_roll.
+    m7_boosts_remaining: int = 0
 
     def has_unrouted(self) -> bool:
         return any(v > 0 for v in self.forces.values()) or any(
@@ -144,6 +150,29 @@ class BattleResult:
 # ---------------------------------------------------------------------------
 # Strike-row construction
 # ---------------------------------------------------------------------------
+
+
+def init_m7_cap(state: GameState, side: BattleSide) -> None:
+    """Set side.m7_boosts_remaining when this side is the Muslim
+    defender/attacker holding M7 Spear Wall. Cap = sum of top-2
+    Muslim Lords' (men_at_arms + african_foot) — approximates the
+    'two marked Lords' restriction without per-Lord force tracking.
+    No-op when M7 is not held or side is not Muslim.
+    """
+    if side.side != "muslim":
+        return
+    if "M7" not in state.decks.this_levy_events.get("muslim", []):
+        return
+    contribs: list[int] = []
+    for lid in side.lord_ids:
+        l = state.lords.get(lid)
+        if l is None:
+            continue
+        af = (l.forces.get("men_at_arms", 0)
+              + l.forces.get("african_foot", 0))
+        contribs.append(af)
+    contribs.sort(reverse=True)
+    side.m7_boosts_remaining = sum(contribs[:2])
 
 
 def build_strike_rows(
@@ -372,18 +401,23 @@ def _resolve_protection_roll(
     canceled = False
     if ptype == "armored":
         lo, hi = unit["protection"]["range"]
-        # M7 Spear Wall (Phase 6a) — Muslim defenders' Armored Foot
-        # (Men-at-Arms, African Foot) get Armor +1 vs Christian Horse
-        # Melee in Battle (not Storm, not vs Missiles, not vs Foot
-        # strikers). Applied while M7 sits in this_levy_events; the
-        # Battle round loop discards it after Round 1.
+        # M7 Spear Wall (Phase 6a, Bug T fix) — Muslim defenders'
+        # Armored Foot (Men-at-Arms, African Foot) get Armor +1 vs
+        # Christian Horse Melee in Battle (not Storm, not vs Missiles,
+        # not vs Foot strikers). Per card text the marker is on TWO
+        # specific Muslim Lords' mats; until per-Lord forces tracking
+        # lands we cap total +1 consultations at the sum of the two
+        # largest Muslim contributors' MaA + AfricanFoot (set up in
+        # resolve_battle).
         if (target_side.side == "muslim"
                 and "M7" in state.decks.this_levy_events.get("muslim", [])
                 and chosen in ("men_at_arms", "african_foot")
                 and striker_unit_class == "horse"
                 and striker_kind == "melee"
-                and context == "battle"):
+                and context == "battle"
+                and target_side.m7_boosts_remaining > 0):
             hi = hi + 1
+            target_side.m7_boosts_remaining -= 1
         if lo <= rng <= hi:
             canceled = True
     elif ptype == "unarmored":
@@ -595,6 +629,9 @@ def resolve_battle(
         attacker=attacker,
         defender=defender,
     )
+    # Bug T: initialize M7 Spear Wall cap.
+    init_m7_cap(state, attacker)
+    init_m7_cap(state, defender)
     # Camp Attack (C2/M2) consumed at Battle start (before Round 1).
     # C7 Baggage Parapet on the Christian side cancels Muslim M2.
     _consume_camp_attack(state, attacker, defender, result)
@@ -1094,10 +1131,13 @@ def _consume_camp_attack(
             christian_hold = state.decks.this_levy_events.get("christian", [])
             if "C7" in christian_hold:
                 cancelled = True
-                christian_hold.remove("C7")
-                state.decks.discard.append("C7")
-                if not christian_hold:
-                    state.decks.this_levy_events.pop("christian", None)
+                # Bug P fix (Pattern 9): C7 has TWO effects per card
+                # text — "Cancel Muslim Camp Attack" AND "If Christians
+                # Retreat, pay 1 Asset per Lord to skip Spoils and
+                # Service shift". Don't discard C7 here; leave it in
+                # this_levy_events so apply_retreat_aftermath can
+                # consult it. apply_aftermath will discard it at
+                # engagement end like any other Hold event.
                 result.notes.append(
                     "Camp Attack (M2) cancelled by Baggage Parapet (C7)"
                 )
@@ -1293,35 +1333,63 @@ def apply_retreat_aftermath(
         if retreat_target is not None:
             lord.cylinder = Cylinder(kind="locale", locale_id=retreat_target)
             lord.in_stronghold = False
-            # Service-shift roll (1-2 -> 1 box, 3-4 -> 2, 5-6 -> 3).
-            d = roll_d6(state)
-            if d <= 2:
-                shift = 1
-            elif d <= 4:
-                shift = 2
-            else:
-                shift = 3
-            new_box = _shift_service_left(state, lid, boxes=shift)
             entry["fate"] = "retreat"
             entry["retreat_to"] = retreat_target
             entry["retreat_way"] = retreat_way
-            entry["service_roll"] = d
-            entry["service_shift_boxes"] = shift
-            entry["new_service_box"] = new_box
+            # Bug P fix (Pattern 9): C7 Baggage Parapet opt-out.
+            # When a Christian Lord Retreats and C7 sits in
+            # this_levy_events["christian"], the Lord may pay 1 Asset
+            # to skip Spoils transfer AND the Service-shift roll
+            # entirely. We auto-pay greedily when an Asset is
+            # available (preferring loot/cart/mule/prov, keeping coin
+            # for Pay step). If no Asset is available, the opt-out
+            # cannot be exercised and the Service-shift fires normally.
+            ASSET_PAY_ORDER = ("loot", "mule", "cart", "prov", "coin")
+            c7_held = "C7" in state.decks.this_levy_events.get("christian", [])
+            opt_out_used = False
+            if c7_held and loser_side == "christian":
+                for atype in ASSET_PAY_ORDER:
+                    if lord.assets.get(atype, 0) > 0:
+                        lord.assets[atype] -= 1
+                        if lord.assets[atype] == 0:
+                            lord.assets.pop(atype, None)
+                        opt_out_used = True
+                        entry["c7_opt_out_asset"] = atype
+                        break
+            if opt_out_used:
+                entry["service_shift_boxes"] = 0
+                entry["service_roll"] = None
+                entry["c7_opt_out"] = True
+            else:
+                # Service-shift roll (1-2 -> 1 box, 3-4 -> 2, 5-6 -> 3).
+                d = roll_d6(state)
+                if d <= 2:
+                    shift = 1
+                elif d <= 4:
+                    shift = 2
+                else:
+                    shift = 3
+                new_box = _shift_service_left(state, lid, boxes=shift)
+                entry["service_roll"] = d
+                entry["service_shift_boxes"] = shift
+                entry["new_service_box"] = new_box
             summary["losers"].append(entry)
             continue
 
-        # Step 3: Permanent removal (rule 3.3.1). Cleanup_on_removal
-        # contract handles per-field cleanup; we move the Lord off the
-        # map by setting cylinder to off_left_service marker (simplest
-        # representation — full removal calls _shift_service_left to
-        # off-edge and clears forces).
+        # Step 3: Permanent removal (rule 3.3.1).
+        # Bug R fix (Pattern 9): cylinder was NOT in
+        # cleanup_on_removal_fields, so the removed Lord remained at
+        # the battle locale as a ghost — visible to Approach trigger,
+        # Withdraw capacity, friendly-Lord scans. Set cylinder.kind
+        # explicitly to "removed" so the rest of the engine sees the
+        # removal.
         for field_name in lord.cleanup_on_removal_fields:
-            default = getattr(type(lord).model_fields[field_name], "default", None)
             try:
-                setattr(lord, field_name, type(getattr(lord, field_name))())
+                setattr(lord, field_name,
+                        type(getattr(lord, field_name))())
             except Exception:
                 pass
+        lord.cylinder = Cylinder(kind="removed")
         _shift_service_left(state, lid, boxes=20)  # force off-left
         entry["fate"] = "removed"
         summary["losers"].append(entry)
