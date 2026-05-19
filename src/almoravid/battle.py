@@ -94,6 +94,11 @@ class LordPosition:
     forces. The pooled BattleSide.forces remains the source of truth
     for single-Lord Battles and as the aggregate view used by
     legacy code paths.
+
+    Phase 6g: `m7_marked` reflects per-Lord M7 Spear Wall markers
+    (card text: two Muslim Lords selected at play). When set, the
+    per-Lord protection-roll helper applies Armor +1 to this Lord's
+    Armored Foot vs Christian Horse Melee.
     """
 
     lord_id: str
@@ -101,6 +106,7 @@ class LordPosition:
     forces: dict[UnitType, int]
     capabilities_in_play: list[str] = field(default_factory=list)
     routed_units: dict[UnitType, int] = field(default_factory=dict)
+    m7_marked: bool = False
 
     def has_unrouted(self) -> bool:
         return any(v > 0 for v in self.forces.values())
@@ -187,26 +193,42 @@ class BattleResult:
 
 
 def init_m7_cap(state: GameState, side: BattleSide) -> None:
-    """Set side.m7_boosts_remaining when this side is the Muslim
-    defender/attacker holding M7 Spear Wall. Cap = sum of top-2
-    Muslim Lords' (men_at_arms + african_foot) — approximates the
-    'two marked Lords' restriction without per-Lord force tracking.
+    """Phase 6g: set up M7 Spear Wall markers on the Muslim side.
+
+    If side.array is present: place per-Lord m7_marked=True on the
+    TWO Muslim Lords with the most MaA + AfricanFoot (per card text:
+    Muslim player picks two Lords; we pick greedily for
+    determinism). The protection-roll helpers (both pool and per-
+    pair paths) consult these markers.
+
+    If side.array is absent (single-Lord or legacy multi-Lord): fall
+    back to side.m7_boosts_remaining = cap of top-2 Lords' MaA+AF.
     No-op when M7 is not held or side is not Muslim.
     """
     if side.side != "muslim":
         return
     if "M7" not in state.decks.this_levy_events.get("muslim", []):
         return
-    contribs: list[int] = []
+    contribs: list[tuple[int, str]] = []
     for lid in side.lord_ids:
         l = state.lords.get(lid)
         if l is None:
             continue
         af = (l.forces.get("men_at_arms", 0)
               + l.forces.get("african_foot", 0))
-        contribs.append(af)
+        contribs.append((af, lid))
     contribs.sort(reverse=True)
-    side.m7_boosts_remaining = sum(contribs[:2])
+    if side.array is not None:
+        top_two = {lid for _, lid in contribs[:2]}
+        for lp in side.array:
+            if lp.lord_id in top_two:
+                lp.m7_marked = True
+        # Also set the side-level cap so legacy callers that don't
+        # consult per-Lord markers (none currently, but defensive)
+        # still respect the count.
+        side.m7_boosts_remaining = sum(af for af, _ in contribs[:2])
+    else:
+        side.m7_boosts_remaining = sum(af for af, _ in contribs[:2])
 
 
 def build_strike_rows(
@@ -1300,13 +1322,13 @@ def _consume_camp_attack(
                     if elord.assets[atype] == 0:
                         elord.assets.pop(atype, None)
                     removed += take
-        # Distribute Spoils to the first friendly Lord (simplification —
-        # full per-Lord Spoils share-out lands with Phase 6c Aftermath).
+        # Phase 6g: distribute Spoils round-robin across all friendly
+        # Lords at the Battle (rule 4.4.3 "winning player distributes
+        # among winning Lords at Locale").
         if total_spoils and friendly.lord_ids:
-            recipient = state.lords.get(friendly.lord_ids[0])
-            if recipient is not None:
-                for atype, n in total_spoils.items():
-                    recipient.assets[atype] = recipient.assets.get(atype, 0) + n
+            distribute_spoils_round_robin(
+                state, list(friendly.lord_ids), total_spoils
+            )
         result.notes.append(
             f"Camp Attack ({ca_id}) fired by {side_key}: "
             f"spoils={total_spoils}"
@@ -1732,14 +1754,24 @@ def _resolve_protection_roll_for_lp(
     canceled = False
     if ptype == "armored":
         lo, hi = unit["protection"]["range"]
-        # Bug T (M7 Spear Wall) — apply per-Lord with the side-level cap.
-        if (side.side == "muslim"
-                and "M7" in state.decks.this_levy_events.get("muslim", [])
-                and chosen in ("men_at_arms", "african_foot")
-                and striker_unit_class == "horse"
-                and striker_kind == "melee"
-                and context == "battle"
-                and side.m7_boosts_remaining > 0):
+        # Phase 6g M7 Spear Wall (per-Lord marker preferred): if the
+        # target LordPosition is m7_marked, Armor +1 vs Christian Horse
+        # Melee in Battle. Falls back to side-level cap if not marked
+        # (covers legacy callers that didn't initialize per-Lord
+        # markers).
+        m7_active = (
+            side.side == "muslim"
+            and chosen in ("men_at_arms", "african_foot")
+            and striker_unit_class == "horse"
+            and striker_kind == "melee"
+            and context == "battle"
+            and "M7" in state.decks.this_levy_events.get("muslim", [])
+        )
+        if m7_active and target_lp.m7_marked:
+            hi = hi + 1
+        elif (m7_active and side.array is None
+              and side.m7_boosts_remaining > 0):
+            # Pool-path fallback only when no per-Lord markers exist.
             hi = hi + 1
             side.m7_boosts_remaining -= 1
         if lo <= rng <= hi:
@@ -1920,3 +1952,38 @@ def _resolve_step_per_pair(
     _sync_side_forces_from_array(attacker)
     _sync_side_forces_from_array(defender)
     return step_res
+
+
+
+# ---------------------------------------------------------------------------
+# Phase 6g: Spoils distribution helper.
+# ---------------------------------------------------------------------------
+
+
+def distribute_spoils_round_robin(
+    state: GameState,
+    friendly_lord_ids: list[str],
+    spoils: dict[str, int],
+) -> dict[str, dict[str, int]]:
+    """Distribute Spoils across friendly Lords round-robin.
+
+    Per rule 4.4.3 winning player distributes among winning Lords at
+    the Battle. Greedy/deterministic: iterate Lords in given order,
+    handing them one Asset at a time per kind. Returns the per-Lord
+    distribution dict.
+    """
+    out: dict[str, dict[str, int]] = {lid: {} for lid in friendly_lord_ids}
+    if not friendly_lord_ids:
+        return out
+    for atype, total in spoils.items():
+        if total <= 0:
+            continue
+        i = 0
+        for _ in range(total):
+            lid = friendly_lord_ids[i % len(friendly_lord_ids)]
+            lord = state.lords.get(lid)
+            if lord is not None:
+                lord.assets[atype] = lord.assets.get(atype, 0) + 1
+            out[lid][atype] = out[lid].get(atype, 0) + 1
+            i += 1
+    return out
