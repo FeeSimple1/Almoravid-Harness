@@ -300,6 +300,84 @@ def _h_aow_draw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"drawn": drawn, "deck_remaining": len(state.decks.draw)}
 
 
+def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.1.2 (first Levy): deploy a drawn Arts of War card as a
+    Capability (lower half). side_wide -> tucked at the map edge
+    (board_edge + capabilities_in_play); this_lord -> tucked under a
+    chosen Mustered Lord's mat (lord.capabilities). A "This Lord" card
+    that cannot be assigned to a Mustered Lord (or a card with no
+    Capability half) adds no Capability and is discarded (3.1.2)."""
+    from almoravid.state import CardInPlay
+    side = _require_side(action)
+    _require_levy_step(state, "arts_of_war")
+    _require_active(state, side)
+    _require(not state.meta.first_levy_done,
+             "Capability deployment (3.1.2) is only for the first Levy; "
+             "later Levies implement Events (3.1.3)", code="not_first_levy")
+    card_id = action.get("card_id")
+    pend = state.decks.pending_draw.get(side, [])
+    _require(card_id in pend, f"{card_id} not in {side} pending draw",
+             code="not_pending")
+    rec = load_cards()["cards"].get(card_id, {})
+    scope = rec.get("capability_scope")
+    deployed = None
+    if rec.get("no_capability") or scope is None:
+        state.decks.discard.append(card_id)        # no Capability half
+    elif scope == "side_wide":
+        state.decks.board_edge.setdefault(side, []).append(card_id)
+        state.decks.capabilities_in_play.append(CardInPlay(
+            card_id=card_id, scope="side_wide", owner_side=side,
+            owner_lord_id=None))
+        deployed = "side_wide"
+    else:  # this_lord
+        lord_id = action.get("lord_id")
+        lord = state.lords.get(lord_id) if lord_id else None
+        if (lord is not None and lord.side == side
+                and lord.cylinder.kind == "locale"):
+            lord.capabilities.append(card_id)
+            state.decks.capabilities_in_play.append(CardInPlay(
+                card_id=card_id, scope="this_lord", owner_side=side,
+                owner_lord_id=lord_id))
+            deployed = f"this_lord:{lord_id}"
+        else:
+            # Cannot assign to a Mustered Lord -> adds no Capability.
+            state.decks.discard.append(card_id)
+            deployed = "unassigned_discarded"
+    state.decks.pending_draw[side] = [c for c in pend if c != card_id]
+    _record(state, action,
+            f"{side} deploys Capability {card_id} ({deployed}) (3.1.2)")
+    return {"card_id": card_id, "deployed": deployed,
+            "pending_remaining": list(state.decks.pending_draw[side])}
+
+
+def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.1.3 (second and later Levies): implement a drawn card's Event
+    (upper half) in the order drawn. Immediate Events apply at once;
+    "This Levy" and "Hold" Events are bucketed by their resolver. Cards
+    must be implemented in draw order (FIFO)."""
+    from almoravid.events import resolve_event
+    side = _require_side(action)
+    _require_levy_step(state, "arts_of_war")
+    _require_active(state, side)
+    _require(state.meta.first_levy_done,
+             "Event implementation (3.1.3) applies from the second Levy; "
+             "the first Levy deploys Capabilities (3.1.2)",
+             code="first_levy_caps_only")
+    pend = state.decks.pending_draw.get(side, [])
+    _require(pend, f"no pending drawn cards for {side}", code="not_pending")
+    card_id = action.get("card_id", pend[0])
+    _require(card_id == pend[0],
+             f"Events must be implemented in the order drawn (next: "
+             f"{pend[0]})", code="out_of_order")
+    res = resolve_event(state, side, card_id, action.get("payload"))
+    # Remove from pending; the resolver routed the card (hold bucket,
+    # this-levy bucket, or immediate apply+discard).
+    state.decks.pending_draw[side] = pend[1:]
+    _record(state, action, f"{side} implements Event {card_id} (3.1.3)")
+    return {"card_id": card_id, "event_result": res,
+            "pending_remaining": list(state.decks.pending_draw[side])}
+
+
 # ---------------------------------------------------------------------------
 # 3.4 Muster (minimal viable implementation)
 # ---------------------------------------------------------------------------
@@ -1522,6 +1600,8 @@ _HANDLERS = {
     "pass_step": _h_pass_step,
     "aow_shuffle": _h_aow_shuffle,
     "aow_draw": _h_aow_draw,
+    "aow_deploy_capability": _h_aow_deploy_capability,
+    "aow_implement_event": _h_aow_implement_event,
     "muster_lord": _h_muster_lord,
     "pay_lord": _h_pay_lord,
     "disband_lord": _h_disband_lord,

@@ -78,6 +78,9 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     if step in ("arts_of_war", "pay", "service_disband", "muster", "call_to_arms"):
         if step == "service_disband" and pending_mandatory_disbands(state, active):
             pass
+        elif step == "arts_of_war" and state.decks.pending_draw.get(active):
+            # L13: must deploy/implement drawn cards before passing.
+            pass
         else:
             moves.append({"type": "pass_step", "side": active})
 
@@ -85,14 +88,41 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
 
 
 def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.1 Arts of War: shuffle the deck and/or draw cards."""
+    """3.1 Arts of War: shuffle / draw, then deploy Capabilities (first
+    Levy, 3.1.2) or implement Events (later Levy, 3.1.3) for drawn cards."""
+    from almoravid.static_data import load_cards
     out: list[dict[str, Any]] = []
-    # Shuffle is always available (re-shuffle costs nothing structurally;
-    # in real play a side shuffles before drawing once per Levy).
+    pend = state.decks.pending_draw.get(side, [])
+    if pend:
+        # L13: drawn cards MUST be processed before anything else.
+        if not state.meta.first_levy_done:
+            cards = load_cards()["cards"]
+            for cid in pend:
+                rec = cards.get(cid, {})
+                if rec.get("no_capability") or rec.get("capability_scope") is None:
+                    out.append({"type": "aow_deploy_capability",
+                                "side": side, "card_id": cid})
+                elif rec["capability_scope"] == "side_wide":
+                    out.append({"type": "aow_deploy_capability",
+                                "side": side, "card_id": cid})
+                else:  # this_lord: offer each Mustered Lord (+ discard)
+                    musters = [lid for lid, l in state.lords.items()
+                               if l.side == side
+                               and l.cylinder.kind == "locale"]
+                    for lid in musters:
+                        out.append({"type": "aow_deploy_capability",
+                                    "side": side, "card_id": cid,
+                                    "lord_id": lid})
+                    out.append({"type": "aow_deploy_capability",
+                                "side": side, "card_id": cid})
+        else:
+            # Implement Events in draw order (FIFO): only the first.
+            out.append({"type": "aow_implement_event", "side": side,
+                        "card_id": pend[0]})
+        return out
+    # No pending cards: shuffle is always available, and the side may draw.
     out.append({"type": "aow_shuffle", "side": side})
     if state.decks.draw:
-        # Allow draws of 1..min(deck, total_lordship). For Phase 2c we
-        # expose draw counts 1..min(3, deck) so legal_moves stays small.
         max_n = min(3, len(state.decks.draw))
         for n in range(1, max_n + 1):
             out.append({"type": "aow_draw", "side": side, "n": n})
