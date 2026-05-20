@@ -279,7 +279,8 @@ def _advance_or_end_campaign(state: GameState) -> None:
 
 
 def _feed_lord(state: GameState, lord_id: str, *,
-                force: bool = False) -> dict[str, Any]:
+                force: bool = False,
+                discard_excess_mules: bool = False) -> dict[str, Any]:
     """Rule 4.8.1 Feed: a Lord who Moved/Fought this card consumes
     ceil((units + mules) / 6) Provender or Loot. Unfed -> Service
     marker shifts 1 box left.
@@ -288,31 +289,137 @@ def _feed_lord(state: GameState, lord_id: str, *,
     cards (C4/M4 Arid Terrain, C5/M5 Drought) can compel an immediate
     Feed regardless of whether the Lord has acted yet.
     """
-    import math
     lord = state.lords[lord_id]
     if not force and not lord.moved_fought:
         return {"skipped": "did_not_move_fight", "consumed": 0}
+    res = _feed_consume_own(state, lord_id,
+                            discard_excess_mules=discard_excess_mules)
+    # Single-Lord (event-forced) Feed applies the Unfed penalty
+    # immediately; the comprehensive end-card Feed defers it until after
+    # Sharing (4.8.1 SHARING).
+    unfed = False
+    if res["short"] > 0:
+        _apply_unfed_penalty(state, lord_id)
+        unfed = True
+    return {"consumed": res["consumed"], "needed": res["needed"],
+            "short": res["short"], "unfed_penalty": unfed,
+            "use_prov": res["use_prov"], "use_loot": res["use_loot"],
+            "mules_discarded": res["mules_discarded"]}
+
+
+def _apply_unfed_penalty(state: GameState, lord_id: str) -> None:
+    """4.8.1 UNFED: shift the Lord's Service marker one 40-Days box left."""
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == lord_id), None)
+    if sm is not None:
+        sm.box = max(0, sm.box - 1)
+
+
+def _feed_consume_own(state: GameState, lord_id: str, *,
+                      discard_excess_mules: bool = False) -> dict[str, Any]:
+    """4.8.1 own-Feed: a Lord consumes ceil((units + Mules)/6) Provender
+    or Loot from his OWN mat (Provender first, then Loot). Does NOT apply
+    the Unfed penalty (the caller decides when, after Sharing).
+
+    E6 GREED (rule 4.8.1): if `discard_excess_mules`, the Lord may first
+    discard Mules in excess of those his own Provender + Loot can Feed,
+    keeping as many Mules as feeding capacity allows. This is an OPTIONAL
+    player choice (rule: "may"); it is NOT auto-exercised by the default
+    end-card Feed, which keeps Mules and accepts any Unfed penalty.
+    """
+    import math
+    lord = state.lords[lord_id]
     units = sum(lord.forces.values())
     mules = lord.assets.get("mule", 0)
-    needed = math.ceil((units + mules) / 6) if (units + mules) > 0 else 0
     prov = lord.assets.get("prov", 0)
     loot = lord.assets.get("loot", 0)
+    discarded = 0
+    if discard_excess_mules and mules > 0:
+        capacity = prov + loot              # Assets available to Feed
+        keep = max(0, min(mules, capacity * 6 - units))
+        discarded = mules - keep
+        if discarded > 0:
+            mules = keep
+            if mules > 0:
+                lord.assets["mule"] = mules
+            else:
+                lord.assets.pop("mule", None)
+    needed = math.ceil((units + mules) / 6) if (units + mules) > 0 else 0
     use_prov = min(prov, needed)
     short_after = needed - use_prov
     use_loot = min(loot, short_after)
     short = short_after - use_loot
-    lord.assets["prov"] = prov - use_prov
-    lord.assets["loot"] = loot - use_loot
-    unfed = False
-    if short > 0:
-        sm = next((s for s in state.calendar.service_markers
-                   if s.lord_id == lord_id), None)
-        if sm is not None:
-            sm.box = max(0, sm.box - 1)
-        unfed = True
-    return {"consumed": use_prov + use_loot, "needed": needed,
-            "short": short, "unfed_penalty": unfed,
-            "use_prov": use_prov, "use_loot": use_loot}
+    if use_prov > 0:
+        lord.assets["prov"] = prov - use_prov
+    if use_loot > 0:
+        lord.assets["loot"] = loot - use_loot
+    return {"needed": needed, "consumed": use_prov + use_loot,
+            "use_prov": use_prov, "use_loot": use_loot, "short": short,
+            "mules_discarded": discarded}
+
+
+def _feed_all_moved_fought(state: GameState, *,
+                           discard_excess_mules: bool = False) -> dict[str, Any]:
+    """4.8.1 Feed for the per-card Feed/Pay/Disband step (4.8).
+
+    E4: ALL Lords marked Moved/Fought on BOTH sides Feed (Christians
+    then Muslims), not only the active Lord (a Battle/Storm or Group
+    March marks several Lords).
+    E5 SHARING: after every Lord Feeds his own Forces + Mules, each
+    side's other Lords in the SAME Locale must expend their remaining
+    Provender and Loot to Feed same-side Lords there who came up short
+    (mandatory, no withholding). Any Lord still short is Unfed (Service
+    -1). Markers are NOT cleared here (4.8.3 handles that).
+    """
+    summary: dict[str, Any] = {"fed": [], "shared": [], "unfed": []}
+    shortfall: dict[str, int] = {}
+
+    # Phase A: own-Feed, Christians then Muslims.
+    for side in ("christian", "muslim"):
+        for lid, lord in state.lords.items():
+            if lord.side != side or not lord.moved_fought:
+                continue
+            if lord.cylinder.kind != "locale":
+                continue
+            r = _feed_consume_own(state, lid,
+                                  discard_excess_mules=discard_excess_mules)
+            summary["fed"].append({"lord_id": lid, **r})
+            if r["short"] > 0:
+                shortfall[lid] = r["short"]
+
+    # Phase B: SHARING within each side at each Locale.
+    for lid in list(shortfall.keys()):
+        if shortfall[lid] <= 0:
+            continue
+        lord = state.lords[lid]
+        loc_id = lord.cylinder.locale_id
+        # Same-side Lords at the same Locale (excluding self) must share
+        # their remaining Provender then Loot.
+        for donor_id, donor in state.lords.items():
+            if shortfall[lid] <= 0:
+                break
+            if (donor_id == lid or donor.side != lord.side
+                    or donor.cylinder.kind != "locale"
+                    or donor.cylinder.locale_id != loc_id):
+                continue
+            for asset in ("prov", "loot"):
+                if shortfall[lid] <= 0:
+                    break
+                have = donor.assets.get(asset, 0)
+                give = min(have, shortfall[lid])
+                if give > 0:
+                    donor.assets[asset] = have - give
+                    shortfall[lid] -= give
+                    summary["shared"].append(
+                        {"to": lid, "from": donor_id, "asset": asset,
+                         "amount": give})
+
+    # Phase C: UNFED penalty for any Lord still short after Sharing.
+    for lid, short in shortfall.items():
+        if short > 0:
+            _apply_unfed_penalty(state, lid)
+            summary["unfed"].append(lid)
+    return summary
 
 
 def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, Any]:
@@ -372,13 +479,20 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
     lord = state.lords[lord_id]
-    # 4.8.1 Feed
-    feed_result = _feed_lord(state, lord_id)
-    # 4.8.3 auto-Disband at service limit (deferred fix landed here)
+    # 4.8.1 Feed — E4/E5: ALL Lords marked Moved/Fought on both sides
+    # Feed (a Battle/Storm or Group March marks several), with Sharing
+    # among same-Locale same-side Lords.
+    feed_result = _feed_all_moved_fought(state)
+    # 4.8.3 auto-Disband at service limit (deferred fix landed here).
+    # Check every Lord that Moved/Fought (and the active Lord) since the
+    # Feed Unfed penalty may have pushed a Lord to its Service limit.
     disband_result = _auto_disband_at_service_limit(state, lord_id)
     # Bookkeeping
     state.meta.active_lord_id = None
     state.meta.actions_remaining = 0
+    # 4.8.3 Remove Moved/Fought markers from ALL Lords (both sides).
+    for _l in state.lords.values():
+        _l.moved_fought = False
     # Pattern 3 per-card flag reset (only if Lord still exists in state
     # — disband doesn't remove Lord from state.lords, just changes
     # cylinder, so this is safe)
@@ -386,14 +500,13 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         lord.lordship_used = 0
         lord.first_march_used_this_card = False
         lord.raiders_used_this_card = False
-        lord.moved_fought = False
     _clear_per_card_event_flags(state)
     _advance_or_end_campaign(state)
     _record(state, action,
             f"{side} ends {lord_id}'s card; Feed: "
-            f"consumed={feed_result.get('consumed',0)} "
-            f"short={feed_result.get('short',0)} "
-            f"unfed={feed_result.get('unfed_penalty', False)}"
+            f"fed={len(feed_result.get('fed', []))} "
+            f"shared={len(feed_result.get('shared', []))} "
+            f"unfed={feed_result.get('unfed', [])}"
             + (f"; auto-disband {disband_result}"
                if disband_result.get('disbanded') else "")
             + (f" -> campaign_step={state.meta.campaign_step}"
