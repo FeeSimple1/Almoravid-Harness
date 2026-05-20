@@ -185,6 +185,10 @@ class BattleResult:
     rounds: list[BattleRound] = field(default_factory=list)
     winner: Side | None = None
     notes: list[str] = field(default_factory=list)
+    # S11b: per-Lord post-Storm forces (multi-besieger Storms) so the
+    # caller can commit each Lord exactly. Empty for non-Storm results.
+    attacker_lord_forces: dict[str, dict] = field(default_factory=dict)
+    defender_lord_forces: dict[str, dict] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -1351,6 +1355,7 @@ def resolve_storm(
     max_rounds: int | None = None,
     walls_range_override: tuple[int, int] | None = None,
     reposition_defender: bool = True,
+    reposition_attacker: bool = True,
     concede_after_round: int | None = None,
 ) -> BattleResult:
     """4.5.2 Storm with per-Lord Array (S8/S10/S11).
@@ -1425,6 +1430,55 @@ def resolve_storm(
     d_reserve = list(defender.lord_ids[1:])
     d_caps = list(defender.capabilities_in_play)
     a_caps = list(attacker.capabilities_in_play)
+
+    # S11b: per-Lord ATTACKER Front/Reserve (multi-besieger Storms). The
+    # Active Lord (attacker.lord_ids[0]) begins at Front; other besieging
+    # Lords start in Reserve. Front never exceeds Stronghold Capacity;
+    # Reposition (Round 2+) brings one Reserve to Front (forced if all
+    # Front Rout). For a single-besieger Storm a_front is just the one
+    # Lord and a_reserve is empty (legacy behavior preserved).
+    if len(attacker.lord_ids) == 1:
+        # Single-besieger Storm: the side's pooled forces ARE the Active
+        # Lord's forces (preserves legacy behavior and lets callers set
+        # BattleSide.forces directly).
+        a_lord_forces = {attacker.lord_ids[0]: dict(attacker.forces)}
+    else:
+        a_lord_forces = {lid: dict(state.lords[lid].forces)
+                         for lid in attacker.lord_ids}
+    a_front = [attacker.lord_ids[0]] if attacker.lord_ids else []
+    a_reserve = list(attacker.lord_ids[1:])
+
+    def _a_front_agg() -> dict:
+        agg: dict = {}
+        for lid in a_front:
+            for ut, n in a_lord_forces[lid].items():
+                if n > 0:
+                    agg[ut] = agg.get(ut, 0) + n
+        return agg
+
+    def _push_attacker_losses(before: dict) -> None:
+        """Distribute Front-Attacker losses (before - now) back to the
+        per-Lord force dicts (greedy across Front Lords)."""
+        now = attacker.forces
+        for ut, b in before.items():
+            lost = b - now.get(ut, 0)
+            for lid in a_front:
+                if lost <= 0:
+                    break
+                have = a_lord_forces[lid].get(ut, 0)
+                take = min(have, lost)
+                if take:
+                    a_lord_forces[lid][ut] = have - take
+                    if a_lord_forces[lid][ut] <= 0:
+                        a_lord_forces[lid].pop(ut, None)
+                    lost -= take
+
+    def _attacker_front_alive() -> bool:
+        return any(a_lord_forces[lid] for lid in a_front)
+
+    def _attacker_alive() -> bool:
+        return (_attacker_front_alive()
+                or any(a_lord_forces[lid] for lid in a_reserve))
 
     def _d_front_agg() -> dict:
         agg: dict = {}
@@ -1502,13 +1556,22 @@ def resolve_storm(
             elif (reposition_defender and len(d_front) < capacity
                   and d_reserve):
                 d_front.append(d_reserve.pop(0))
+            # S11b: ATTACKER Reposition (forced if all Front Rout, else
+            # optional up to Capacity).
+            if (not _attacker_front_alive()) and a_reserve:
+                a_front.append(a_reserve.pop(0))
+            elif (reposition_attacker and len(a_front) < capacity
+                  and a_reserve):
+                a_front.append(a_reserve.pop(0))
 
         round_walls = walls_range
         if siege_towers and round_idx >= 2 and walls_range is not None:
             round_walls = (walls_range[0], max(0, walls_range[1] - 1))
 
-        # Engaged Defender = Front aggregate (+ Garrison bucket).
+        # Engaged Defender = Front aggregate (+ Garrison bucket); engaged
+        # Attacker = Front aggregate (S11b).
         defender.forces = _d_front_agg()
+        attacker.forces = _a_front_agg()
 
         # ---- Storm step order: Defender all Strikes, then Attacker ----
         # 1.a Defender Missile (Front + Garrison) -> Attacker.
@@ -1519,8 +1582,10 @@ def resolve_storm(
                              siege_markers=siegeworks_count,
                              round_index=round_idx)
         rnd.steps.append(step)
+        _push_attacker_losses(before)
+        attacker.forces = _a_front_agg()
         # 1.b Attacker Missile -> Defender (Front aggregate + Garrison).
-        if attacker.has_unrouted():
+        if _attacker_front_alive():
             before_d = dict(defender.forces)
             step = _resolve_step(state, "1.b", "attacker", "missile", None,
                                  attacker, defender, context="storm",
@@ -1536,6 +1601,7 @@ def resolve_storm(
                 [d_lord_forces[lid] for lid in d_front], d_caps,
                 side_is_christian=(defender.side == "christian"),
                 round_idx=round_idx, garrison=defender.garrison_forces)
+            before_a = dict(attacker.forces)
             step = _resolve_step(state, "2.a", "defender", "melee", None,
                                  attacker, defender, context="storm",
                                  walls_range=round_walls,
@@ -1543,10 +1609,12 @@ def resolve_storm(
                                  round_index=round_idx,
                                  melee_hits_override=dmelee)
             rnd.steps.append(step)
-        # 2.b Attacker Melee (single Active Lord, cap 6) -> Defender.
-        if attacker.has_unrouted() and _defender_alive():
+            _push_attacker_losses(before_a)
+            attacker.forces = _a_front_agg()
+        # 2.b Attacker Melee (per Front Lord, cap 6 each) -> Defender.
+        if _attacker_front_alive() and _defender_alive():
             amelee = _melee_hits(
-                [attacker.forces], a_caps,
+                [a_lord_forces[lid] for lid in a_front], a_caps,
                 side_is_christian=(attacker.side == "christian"),
                 round_idx=round_idx)
             before_d = dict(defender.forces)
@@ -1562,7 +1630,7 @@ def resolve_storm(
         result.rounds.append(rnd)
         if round_idx == 1:
             _discard_round1_events(state, ["C8"])
-        if not attacker.has_unrouted() or not _defender_alive():
+        if not _attacker_alive() or not _defender_alive():
             break
 
     # Final Defender forces = surviving Front + untouched Reserve units
@@ -1574,12 +1642,27 @@ def resolve_storm(
                 final_forces[ut] = final_forces.get(ut, 0) + n
     defender.forces = final_forces
     defender.garrison_forces = {}  # Garrison returns to pool at Storm end.
+    # S11b: surviving Attacker forces = Front + Reserve, and expose the
+    # per-Lord post-Storm forces so the caller can commit each besieging
+    # Lord exactly (not proportionally) — likewise for the Defenders.
+    a_final: dict = {}
+    for lid in a_front + a_reserve:
+        for ut, n in a_lord_forces[lid].items():
+            if n > 0:
+                a_final[ut] = a_final.get(ut, 0) + n
+    attacker.forces = a_final
+    result.attacker_lord_forces = {
+        lid: {ut: n for ut, n in a_lord_forces[lid].items() if n > 0}
+        for lid in attacker.lord_ids}
+    result.defender_lord_forces = {
+        lid: {ut: n for ut, n in d_lord_forces[lid].items() if n > 0}
+        for lid in defender.lord_ids}
 
     # ---- Winner (4.5.2 Ending the Storm) ------------------------------
     if conceded:
         result.winner = defender.side
         result.notes.append("Attacker Conceded; attacker loses")
-    elif not attacker.has_unrouted():
+    elif not _attacker_alive():
         result.winner = defender.side
     elif not _defender_alive():
         result.winner = attacker.side

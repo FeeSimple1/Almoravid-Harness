@@ -2476,7 +2476,26 @@ def _h_cmd_storm(state, action):
         and l.cylinder.locale_id == here
         and l.in_stronghold
     ]
-    atk = battleside_for_lord(state, lord_id, "attacker")
+    # S11b (4.5.2): all besieging Lords at the Locale (outside the
+    # Stronghold) may Storm together — the Active Lord starts at Front,
+    # the others in Reserve (resolve_storm handles Front/Reserve +
+    # Reposition). Build the multi-besieger Attacker side, Active first.
+    besieger_ids = [lord_id] + [
+        l.id for l in state.lords.values()
+        if l.side == side and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here and not l.in_stronghold
+        and l.id != lord_id]
+    if len(besieger_ids) == 1:
+        atk = battleside_for_lord(state, lord_id, "attacker")
+    else:
+        a_forces: dict = {}
+        a_caps: list[str] = []
+        for bid in besieger_ids:
+            for ut, n in state.lords[bid].forces.items():
+                a_forces[ut] = a_forces.get(ut, 0) + n
+            a_caps.extend(state.lords[bid].capabilities)
+        atk = BattleSide(side=side, role="attacker", lord_ids=besieger_ids,
+                         forces=a_forces, capabilities_in_play=a_caps)
     # Build defender side. If multiple Lords inside, aggregate (Phase 5f).
     if enemy_inside:
         dfd_forces: dict = {}
@@ -2523,9 +2542,19 @@ def _h_cmd_storm(state, action):
         result = resolve_storm(state, atk, dfd,
                                concede_after_round=concede_after_round,
                                reposition_defender=reposition_defender)
-    commit_forces_after_battle(state, atk)
-    # Defender: only commit back if single-Lord (Phase 5f limit)
-    if len(dfd.lord_ids) == 1:
+    # S11b: commit each besieging Lord and each Defender Lord exactly
+    # from the per-Lord post-Storm forces (resolve_storm tracked them).
+    if result.attacker_lord_forces:
+        for bid, f in result.attacker_lord_forces.items():
+            if bid in state.lords:
+                state.lords[bid].forces = dict(f)
+    else:
+        commit_forces_after_battle(state, atk)
+    if result.defender_lord_forces:
+        for did, f in result.defender_lord_forces.items():
+            if did in state.lords:
+                state.lords[did].forces = dict(f)
+    elif len(dfd.lord_ids) == 1:
         commit_forces_after_battle(state, dfd)
 
     # 4.5.2 SACK: if the Besieged Defenders lose the Storm, the
