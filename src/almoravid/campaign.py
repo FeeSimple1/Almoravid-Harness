@@ -2687,10 +2687,13 @@ def compute_final_vp(state) -> tuple[float, float]:
         elif loc.ravaged == "green":
             muslim += 0.5
     for tf in state.taifas.values():
+        # 1.4.2: Reconquista Taifa = 3 Christian VP (9 if Sevilla);
+        # Parias Taifa = 1 Christian VP (3 if Sevilla); Independent = 0.
+        is_sevilla = (tf.id == "sevilla")
         if tf.status == "reconquista":
-            christian += 3.0
+            christian += 9.0 if is_sevilla else 3.0
         elif tf.status == "parias":
-            christian += 1.0
+            christian += 3.0 if is_sevilla else 1.0
     # Taifas-box VP (rule 1.4.2) counts for the Muslims.
     muslim += state.taifas_box_vp
     return christian, muslim

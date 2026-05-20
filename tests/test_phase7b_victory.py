@@ -123,3 +123,32 @@ def test_full_game_advance_to_end_sets_winner() -> None:
     assert s.meta.phase == "ended"
     assert s.score.winner in ("christian", "muslim", "draw")
     assert "victory" in r
+
+
+def test_sevilla_reconquista_worth_nine_vp() -> None:
+    """1.4.2: Reconquista Sevilla is worth 9 Christian VP, not 3."""
+    from almoravid.campaign import compute_final_vp
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    for loc in s.locales.values():
+        loc.conquered_markers = 0
+        loc.jihad_markers = 0
+        loc.ravaged = "none"
+    for t in s.taifas.values():
+        t.status = "independent"
+    s.taifas["sevilla"].status = "reconquista"
+    cvp, mvp = compute_final_vp(s)
+    assert cvp == 9.0
+
+
+def test_sevilla_parias_worth_three_vp() -> None:
+    from almoravid.campaign import compute_final_vp
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    for loc in s.locales.values():
+        loc.conquered_markers = 0
+        loc.jihad_markers = 0
+        loc.ravaged = "none"
+    for t in s.taifas.values():
+        t.status = "independent"
+    s.taifas["sevilla"].status = "parias"
+    cvp, mvp = compute_final_vp(s)
+    assert cvp == 3.0

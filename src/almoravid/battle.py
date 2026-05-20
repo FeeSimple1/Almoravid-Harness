@@ -1115,17 +1115,21 @@ def resolve_storm(
             walls_range = tuple(
                 load_strongholds()["strongholds"][loc.base_type]["walls_range"]
             )
-    # Phase 6i: C6 Surprise / C6 Siege Towers override (Walls -1).
-    if walls_range_override is not None:
-        walls_range = walls_range_override
-        # Storm cap = Siege markers our side has (rule 4.5.2)
+        # 4.5.2 ENDING THE STORM: "A Storm ends once the number of
+        # Rounds completed equals the number of Siege markers there."
+        # The cap is the BESIEGER's Siege-marker count at the Locale
+        # (used regardless of any Walls override). Per 4.5.2 the
+        # Besieger's Siegeworks Walls also equal that marker count.
         if max_rounds is None:
             siege = (loc.siege_yellow if attacker.side == "christian"
                      else loc.siege_green)
             max_rounds = max(1, siege)
+    # C6 Surprise / C6 Siege Towers override (Walls -1).
+    if walls_range_override is not None:
+        walls_range = walls_range_override
 
     if max_rounds is None:
-        max_rounds = 4
+        max_rounds = 1
 
     # Bug M (Pattern 7 audit fix): Garrison units kept in their own
     # bucket so the Protection roll drains them before Lord units.
