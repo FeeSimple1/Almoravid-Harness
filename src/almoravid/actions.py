@@ -1233,7 +1233,11 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             and state.taifas.get(lord.home_taifa) is not None
             and state.taifas[lord.home_taifa].status == "independent"):
         from almoravid.campaign import adjust_taifa_status
-        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "parias")
+        # T5: the Disband path awards Parias Coin with the Christian
+        # player's explicit distribution, so suppress adjust_taifa_status'
+        # own auto-award to avoid double-paying (1.4.3 / L7).
+        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "parias",
+                                           award_parias_coin=False)
         parias_coin = _award_parias_coin(
             state, lord.service_rating, action.get("parias_coin_targets"))
         # Running-score tracker; final VP is recomputed from Parias status.

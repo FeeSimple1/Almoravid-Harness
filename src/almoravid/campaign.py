@@ -949,7 +949,8 @@ def spring_muster(state) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
+def adjust_taifa_status(state, taifa_id: str, new_status: str,
+                        *, award_parias_coin: bool = True) -> dict:
     """Apply a Taifa status transition and its cascades per 1.4.3.
 
     Returns dict with the cascade effects: ravaged flips, forced Conquests,
@@ -1007,6 +1008,19 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
                "siege_removed": [], "jihad_added": []}
     taifa.status = new_status
 
+    # T5 (rule 1.4.3 PARIAS COIN): changing from Independent to Parias,
+    # the Christians add Coin from the pool = the departing Taifa Lord's
+    # Service (six if al-Mutamid / Sevilla, four otherwise) among any
+    # Unbesieged Christian Lords. Awarded here so EVERY caller (Muster,
+    # combat removal, recompute) triggers it; the Disband path passes
+    # award_parias_coin=False and awards with its own player-chosen
+    # distribution (1.4.3 / L7).
+    if (old_status == "independent" and new_status == "parias"
+            and award_parias_coin):
+        from almoravid.actions import _award_parias_coin
+        amount = 6 if taifa_id == "sevilla" else 4
+        results["parias_coin"] = _award_parias_coin(state, amount, None)
+
     # Determine the transition and apply the cascade.
     flip_color_from, flip_color_to = None, None
     if (old_status, new_status) in (
@@ -1050,11 +1064,20 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
         # Muslim Lord at Muslim Stronghold "would go Neutral or Christian"
         if going_neutral or going_christian_friendly:
             if present_muslim:
-                # Add Jihad markers (Conquer per Muslim side).
-                sh_value = {"city": 3, "fortress": 2, "town": 1, "castle": 1}.get(
-                    loc.base_type, 0)
-                loc.jihad_markers += sh_value
-                results["jihad_added"].append((lid, sh_value))
+                # T3 (1.4.3 HOSTAGE POPULACE / 1.4.4): the Muslim Lord
+                # forcibly Conquers, placing Jihad markers = the
+                # Stronghold's Value via _conquer_stronghold (which also
+                # applies 1.4.4 eligibility: removes Christian Conquered
+                # + Christian Seat markers first, never double-stacks
+                # with Conquered, and adjusts Victory). taifa.status is
+                # already new_status (Parias/Reconquista) so Jihad is the
+                # correct marker.
+                cres = _conquer_stronghold(state, lid, "muslim")
+                if cres.get("marker") == "jihad":
+                    results["jihad_added"].append((lid, cres["value"]))
+                elif cres.get("marker") == "conquered":
+                    results["auto_conquered"].append(
+                        (lid, "muslim", cres["value"]))
         # Christian Lord at Muslim Stronghold "goes Christian": remove Siege/Bypass
         if going_christian_friendly:
             if present_christian and (loc.siege_yellow > 0 or loc.bypass_yellow):
@@ -1091,12 +1114,13 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str) -> dict:
         if going_neutral or (new_status == "independent"
                               and old_status != "independent"):
             if present_christian and old_status in ("parias", "reconquista"):
-                # Christian Conquers the Stronghold
-                from almoravid.static_data import load_strongholds
-                sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
-                loc.conquered_markers += sh_value
-                state.score.christian += sh_value
-                results["auto_conquered"].append((lid, "christian", sh_value))
+                # T3 (1.4.3 HOSTAGE POPULACE): the Christian Lord forcibly
+                # Conquers, placing Christian Conquered markers = the
+                # Stronghold's Value via _conquer_stronghold (removes any
+                # Jihad, adjusts Victory).
+                cres = _conquer_stronghold(state, lid, "christian")
+                results["auto_conquered"].append(
+                    (lid, "christian", cres["value"]))
     return results
 
 
