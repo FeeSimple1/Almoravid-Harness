@@ -846,6 +846,11 @@
           "default": null,
           "title": "Swollen River Blocked Card Lord Id"
         },
+        "advanced_vassal_service": {
+          "default": false,
+          "title": "Advanced Vassal Service",
+          "type": "boolean"
+        },
         "surprise_storm_pending_locale_id": {
           "anyOf": [
             {
@@ -1020,6 +1025,18 @@
         "box": {
           "title": "Box",
           "type": "integer"
+        },
+        "vassal_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vassal Id"
         }
       },
       "required": [

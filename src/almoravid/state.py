@@ -121,6 +121,10 @@ class Meta(StrictModel):
     # triggers, this stores the lord_id whose current Command card has
     # March blocked for its remainder. Cleared in _h_end_card.
     swollen_river_blocked_card_lord_id: str | None = None
+    # Phase 7d: advanced Vassal Service rule (3.4.2) toggle. When True,
+    # Mustered Vassals get their own Calendar Service markers and Lord
+    # Service shifts cascade to them.
+    advanced_vassal_service: bool = False
     # Phase 6i: Surprise (C6) consumed on March into empty Enemy
     # Stronghold — payload tells the next cmd_storm to use Walls-1
     # and applies +2 Siege markers (already placed by the cmd_march
@@ -154,6 +158,10 @@ class ServiceMarker(StrictModel):
 
     lord_id: str
     box: int  # 0 = off_left_service, 1..16 in track, 17 = off_right_service
+    # Phase 7d: advanced Vassal Service (3.4.2). When set, this marker
+    # belongs to the named Vassal of `lord_id` rather than the Lord
+    # himself. Lord-own markers leave this None.
+    vassal_id: str | None = None
 
 
 class CalendarBox(StrictModel):

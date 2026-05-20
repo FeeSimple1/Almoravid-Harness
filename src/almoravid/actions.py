@@ -372,8 +372,22 @@ def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
 
     Returns the new box position (0..16, where 0 means off-left).
     """
+    # Phase 7d: advanced Vassal Service (3.4.2) — Lord Service shifts
+    # cascade to that Lord's Vassal Service markers by the same boxes.
+    if state.meta.advanced_vassal_service:
+        for vm in list(state.calendar.service_markers):
+            if vm.lord_id == lord_id and vm.vassal_id is not None:
+                vm.box = max(0, vm.box - boxes)
+        # Drop Vassal markers that hit off-left.
+        state.calendar.service_markers = [
+            s for s in state.calendar.service_markers
+            if not (s.lord_id == lord_id and s.vassal_id is not None
+                    and s.box <= 0)
+        ]
+
+    # The Lord's OWN Service marker has vassal_id is None.
     sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id), None)
+               if s.lord_id == lord_id and s.vassal_id is None), None)
     if sm is None:
         # Already off-edge or no marker — append to off_left_service if not present
         if lord_id not in state.calendar.off_left_service:
@@ -381,9 +395,10 @@ def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
         return 0
     new_box = sm.box - boxes
     if new_box <= 0:
-        # Goes off-left
+        # Goes off-left (remove only the Lord's own marker, not Vassals')
         state.calendar.service_markers = [
-            s for s in state.calendar.service_markers if s.lord_id != lord_id
+            s for s in state.calendar.service_markers
+            if not (s.lord_id == lord_id and s.vassal_id is None)
         ]
         if lord_id not in state.calendar.off_left_service:
             state.calendar.off_left_service.append(lord_id)
@@ -567,6 +582,19 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
         lord.forces[ut] = lord.forces.get(ut, 0) + n
     vassal.ready = False
     lord.lordship_used += 1
+    # Phase 7d: advanced Vassal Service (3.4.2) — place the Vassal's
+    # Service marker on the Calendar at the Lord's current Service box.
+    if state.meta.advanced_vassal_service:
+        from almoravid.state import ServiceMarker
+        lord_sm = next((s for s in state.calendar.service_markers
+                        if s.lord_id == lord_id and s.vassal_id is None),
+                       None)
+        box = lord_sm.box if lord_sm is not None else 1
+        already = any(s.lord_id == lord_id and s.vassal_id == vassal.id
+                      for s in state.calendar.service_markers)
+        if not already:
+            state.calendar.service_markers.append(
+                ServiceMarker(lord_id=lord_id, box=box, vassal_id=vassal.id))
     _record(state, action,
             f"{side} {lord_id} spends Lordship -> takes Vassal {vassal.name}")
     return {"lord_id": lord_id, "vassal_name": vassal.name,
