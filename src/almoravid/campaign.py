@@ -2648,6 +2648,49 @@ def _require_pending(state, kind: str, side: Side):
     return pd
 
 
+def _approach_subset(payload, action) -> list[str]:
+    """C2 (4.3.4): the Inactive side may partition its Lords across
+    Avoid / Withdraw / Battle. An avoid/withdraw response acts on the
+    `lord_ids` subset of the still-pending defenders (default: ALL of
+    them, preserving the whole-group behavior)."""
+    pending = list(payload["defender_lord_ids"])
+    subset = action.get("lord_ids")
+    if subset is None:
+        return pending
+    subset = list(subset)
+    _require(all(lid in pending for lid in subset) and subset,
+             "lord_ids must be a non-empty subset of the pending "
+             "defenders (4.3.4)", code="bad_subset")
+    return subset
+
+
+def _resolve_or_repend_approach(state, payload, active_side, *,
+                                some_withdrew: bool) -> bool:
+    """After an Avoid/Withdraw subset acts, either re-pend the remaining
+    defenders' response (still owing Avoid/Withdraw/Battle) or, when none
+    remain, resolve the Approach: trigger Besiege-or-Bypass (4.3.5) if
+    any Enemy Lords Withdrew inside, else restore control to the Active
+    side. Returns True if a new pending decision was set."""
+    from almoravid.state import PendingDecision
+    remaining = payload["defender_lord_ids"]
+    if remaining:
+        # Keep waiting on the defender for the remaining Lords.
+        state.pending = PendingDecision(
+            kind="march_arrival_response",
+            waiting_on=_other(active_side),
+            payload=payload)
+        state.meta.active_player = _other(active_side)
+        return True
+    # Fully resolved. If Enemy Lords Withdrew inside, force Besiege/Bypass.
+    locale_id = payload["locale_id"]
+    active_lord_id = payload.get("active_lord_id")
+    if some_withdrew and _set_besiege_or_bypass_pending(
+            state, locale_id, active_side, active_lord_id):
+        return True
+    _clear_approach_pending(state, active_side)
+    return False
+
+
 def _h_respond_avoid_battle(state, action):
     """4.3.4 Avoid Battle. Defender Lords move together to an adjacent
     Locale that:
@@ -2705,8 +2748,9 @@ def _h_respond_avoid_battle(state, action):
     # Provender, so only Mules (one each) may. All discarded Loot and
     # Provender go to the Approaching Enemy Lords as Spoils (4.4.3),
     # divided among them.
+    avoiding = _approach_subset(payload, action)   # C2 partition subset
     discarded = {"loot": 0, "prov": 0}
-    for lid in payload["defender_lord_ids"]:
+    for lid in avoiding:
         if lid not in state.lords:
             continue
         l = state.lords[lid]
@@ -2734,20 +2778,25 @@ def _h_respond_avoid_battle(state, action):
     if spoils and attackers:
         from almoravid.battle import distribute_spoils_round_robin
         spoils_dist = distribute_spoils_round_robin(state, attackers, spoils)
-    # Move all defender Lords. Avoid Battle does NOT mark moved_fought
+    # Move the avoiding subset. Avoid Battle does NOT mark moved_fought
     # (SoP withdraw_definition / 4.3.4 — avoidance is reactive).
-    for lid in payload["defender_lord_ids"]:
+    for lid in avoiding:
         if lid in state.lords:
             l = state.lords[lid]
             l.cylinder = Cylinder(kind="locale", locale_id=target)
             l.in_stronghold = False
+    # C2: remove the avoiding subset from the still-pending defenders.
+    payload["defender_lord_ids"] = [
+        d for d in payload["defender_lord_ids"] if d not in avoiding]
     _record(state, action,
-            f"{side} avoids Battle: {payload['defender_lord_ids']} "
-            f"move {locale_id} -> {target} via {way_type}"
+            f"{side} avoids Battle: {avoiding} move {locale_id} -> "
+            f"{target} via {way_type}"
             + (f"; discarded {spoils} to {active_side} as Spoils"
                if spoils else ""))
-    _clear_approach_pending(state, active_side)
-    return {"avoided_to": target, "lord_ids": payload["defender_lord_ids"],
+    _resolve_or_repend_approach(state, payload, active_side,
+                                some_withdrew=False)
+    return {"avoided_to": target, "lord_ids": avoiding,
+            "remaining_defenders": list(payload["defender_lord_ids"]),
             "discarded_as_spoils": spoils, "spoils_distribution": spoils_dist}
 
 
@@ -2773,6 +2822,7 @@ def _h_respond_withdraw(state, action):
              f"{locale_id} not Friendly to {side} — Withdraw impossible",
              code="stronghold_not_friendly")
     capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+    withdrawing = _approach_subset(payload, action)   # C2 partition subset
     # Count Lords already inside the Stronghold + the withdrawing group.
     already_inside = sum(
         1 for l in state.lords.values()
@@ -2780,14 +2830,14 @@ def _h_respond_withdraw(state, action):
         and l.cylinder.locale_id == locale_id
         and l.in_stronghold
     )
-    incoming = len(payload["defender_lord_ids"])
+    incoming = len(withdrawing)
     # C9 (4.1.3): a Lieutenant and his Lower Lord always move together,
     # so both must Withdraw together — and since they are two Lords they
     # can never Withdraw into a Castle (Capacity 1; enforced by the
     # capacity check below). Reject a Withdraw that would separate a
     # Lt/Lower pair (one withdraws, the partner stays outside).
-    wset = set(payload["defender_lord_ids"])
-    for lid in payload["defender_lord_ids"]:
+    wset = set(withdrawing)
+    for lid in withdrawing:
         l = state.lords.get(lid)
         if l is None:
             continue
@@ -2806,26 +2856,25 @@ def _h_respond_withdraw(state, action):
              f"Siege Capacity {capacity} at {locale_id} would be "
              f"exceeded ({already_inside} inside + {incoming} withdrawing)",
              code="exceeds_capacity")
-    for lid in payload["defender_lord_ids"]:
+    for lid in withdrawing:
         if lid in state.lords:
             state.lords[lid].in_stronghold = True
+    # C2: remove the withdrawing subset from the still-pending defenders.
+    payload["defender_lord_ids"] = [
+        d for d in payload["defender_lord_ids"] if d not in withdrawing]
     _record(state, action,
             f"{side} withdraws inside {locale_id} Stronghold "
-            f"({payload['defender_lord_ids']})")
-    # C1 (4.3.5): the Active (Marching) side now has Lord(s) outside an
-    # Enemy Stronghold that just had Enemy Lords Withdraw inside and is
-    # not yet Besieged or Bypassed — it MUST immediately choose Besiege
-    # or Bypass before continuing. Set that pending decision (on the
-    # Active side); otherwise restore control normally.
-    active_lord_id = payload.get("active_lord_id")
-    if _set_besiege_or_bypass_pending(state, locale_id, active_side,
-                                      active_lord_id):
-        return {"withdrew_to_stronghold": locale_id,
-                "lord_ids": payload["defender_lord_ids"],
-                "besiege_or_bypass_pending": True}
-    _clear_approach_pending(state, active_side)
+            f"({withdrawing})")
+    # C1 (4.3.5): once the Approach is fully resolved (no more defenders
+    # owe a response) and Enemy Lords Withdrew inside, the Active side
+    # must Besiege or Bypass. _resolve_or_repend_approach handles both
+    # the re-pend (defenders remain) and the Besiege/Bypass trigger.
+    repended = _resolve_or_repend_approach(
+        state, payload, active_side, some_withdrew=True)
     return {"withdrew_to_stronghold": locale_id,
-            "lord_ids": payload["defender_lord_ids"]}
+            "lord_ids": withdrawing,
+            "remaining_defenders": list(payload["defender_lord_ids"]),
+            "pending_followup": repended}
 
 
 def _set_besiege_or_bypass_pending(state, locale_id: str, active_side: Side,
