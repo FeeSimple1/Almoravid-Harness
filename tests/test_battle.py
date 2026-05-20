@@ -137,44 +137,46 @@ def test_capability_gated_strike_row_requires_card_in_play() -> None:
 
 # ---- Pattern 2 mirror gaps: aftermath both winner-attacker and winner-defender
 
-def test_aftermath_winner_restores_routed_units_attacker_win() -> None:
-    """Pattern 2: when attacker wins, attacker.routed_units restore."""
-    s = load_scenario("scenario_a_toledo_beset", seed=7)
-    atk = BattleSide(side="christian", role="attacker",
-                     lord_ids=["alfonso"], forces={"knights": 3})
-    dfd = BattleSide(side="muslim", role="defender",
-                     lord_ids=["al_mutamid"], forces={"serfs": 2})
-    # Simulate: attacker took some routs (synthetic)
-    atk.routed_units = {"knights": 1}
-    dfd.forces = {}
-    dfd.routed_units = {"serfs": 2}
-    from almoravid.battle import BattleResult
-    r = BattleResult(engagement="battle", attacker=atk, defender=dfd,
-                     winner="christian")
-    knights_before = s.lords["alfonso"].forces.get("knights", 0)
-    apply_aftermath(s, r)
-    # Routed Knights pushed back to forces on the side AND on the Lord
-    assert atk.routed_units == {}
-    # Lord's forces grew by the restored amount
-    assert s.lords["alfonso"].forces.get("knights", 0) == knights_before + 1
+def test_winner_routed_units_roll_protection_not_auto_restore() -> None:
+    """4.4.4: the winner does NOT auto-restore all Routed units; each
+    rolls vs its unmodified Protection. Knights (Armor 1-4) survive on
+    1-4, lost on 5-6. apply_battle_losses with loser_state='winner'."""
+    from almoravid.battle import apply_battle_losses, BattleResult
+    # Aggregate over seeds: some winner Knights are lost, not all kept.
+    total_kept = total_routed = 0
+    for seed in range(40):
+        s = load_scenario("scenario_a_toledo_beset", seed=seed)
+        s.lords["alfonso"].forces = {}
+        s.lords["alfonso"].routed_units = {"knights": 4}
+        atk = BattleSide(side="christian", role="attacker",
+                         lord_ids=["alfonso"], forces={})
+        dfd = BattleSide(side="muslim", role="defender",
+                         lord_ids=["al_mutamid"], forces={})
+        r = BattleResult(engagement="battle", attacker=atk, defender=dfd,
+                         winner="christian")
+        apply_battle_losses(s, r, {"losers": []})
+        total_kept += s.lords["alfonso"].forces.get("knights", 0)
+        total_routed += 4
+        # routed pile cleared either way
+        assert s.lords["alfonso"].routed_units == {}
+    # ~4/6 of Knights survive: strictly between none and all.
+    assert 0 < total_kept < total_routed
 
 
-def test_aftermath_winner_restores_routed_units_defender_win() -> None:
-    """Pattern 2 mirror: same restore must fire when defender wins."""
-    s = load_scenario("scenario_a_toledo_beset", seed=7)
-    atk = BattleSide(side="christian", role="attacker",
-                     lord_ids=["alfonso"], forces={})
-    atk.routed_units = {"knights": 3}
-    dfd = BattleSide(side="muslim", role="defender",
-                     lord_ids=["al_mutamid"], forces={"sergeants": 1})
-    dfd.routed_units = {"sergeants": 1}
-    from almoravid.battle import BattleResult
-    r = BattleResult(engagement="battle", attacker=atk, defender=dfd,
-                     winner="muslim")
-    sgt_before = s.lords["al_mutamid"].forces.get("sergeants", 0)
-    apply_aftermath(s, r)
-    assert dfd.routed_units == {}
-    assert s.lords["al_mutamid"].forces.get("sergeants", 0) == sgt_before + 1
+def test_loser_retreat_no_concede_units_need_a_one() -> None:
+    """4.4.4: units of a Lord who Retreated WITHOUT Conceding survive
+    only on a roll of 1 (harsh). Most are lost."""
+    from almoravid.battle import apply_losses_rolls
+    total_kept = total = 0
+    for seed in range(40):
+        s = load_scenario("scenario_a_toledo_beset", seed=seed)
+        s.lords["al_mutamid"].forces = {}
+        s.lords["al_mutamid"].routed_units = {"sergeants": 6}
+        apply_losses_rolls(s, "al_mutamid", "retreated_no_concede")
+        total_kept += s.lords["al_mutamid"].forces.get("sergeants", 0)
+        total += 6
+    # ~1/6 survive.
+    assert 0 < total_kept < total // 2
 
 
 def test_aftermath_marks_lords_moved_fought() -> None:

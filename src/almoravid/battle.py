@@ -836,6 +836,134 @@ def resolve_battle(
 # ---------------------------------------------------------------------------
 
 
+def _losses_keep_threshold(utype: UnitType) -> int:
+    """4.4.4: the unmodified Protection roll range a Routed unit must
+    roll WITHIN to survive (un-rout). Armored -> high end; Unarmored
+    -> 1; Serfs (auto_remove) -> 0 (always lost). African Horse ALWAYS
+    uses its Evade range (per 4.4.4), not Unarmored. Ranges are
+    unmodified by Events/Capabilities/Battle situation, so Light
+    Horse uses Unarmored (1), not its M10 Evade."""
+    fd = load_forces()
+    rec = None
+    for cat in ("horse", "foot"):
+        if utype in fd[cat]:
+            rec = fd[cat][utype]
+            break
+    if rec is None:
+        return 0
+    if utype == "african_horse":
+        return rec["protection"]["evade"]["range"][1]
+    ptype = rec["protection"]["type"]
+    if ptype == "armored":
+        return rec["protection"]["range"][1]
+    if ptype == "unarmored":
+        return 1
+    return 0  # auto_remove (Serfs)
+
+
+def apply_losses_rolls(state: GameState, lord_id: str, loser_state: str) -> dict:
+    """4.4.4 Losses: roll 1d6 for each of a Lord's Routed units.
+
+    Threshold by loser_state:
+      - "retreated_no_concede" / "storm_attacker": keep only on a 1.
+      - "winner" / "withdrew" / "conceded_then_retreated": keep on a
+        roll within the unit's unmodified Protection range (African
+        Horse uses Evade).
+      - "removed": Lord is gone; discard the pile.
+    Kept units return to lord.forces (un-Routed). Failed units go to
+    the pool. Service markers stay put."""
+    lord = state.lords.get(lord_id)
+    if lord is None or not lord.routed_units:
+        return {"lord_id": lord_id, "rolls": []}
+    rolls = []
+    for utype, n in list(lord.routed_units.items()):
+        if loser_state == "removed":
+            keep = 0
+        elif loser_state in ("retreated_no_concede", "storm_attacker"):
+            keep = 1
+        else:  # winner / withdrew / conceded_then_retreated
+            keep = _losses_keep_threshold(utype)
+        kept = 0
+        for _ in range(n):
+            r = roll_d6(state)
+            if r <= keep and keep > 0:
+                kept += 1
+        if kept > 0:
+            lord.forces[utype] = lord.forces.get(utype, 0) + kept
+        del lord.routed_units[utype]
+        rolls.append({"unit": utype, "n_routed": n, "keep_threshold": keep,
+                      "kept": kept, "lost": n - kept})
+    return {"lord_id": lord_id, "rolls": rolls}
+
+
+def apply_battle_losses(
+    state: GameState,
+    result: BattleResult,
+    retreat_summary: dict,
+    *,
+    storm: bool = False,
+) -> dict:
+    """Drive 4.4.4 Losses for BOTH sides after a Battle/Storm.
+
+    Winner-side Lords roll vs Protection ("winner"). Loser-side Lords
+    use the loser_state implied by their fate (from retreat_summary):
+    withdraw -> "withdrew"; retreat -> "conceded_then_retreated" if the
+    loser side Conceded else "retreated_no_concede"; removed -> already
+    gone. In a Storm, the Attacking side's Routed units always need a
+    1 ("storm_attacker", 4.5.2). Any Lord left with zero Forces is
+    permanently removed (3.3.1)."""
+    from almoravid.state import Cylinder
+    out: dict[str, dict] = {}
+    if result.winner is None:
+        # Stalemate — both sides simply roll vs Protection.
+        loser_side = None
+    else:
+        loser_side = (result.attacker.side
+                      if result.winner == result.defender.side
+                      else result.defender.side)
+    conceded = {result.attacker.side: result.attacker.conceded,
+                result.defender.side: result.defender.conceded}
+    fate_by_lord = {e["lord_id"]: e.get("fate")
+                    for e in retreat_summary.get("losers", [])}
+
+    for side_obj in (result.attacker, result.defender):
+        is_attacker = (side_obj is result.attacker)
+        for lid in side_obj.lord_ids:
+            if lid not in state.lords:
+                continue
+            if storm and is_attacker:
+                lstate = "storm_attacker"
+            elif loser_side is not None and side_obj.side == loser_side:
+                fate = fate_by_lord.get(lid)
+                if fate == "removed":
+                    continue  # gone already
+                if fate == "withdraw":
+                    lstate = "withdrew"
+                elif fate == "retreat":
+                    lstate = ("conceded_then_retreated"
+                              if conceded.get(side_obj.side) else
+                              "retreated_no_concede")
+                else:
+                    lstate = "withdrew"  # default safe
+            else:
+                lstate = "winner"
+            out[lid] = apply_losses_rolls(state, lid, lstate)
+            # 3.3.1: a Lord who lost ALL Forces is permanently removed.
+            lord = state.lords[lid]
+            if (not lord.forces and not lord.routed_units
+                    and lord.cylinder.kind == "locale"):
+                from almoravid.actions import _shift_service_left as _ssl
+                for fld in lord.cleanup_on_removal_fields:
+                    try:
+                        setattr(lord, fld, type(getattr(lord, fld))())
+                    except Exception:
+                        pass
+                lord.cylinder = Cylinder(kind="removed")
+                _ssl(state, lid, boxes=20)
+                out[lid]["permanently_removed"] = True
+    return out
+
+
 def apply_aftermath(
     state: GameState,
     result: BattleResult,
@@ -861,12 +989,9 @@ def apply_aftermath(
         if lord_id in state.lords:
             state.lords[lord_id].moved_fought = True
 
-    # Pattern 2: winner restores routed_units. Apply to whichever side
-    # actually won — the helper is role-aware.
-    if result.winner == result.attacker.side:
-        _restore_routed_to_forces(state, result.attacker)
-    elif result.winner == result.defender.side:
-        _restore_routed_to_forces(state, result.defender)
+    # 4.4.4 Losses are applied separately (apply_battle_losses) BEFORE
+    # aftermath; the old blanket winner-restore is gone — winners also
+    # roll for their Routed units per the rule.
 
     # Bug J (Pattern 13): clear this_levy_events; discard the held cards.
     for side_key, cards in list(state.decks.this_levy_events.items()):

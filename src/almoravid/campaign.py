@@ -1951,8 +1951,11 @@ def _h_cmd_battle(state, action):
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
-    from almoravid.battle import apply_retreat_aftermath
+    from almoravid.battle import (
+        apply_retreat_aftermath, apply_battle_losses,
+    )
     retreat_summary = apply_retreat_aftermath(state, result)
+    losses = apply_battle_losses(state, result, retreat_summary)
     apply_aftermath(state, result)
 
     # Battle ends the card (rule 4.4.5).
@@ -2444,12 +2447,15 @@ def _h_respond_stand_battle(state, action):
     # Bug P fix: Retreat aftermath FIRST so it can consult Hold events
     # (C7 Baggage Parapet opt-out) in this_levy_events before
     # apply_aftermath clears that bucket.
-    from almoravid.battle import apply_retreat_aftermath
+    from almoravid.battle import (
+        apply_retreat_aftermath, apply_battle_losses,
+    )
     retreat_summary = apply_retreat_aftermath(
         state, result,
         approach_from_locale=payload.get("from_locale_id"),
         approach_way_type=payload.get("via_way_type"),
     )
+    losses = apply_battle_losses(state, result, retreat_summary)
     apply_aftermath(state, result)
 
     # End the active side's card (rule 4.4.5).
