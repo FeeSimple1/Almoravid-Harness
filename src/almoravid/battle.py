@@ -277,6 +277,36 @@ def build_strike_rows(
                     one_round_only=cap_row.get("any_one_round", False),
                     card_ids=sorted(required & caps_in_play),
                 ))
+
+    # S3 (4.5.2 GARRISON FORCES DURING STORM): the Garrison adds its
+    # Strikes to the Defending Lord's (rounded together by _step_hits).
+    # Garrison Men-at-Arms: base Melee (storm) PLUS Crossbow Missiles
+    # (-1 Armor, firing side selects target). Garrison Militia: base
+    # Melee PLUS regular Bowmen Missiles. The Garrison ignores cards
+    # affecting the Lord individually, so no strikes_by_capability here.
+    if context == "storm":
+        for unit_type, count in side.garrison_forces.items():
+            if count <= 0:
+                continue
+            unit = None
+            for category in ("horse", "foot"):
+                if unit_type in forces_data[category]:
+                    unit = forces_data[category][unit_type]
+                    break
+            if unit is None:
+                continue
+            for s in unit["strikes_storm"]:
+                rows.append(StrikeRow(
+                    unit_type=unit_type, count=count,
+                    kind=s["kind"], rate=s["rate"],
+                    one_round_only=s.get("any_one_round", False),
+                ))
+            # Garrison-granted Missile rows (automatic; not card-gated).
+            for g_row in unit.get("strikes_by_garrison", []):
+                rows.append(StrikeRow(
+                    unit_type=unit_type, count=count,
+                    kind=g_row["kind"], rate=g_row["rate"],
+                ))
     return rows
 
 
