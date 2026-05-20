@@ -431,6 +431,89 @@ def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _apply_grow_harvest_repairs(state, prev_box: int) -> dict:
+    """Rules 4.9.2 GROW / HARVEST and 4.9.3 REPAIRS, applied for the
+    Campaign that just concluded in `prev_box` (1-indexed). Only runs
+    when the game continues (4.9.1 Game End is checked first).
+
+    GROW (end of the SECOND 40 Days of Spring): the Christian then the
+    Muslim player each reduces ENEMY Ravage markers on the map to half
+    their number, rounded up (mandatory). Christian removes Muslim
+    (green) Ravaged markers; Muslim removes Christian (yellow). Removing
+    floor(n/2) markers leaves ceil(n/2). Which markers are removed is a
+    minor player choice with no VP-total effect (VP is count-based);
+    a deterministic selection is used.
+
+    HARVEST (end of the SECOND 40 Days of Summer): each Lord reduces his
+    Carts and Mules EACH to half, rounded up.
+
+    REPAIRS (end of each Campaign except Winter): remove one Siege
+    marker from each Siege Locale that has three OR four Siege markers
+    (per besieger color).
+    """
+    import math as _m
+    out: dict = {"grow": None, "harvest": None, "repairs": []}
+    boxes = state.calendar.boxes
+    if prev_box < 1 or prev_box > len(boxes):
+        return out
+    season = boxes[prev_box - 1].season
+    second_of_season = (prev_box >= 2
+                        and boxes[prev_box - 2].season == season)
+
+    # GROW (second Spring) -------------------------------------------
+    if season == "spring" and second_of_season:
+        def _reduce(color: str) -> list[str]:
+            ravaged = [lid for lid, loc in state.locales.items()
+                       if loc.ravaged == color]
+            n = len(ravaged)
+            remove = n - _m.ceil(n / 2) if n > 0 else 0  # = floor(n/2)
+            removed = sorted(ravaged)[:remove]
+            for lid in removed:
+                state.locales[lid].ravaged = "none"
+            return removed
+        # Christian reduces ENEMY (green) markers; Muslim reduces yellow.
+        green_removed = _reduce("green")
+        yellow_removed = _reduce("yellow")
+        out["grow"] = {"christian_removed_green": green_removed,
+                       "muslim_removed_yellow": yellow_removed}
+
+    # HARVEST (second Summer) ----------------------------------------
+    if season == "summer" and second_of_season:
+        harvested = []
+        for lid, lord in state.lords.items():
+            if lord.cylinder.kind != "locale":
+                continue
+            cart = lord.assets.get("cart", 0)
+            mule = lord.assets.get("mule", 0)
+            if cart <= 1 and mule <= 1:
+                continue
+            new_cart = _m.ceil(cart / 2) if cart > 0 else 0
+            new_mule = _m.ceil(mule / 2) if mule > 0 else 0
+            if new_cart > 0:
+                lord.assets["cart"] = new_cart
+            else:
+                lord.assets.pop("cart", None)
+            if new_mule > 0:
+                lord.assets["mule"] = new_mule
+            else:
+                lord.assets.pop("mule", None)
+            harvested.append({"lord_id": lid,
+                              "cart": (cart, new_cart),
+                              "mule": (mule, new_mule)})
+        out["harvest"] = harvested
+
+    # REPAIRS (every Campaign except Winter) -------------------------
+    if season != "winter":
+        for lid, loc in state.locales.items():
+            for fld in ("siege_yellow", "siege_green"):
+                n = getattr(loc, fld)
+                if n in (3, 4):
+                    setattr(loc, fld, n - 1)
+                    out["repairs"].append({"locale": lid, "marker": fld,
+                                           "from": n, "to": n - 1})
+    return out
+
+
 def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Resolve end-of-Campaign bookkeeping and advance the Calendar.
 
@@ -477,6 +560,10 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                 f"(Scenario End); winner={verdict['winner']}")
         return {"phase": "ended", "current_box": new_box,
                 "victory": verdict}
+    # 4.9.2 Grow/Harvest + 4.9.3 Repairs for the just-concluded Campaign
+    # (only reached when the game continues, i.e. 4.9.1 Game End did not
+    # fire above). `prev_box` is the box whose Campaign just ended.
+    ghr = _apply_grow_harvest_repairs(state, prev_box)
     # Otherwise return to Levy
     state.meta.phase = "levy"
     state.meta.campaign_step = None
@@ -514,9 +601,13 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
     _record(state, action,
             f"End Campaign; advanced box {prev_box} -> {new_box}; back to Levy"
+            + (f"; grow/harvest/repairs: {ghr}"
+               if (ghr.get("grow") or ghr.get("harvest") or ghr.get("repairs"))
+               else "")
             + (f"; auto: {auto_actions}" if auto_actions else ""))
     return {"phase": state.meta.phase, "current_box": new_box,
             "turn_index": state.meta.turn_index,
+            "grow_harvest_repairs": ghr,
             "auto_actions": auto_actions}
 
 
@@ -580,11 +671,10 @@ def apply_curias(state, box: int) -> dict:
         state.calendar.boxes[5].decorations.append("curias")  # box 6 (index 5)
         placed.append(6)
 
-    # Phase 5k baseline: deduct from Christian VP for each Curias marker
-    # placed (treating Taifas Box 1VP markers as already-counted yellow
-    # Conquered that get reversed by Curias). The actual Taifas Box marker
-    # model is small enough to add when Phase 5l Adjust Status lands.
-    state.score.christian = max(0, state.score.christian - len(placed))
+    # T6 (rule 6.2.2 / 5.1): remove one 1VP Conquered marker from the
+    # Muslims' Taifas box per Curias marker placed -- this REDUCES the
+    # Muslim Taifas-box VP, it does NOT deduct from the Christian score.
+    state.taifas_box_vp = max(0.0, state.taifas_box_vp - float(len(placed)))
 
     # Advance Levy marker to box 7
     state.calendar.current_box = 7

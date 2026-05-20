@@ -87,13 +87,13 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 - T3 adjust_taifa_status Jihad bypasses eligibility + hardcodes value (1.4.4 Important) — FIX.
 - T4 adjust_taifa_status OR-choices auto-resolved (1.4.3 player choice) — ADJ.
 - T5 Parias Coin transfer not applied in non-Disband paths (1.4.3) — FIX.
-- T6 Curias deducts Christian score vs removing Taifas-box Conquered marker (5.1 note) — FIX.
+- T6 Curias deducts Christian score vs removing Taifas-box Conquered marker (5.1 note) — FIXED 2026-05-20. apply_curias now reduces the Muslims' Taifas-box VP (state.taifas_box_vp) by one per Curias marker placed (6.2.2), instead of deducting from the Christian running score. Tests: test_fix_e1e2e3_endcampaign.py::test_t6_curias_reduces_taifas_box_not_christian_score.
 - T7 Conquered-marker side inferred by territory, not tracked (1.3.1) — FIX (model).
 
 ### End-Season / Feed (§4.8-4.9)
-- E1 Grow (Spring-2 Ravage halving) (4.9.2) missing — FIX (critical).
-- E2 Harvest (Summer-2 Cart/Mule halving) (4.9.2) missing — FIX (critical).
-- E3 Repairs (remove 1 Siege from 3-4 stacks, non-Winter) (4.9.3) missing — FIX (critical).
+- E1 Grow (Spring-2 Ravage halving) (4.9.2) — FIXED 2026-05-20. _apply_grow_harvest_repairs (called from _h_end_campaign when the game continues) reduces ENEMY Ravage markers to half rounded up at the end of the SECOND Spring box: Christian removes floor(n/2) green (Muslim) Ravaged markers, Muslim removes floor(n/2) yellow. Which markers are removed is a minor player choice with no VP-total effect; deterministic selection used. Tests: test_fix_e1e2e3_endcampaign.py.
+- E2 Harvest (Summer-2 Cart/Mule halving) (4.9.2) — FIXED 2026-05-20. At the end of the SECOND Summer box each on-map Lord reduces Carts and Mules EACH to half rounded up. Tests: test_fix_e1e2e3_endcampaign.py.
+- E3 Repairs (remove 1 Siege from 3-4 stacks, non-Winter) (4.9.3) — FIXED 2026-05-20. At the end of each non-Winter Campaign, every Siege Locale with three or four Siege markers (per besieger color: siege_yellow/siege_green) loses one. Skipped in Winter. Tests: test_fix_e1e2e3_endcampaign.py.
 - E4 Feed: only active Lord, not both sides' Moved/Fought (4.8.1) — FIX.
 - E5 Feed Sharing among same-Locale Lords (4.8.1) missing — FIX.
 - E6 Feed Greed mule-discard option (4.8.1) missing — FIX.
