@@ -1771,96 +1771,93 @@ def _h_cmd_siege(state, action):
     color = "yellow" if side == "christian" else "green"
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"
     current = getattr(loc, marker_field)
-    _require(current < 4,
-             f"{here} already has {current} {color} Siege markers (max 4)",
-             code="siege_cap_reached")
 
-    # Count Lords here on our side for Siegeworks Capacity check
-    lords_here_our_side = sum(
-        1 for other in state.lords.values()
-        if other.side == side
-        and other.cylinder.kind == "locale"
-        and other.cylinder.locale_id == here
-    )
     from almoravid.static_data import load_strongholds
-    capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
-    siegeworks = lords_here_our_side >= capacity
-
-    # Place +1 marker (or +2 if Siegeworks and room).
-    placed = 1
-    setattr(loc, marker_field, current + 1)
-    if siegeworks and current + 1 < 4:
-        setattr(loc, marker_field, current + 2)
-        placed = 2
-
-    # 4.5.1 Surrender check (optional, when no Besieged Lord inside).
     from almoravid.rng import roll_d6_n
-    surrender_result = None
+    capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+    sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
+
     enemy_inside = any(
         l for l in state.lords.values()
-        if l.side != side
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here
-        and l.in_stronghold
+        if l.side != side and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here and l.in_stronghold
     )
+
+    # --- 4.5.1 SURRENDER? (FIRST, before Siegeworks; only if no
+    # Besieged Lords inside). Dice = Stronghold VP; each die must be
+    # <= (Siege markers there, max 4) + (Ravaged marker there, max 1).
+    surrender_result = None
+    surrendered = False
     do_surrender = action.get("surrender", True) and not enemy_inside
     if do_surrender:
-        from almoravid.static_data import load_strongholds
-        sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
-        # Phase 6k: C21 Mozarabes auto-success when Christian holds
-        # and target locale is in a Reconquista Taifa.
+        # C21 Mozarabes auto-success in a Reconquista Taifa.
         c21_held = (side == "christian" and "C21" in
                     state.decks.this_levy_events.get("christian", []))
         target_taifa = state.taifas.get(loc.territory)
         c21_eligible = (c21_held and target_taifa is not None
                         and target_taifa.status == "reconquista")
+        # Ravaged marker THERE (at the Locale), of the besieging side,
+        # capped at 1 (rule 4.5.1).
+        ravaged_here = 1 if loc.ravaged == color else 0
+        threshold = min(4, current) + ravaged_here
         if c21_eligible:
             state.decks.this_levy_events["christian"].remove("C21")
             state.decks.discard.append("C21")
             dice = []
-            cancellations = sh_value  # auto-success
+            cancellations = sh_value
             threshold = "auto_mozarabes"
         else:
             dice = roll_d6_n(state, sh_value)
-            threshold = (getattr(loc, marker_field)
-                         + _ravaged_count_in_taifa_for_side(state, here, side))
             cancellations = sum(1 for d in dice if d <= threshold)
         if cancellations == sh_value:
-            # Surrender succeeds — Conquest
+            surrendered = True
             conq_result = _conquer_stronghold(state, here, side)
-            # Phase 6i: C9 Betrayal of Terms opt-in (Christian only).
-            # Held in this_levy_events; auto-fire greedy double-Spoils.
-            from almoravid.static_data import load_strongholds
+            # Surrender provides NO Spoils (4.5.1 Terms). C9 Betrayal of
+            # Terms (Christian) overrides: take Spoils as if Sack, OR
+            # double + Muslims add 1 Jihad.
             from almoravid.battle import distribute_spoils_round_robin
             sh = load_strongholds()["strongholds"][loc.base_type]
             base_spoils = {k: v for k, v in sh.get("spoils", {}).items()
                            if k in ("coin", "loot", "prov")}
             c9_held = (side == "christian" and "C9" in
                        state.decks.this_levy_events.get("christian", []))
-            multiplier = 2 if c9_held else 1
-            spoils = {k: v * multiplier for k, v in base_spoils.items()}
-            friendly_here = [
-                l.id for l in state.lords.values()
-                if l.side == side and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == here
-            ]
-            if friendly_here and spoils:
-                distribute_spoils_round_robin(state, friendly_here, spoils)
+            spoils = {}
             if c9_held:
+                multiplier = 2
+                spoils = {k: v * multiplier for k, v in base_spoils.items()}
+                friendly_here = [
+                    l.id for l in state.lords.values()
+                    if l.side == side and l.cylinder.kind == "locale"
+                    and l.cylinder.locale_id == here
+                ]
+                if friendly_here and spoils:
+                    distribute_spoils_round_robin(state, friendly_here, spoils)
                 state.decks.this_levy_events["christian"].remove("C9")
                 state.decks.discard.append("C9")
-                # Muslims add 1 Jihad if able.
-                from almoravid.events import _first_jihad_eligible_locale
-                jloc = _first_jihad_eligible_locale(state)
-                if jloc is not None:
-                    state.locales[jloc].jihad_markers += 1
+                from almoravid.events import _add_jihad
+                _add_jihad(state, 1, {})
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": True, "conquest": conq_result,
-                                "spoils": spoils,
-                                "c9_betrayal_used": c9_held}
+                                "spoils": spoils, "c9_betrayal_used": c9_held}
         else:
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": False}
+
+    # --- 4.5.1 SIEGEWORKS: only if the Stronghold did NOT Surrender
+    # (incl. declined to roll), and the besieging side has Lords >=
+    # Capacity. Add exactly ONE marker, max 4.
+    placed = 0
+    siegeworks = False
+    if not surrendered:
+        lords_here_our_side = sum(
+            1 for other in state.lords.values()
+            if other.side == side and other.cylinder.kind == "locale"
+            and other.cylinder.locale_id == here
+        )
+        siegeworks = lords_here_our_side >= capacity
+        if siegeworks and current < 4:
+            setattr(loc, marker_field, current + 1)
+            placed = 1
 
     # End-of-card: consume all remaining actions (SoP end_card_action).
     consumed = state.meta.actions_remaining

@@ -38,16 +38,19 @@ def _activate_lord(scenario, lord_id, seed=1):
     raise RuntimeError(f"Could not activate {lord_id}")
 
 
-def test_siege_places_marker_at_enemy_stronghold() -> None:
-    """Christian Lord at Muslim City Zaragoza places yellow Siege marker."""
+def test_siege_no_siegeworks_marker_below_capacity() -> None:
+    """4.5.1: Siegeworks adds a marker only when the besieging side has
+    Lords >= Stronghold Capacity. A lone Christian Lord at Zaragoza
+    City (capacity 3) places NO Siegeworks marker (the initial Siege
+    marker is placed via Besiege, 4.3.5, not here)."""
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
+    s.locales["zaragoza"].siege_yellow = 1  # already Besieging (4.3.5)
     before = s.locales["zaragoza"].siege_yellow
-    r = apply_action(s, {"type": "cmd_siege", "side": "christian"})
-    # Christian alone at Zaragoza City (capacity 3) -> NO Siegeworks
-    assert s.locales["zaragoza"].siege_yellow == before + 1
-    assert r["color"] == "yellow"
-    assert r["placed"] == 1
+    r = apply_action(s, {"type": "cmd_siege", "side": "christian",
+                         "surrender": False})
+    assert s.locales["zaragoza"].siege_yellow == before  # no marker added
+    assert r["placed"] == 0
     assert r["siegeworks"] is False
 
 
@@ -77,13 +80,16 @@ def test_siege_besieged_lord_rejected() -> None:
     assert ei.value.code == "besieged"
 
 
-def test_siege_cap_at_4() -> None:
+def test_siege_at_4_markers_adds_none() -> None:
+    """4.5.1: Siegeworks maxes at 4 markers. At 4, Siege is still a
+    legal action (e.g. to roll Surrender) but adds no marker."""
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
     s.locales["zaragoza"].siege_yellow = 4
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_siege", "side": "christian"})
-    assert ei.value.code == "siege_cap_reached"
+    r = apply_action(s, {"type": "cmd_siege", "side": "christian",
+                         "surrender": False})
+    assert s.locales["zaragoza"].siege_yellow == 4
+    assert r["placed"] == 0
 
 
 def test_siege_uses_entire_card() -> None:
@@ -94,17 +100,18 @@ def test_siege_uses_entire_card() -> None:
     assert s.meta.actions_remaining == 0
 
 
-def test_siegeworks_doubles_marker_at_capacity() -> None:
-    """Castle Capacity=1: one Lord meets it -> Siegeworks (+2 markers)."""
+def test_siegeworks_adds_one_marker_at_capacity() -> None:
+    """4.5.1: Siegeworks adds exactly ONE marker when Lords >= Capacity.
+    Castle Capacity=1: one Lord meets it -> +1 marker (NOT +2)."""
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
     # Calatayud is a Castle (capacity 1) in Independent Zaragoza (Muslim).
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="calatayud")
     before = s.locales["calatayud"].siege_yellow
-    r = apply_action(s, {"type": "cmd_siege", "side": "christian"})
-    # 1 Lord >= capacity 1 -> Siegeworks places +2
+    r = apply_action(s, {"type": "cmd_siege", "side": "christian",
+                         "surrender": False})
     assert r["siegeworks"] is True
-    assert r["placed"] == 2
-    assert s.locales["calatayud"].siege_yellow == before + 2
+    assert r["placed"] == 1
+    assert s.locales["calatayud"].siege_yellow == before + 1
 
 
 def test_legal_moves_offers_siege_at_enemy_stronghold() -> None:
