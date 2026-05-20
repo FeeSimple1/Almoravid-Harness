@@ -63,9 +63,14 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     elif step == "call_to_arms":
         moves.extend(_call_to_arms_moves(state, active))
 
-    # pass_step is always legal for the active side during a Levy step.
+    # pass_step is legal for the active side during a Levy step, EXCEPT
+    # during service_disband while that side still owes a mandatory
+    # Disband (3.3) — keeps the legal_moves<->apply contract intact.
     if step in ("arts_of_war", "pay", "service_disband", "muster", "call_to_arms"):
-        moves.append({"type": "pass_step", "side": active})
+        if step == "service_disband" and pending_mandatory_disbands(state, active):
+            pass
+        else:
+            moves.append({"type": "pass_step", "side": active})
 
     return moves
 
@@ -130,11 +135,53 @@ def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _service_disband_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.3 Service / Disband: voluntary Disband of own Lords."""
+    """3.3 Disband. Disband is driven by Service-marker position and is
+    MANDATORY for Lords at or beyond the Service limit (box <= current
+    Levy/Campaign box). Only those Lords are offered. Independent Taifa
+    Lords get a deterministic Parias-Coin distribution (1.4.3) that the
+    caller may override."""
+    from almoravid.effective import is_besieged
     out: list[dict[str, Any]] = []
+    cur = state.calendar.current_box
+    marker_box = {m.lord_id: m.box for m in state.calendar.service_markers
+                  if m.vassal_id is None}
     for lid, lord in state.lords.items():
-        if lord.side == side and lord.cylinder.kind == "locale":
-            out.append({"type": "disband_lord", "side": side, "lord_id": lid})
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        box = marker_box.get(lid)
+        # Eligible iff off-Calendar (no marker) or at/left of the marker.
+        if box is not None and box > cur:
+            continue
+        move: dict[str, Any] = {"type": "disband_lord", "side": side,
+                                "lord_id": lid}
+        if (lord.is_taifa and lord.home_taifa
+                and state.taifas.get(lord.home_taifa) is not None
+                and state.taifas[lord.home_taifa].status == "independent"):
+            elig = [cid for cid, c in state.lords.items()
+                    if c.side == "christian" and c.cylinder.kind == "locale"
+                    and not is_besieged(state, cid)]
+            if elig:
+                move["parias_coin_targets"] = [
+                    {"lord_id": elig[0], "coin": lord.service_rating}]
+        out.append(move)
+    return out
+
+
+def pending_mandatory_disbands(state: GameState, side: Side) -> list[str]:
+    """Lords of `side` that MUST Disband now (3.3): on the map with a
+    Service marker at or left of the Levy/Campaign marker, or off the
+    Calendar entirely. Used to block passing the service_disband step
+    while a mandatory Disband is outstanding."""
+    cur = state.calendar.current_box
+    marker_box = {m.lord_id: m.box for m in state.calendar.service_markers
+                  if m.vassal_id is None}
+    out: list[str] = []
+    for lid, lord in state.lords.items():
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        box = marker_box.get(lid)
+        if box is None or box <= cur:
+            out.append(lid)
     return out
 
 

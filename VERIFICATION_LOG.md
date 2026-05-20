@@ -38,8 +38,8 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 - L3 Pay shifts Service LEFT; rules shift RIGHT (3.2.1) — FIX (critical, inverted).
 - L4 Pay-with-Coin missing same-Locale/Taifa-Coin/multi-Coin targeting (3.2.1) — FIX.
 - L5 Pay-with-Loot (3.2.2) missing — FIX.
-- L6 Disband doesn't split Beyond-Service permanent-removal (3.3.1) vs At-Limit to-Calendar (3.3.2); no eligibility gate — FIX (critical).
-- L7 Independent-Taifa-Lord Disband → Parias + Coin + VP not triggered (3.3 Important) — FIX.
+- L6 Disband doesn't split Beyond-Service permanent-removal (3.3.1) vs At-Limit to-Calendar (3.3.2); no eligibility gate — FIXED 2026-05-20. Disband now gated on Service-marker position (box <= current Levy/Campaign box; mandatory). box<current => permanent removal (cylinder 'removed', caps -> board_edge, Seat + Lord/Vassal Service markers removed); box==current => to Calendar (service_rating boxes right; caps discarded; Service markers set aside; Seat removed). pass_step blocked + pass_step de-listed in service_disband while a mandatory Disband is pending. Tests: test_real_levy.py (rewritten 4) + test_fix_disband_331_332.py.
+- L7 Independent-Taifa-Lord Disband -> Parias + Coin + VP not triggered (3.3 Important) — FIXED 2026-05-20. Disband of an Independent Taifa Lord now calls adjust_taifa_status(->parias), awards Parias Coin (= the Lord's Service rating: 6 al-Mutamid / 4 others) to Unbesieged Christian Lords' mats (explicit parias_coin_targets, enumerator supplies a deterministic distribution), and +1 running Christian VP (final VP recomputed from Parias status). NOTE: which Christian Lord(s) receive the Coin is a minor Christian player choice surfaced via parias_coin_targets; totals/VP are unaffected by the distribution.
 - L8 Muster ignores Friendly/Unbesieged + Ready(box<=levy) gating (3.4.1) — FIX.
 - L9 Muster greedy seat default + no failed-roll retry via Lordship (3.4.1) — FIX (seat=player choice) / ADJ retry.
 - L10 Muster of Taifa Lord → Independent adjust (3.4.1) — FIX.

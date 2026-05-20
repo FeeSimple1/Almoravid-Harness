@@ -222,6 +222,15 @@ def _h_pass_step(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     _require_phase(state, "levy")
     _require_active(state, side)
+    # 3.3: Disband is mandatory for Lords at/beyond the Service limit —
+    # a side may not pass the service_disband step while any of its
+    # Lords still owe a Disband.
+    if state.meta.levy_step == "service_disband":
+        from almoravid.legal_moves import pending_mandatory_disbands
+        pend = pending_mandatory_disbands(state, side)
+        _require(not pend,
+                 f"{side} must Disband {pend} before passing the "
+                 f"service_disband step (3.3)", code="disband_pending")
     _set_step_completed(state, side)
     prev_step = state.meta.levy_step
     _advance_step_if_both_done(state)
@@ -1084,15 +1093,77 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """3.3 Disband: voluntarily Disband a Lord whose Service marker is
-    at or beyond Service limit (Beyond-Service per rule 3.3.1) OR
-    voluntarily before Service expires.
+def _award_parias_coin(state: GameState, amount: int, targets) -> dict[str, Any]:
+    """1.4.3 PARIAS COIN: when an Independent Taifa Lord Disbands, the
+    Christians add `amount` Coin (= the Disbanding Taifa Lord's Service
+    rating: six if al-Mutamid, four otherwise) from the pool among any
+    Unbesieged Christian Lords' mats.
 
-    Phase 5g baseline: Disband to the Calendar. Sets cylinder to
-    'calendar' at the current Levy box + Lord's service_rating
-    (rule 3.4.1 'Service-rating boxes ahead'). Clears all
-    Lord.cleanup_on_removal_fields per Pattern 8.
+    `targets` is an explicit list of {"lord_id", "coin"} (the Christian
+    player's distribution); each lord must be an Unbesieged Christian
+    Lord on the map and the coins must total `amount`. When omitted, a
+    deterministic distribution is built (fill Unbesieged Christian Lords
+    in id order) — the controlling side may override with explicit
+    targets. If no Unbesieged Christian Lord exists, the Coin cannot be
+    placed (stays in the pool).
+    """
+    from almoravid.effective import is_besieged
+    eligible = [lid for lid, l in state.lords.items()
+                if l.side == "christian" and l.cylinder.kind == "locale"
+                and not is_besieged(state, lid)]
+    if not eligible:
+        return {"amount": amount, "placed": {}, "unplaced": amount,
+                "reason": "no Unbesieged Christian Lord"}
+    if targets is None:
+        # Deterministic default: all to the first eligible Lord.
+        targets = [{"lord_id": eligible[0], "coin": amount}]
+    placed: dict[str, int] = {}
+    total = 0
+    for entry in targets:
+        plid = entry.get("lord_id")
+        _require(plid in eligible,
+                 f"{plid} is not an Unbesieged Christian Lord for Parias "
+                 f"Coin (1.4.3)", code="bad_parias_target")
+        c = int(entry.get("coin", 0))
+        _require(c >= 1, "Parias Coin amount must be >= 1", code="bad_arg")
+        placed[plid] = placed.get(plid, 0) + c
+        total += c
+    _require(total == amount,
+             f"Parias Coin distribution totals {total}, need {amount} "
+             f"(1.4.3)", code="bad_parias_total")
+    for plid, c in placed.items():
+        lord = state.lords[plid]
+        lord.assets["coin"] = lord.assets.get("coin", 0) + c
+    return {"amount": amount, "placed": placed, "unplaced": 0}
+
+
+def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.3 Disband. Lords are Disbanded by the POSITION of their Service
+    marker relative to the Levy/Campaign marker — Disband is mandatory,
+    not voluntary (3.3).
+
+      - Service marker LEFT of the marker (box < current) -> 3.3.1
+        Beyond Service Limit: PERMANENTLY removed from the game
+        (cylinder kind='removed'); "This Lord" Capabilities return to
+        the side's board-edge stock; Seat + Lord/Vassal Service markers
+        removed.
+      - Service marker in the SAME box as the marker (box == current)
+        -> 3.3.2 At Service Limit: Disband to the Calendar (cylinder
+        placed service_rating boxes right of the current box if Levy;
+        next box + service if Campaign), mat cards discarded, Service
+        markers set aside (removed from the Calendar) for future Muster,
+        Seat markers removed.
+
+    A Lord whose Service marker is RIGHT of the marker is not subject
+    to Disband and cannot be Disbanded here.
+
+    Important (3.3.2): when an Independent Taifa Lord Disbands (either
+    way), his Taifa adjusts to Parias (1.4.3) — awarding Parias Coin
+    (= his Service rating) and a victory point to the Christians.
+
+    Args:
+      side, lord_id, parias_coin_targets (optional explicit Coin
+        distribution for the Independent-Taifa case, 1.4.3).
     """
     from almoravid.state import Cylinder
     side = _require_side(action)
@@ -1108,20 +1179,57 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="wrong_side")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not on map", code="not_on_map")
-    # Bug N (Pattern 9 audit / Errata p.12): Disband target box differs
-    # by phase per the Errata correction —
-    #   if Levy: current_box + service_rating
-    #   if Campaign: current_box + 1 + service_rating  (the +1 is the
-    #     errata 'next box if Campaign (4.8.2)' insertion)
-    # Today _h_disband_lord is gated on Levy step, so the if-branch is
-    # what runs; the helper is in place so when 4.8.2/4.8.3 voluntary
-    # Campaign-time Disband lands later it uses the right box.
-    new_box = _compute_disband_target_box(state, lord)
-    if new_box > 16:
-        new_box = 17  # off-right sentinel
-        state.calendar.off_right.append(lord_id)
-    lord.cylinder = Cylinder(kind="calendar", box=new_box)
-    # Pattern 8: clear cleanup_on_removal_fields
+    # Eligibility gate (3.3): Disband only Lords AT or BEYOND the Service
+    # limit (Service marker box <= current Levy/Campaign box).
+    cur = state.calendar.current_box
+    sm = next((m for m in state.calendar.service_markers
+               if m.lord_id == lord_id and m.vassal_id is None), None)
+    if sm is None:
+        beyond, at_limit = True, False  # off the Calendar (off-left)
+    else:
+        _require(sm.box <= cur,
+                 f"{lord_id} Service marker (box {sm.box}) is right of the "
+                 f"Levy marker (box {cur}) — not subject to Disband (3.3)",
+                 code="not_at_limit")
+        beyond = sm.box < cur
+        at_limit = sm.box == cur
+
+    # 3.3.2 Important / 1.4.3: Independent Taifa Lord -> Parias + Coin + VP.
+    taifa_adjust = None
+    parias_coin = None
+    if (lord.is_taifa and lord.home_taifa
+            and state.taifas.get(lord.home_taifa) is not None
+            and state.taifas[lord.home_taifa].status == "independent"):
+        from almoravid.campaign import adjust_taifa_status
+        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "parias")
+        parias_coin = _award_parias_coin(
+            state, lord.service_rating, action.get("parias_coin_targets"))
+        # Running-score tracker; final VP is recomputed from Parias status.
+        state.score.christian += 1.0
+
+    # Remove this Lord's Seat markers from the map (both 3.3.1 and 3.3.2).
+    for loc in state.locales.values():
+        if lord_id in loc.seat_marker_lord_ids:
+            loc.seat_marker_lord_ids.remove(lord_id)
+
+    # Route "This Lord" Capability cards: 3.3.1 returns them to the
+    # side's board-edge stock; 3.3.2 discards them (cards at his mat).
+    caps = list(lord.capabilities)
+    if caps:
+        if beyond:
+            state.decks.board_edge.setdefault(side, []).extend(caps)
+        else:
+            state.decks.discard.extend(caps)
+
+    # Remove the Lord's own AND Vassal Service markers; clear off-edge.
+    state.calendar.service_markers = [
+        m for m in state.calendar.service_markers if m.lord_id != lord_id]
+    if lord_id in state.calendar.off_left_service:
+        state.calendar.off_left_service.remove(lord_id)
+    if lord_id in state.calendar.off_right_service:
+        state.calendar.off_right_service.remove(lord_id)
+
+    # Pattern 8: clear cleanup_on_removal_fields.
     lord.forces = {}
     lord.assets = {}
     lord.capabilities = []
@@ -1133,13 +1241,29 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.first_march_used_this_card = False
     lord.raiders_used_this_card = False
     lord.routed_units = {}
-    # Remove Service marker
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers if s.lord_id != lord_id
-    ]
-    _record(state, action,
-            f"{side} {lord_id} Disbands -> Calendar box {new_box}")
-    return {"lord_id": lord_id, "calendar_box": new_box}
+    lord.crusader_markers = 0
+    lord.is_lieutenant = False
+    lord.lieutenant_of = None
+
+    if beyond:
+        # 3.3.1 permanent removal.
+        lord.cylinder = Cylinder(kind="removed")
+        outcome = "removed (3.3.1 Beyond Service)"
+        result_box = None
+    else:
+        # 3.3.2 to the Calendar.
+        new_box = _compute_disband_target_box(state, lord)
+        if new_box > 16:
+            new_box = 17
+            state.calendar.off_right.append(lord_id)
+        lord.cylinder = Cylinder(kind="calendar", box=new_box)
+        outcome = f"to Calendar box {new_box} (3.3.2 At Limit)"
+        result_box = new_box
+
+    _record(state, action, f"{side} {lord_id} Disbands -> {outcome}")
+    return {"lord_id": lord_id, "permanent": beyond,
+            "calendar_box": result_box, "taifa_adjust": taifa_adjust,
+            "parias_coin": parias_coin}
 
 
 # ---------------------------------------------------------------------------

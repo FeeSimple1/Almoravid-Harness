@@ -58,18 +58,29 @@ def test_pay_lord_rejects_no_coin() -> None:
 
 # ---- 3.3 Disband ---------------------------------------------------
 
-def test_disband_lord_clears_state_and_places_on_calendar() -> None:
-    """Pattern 8 (lifecycle leaks): all cleanup fields must clear on Disband."""
+def test_disband_at_limit_goes_to_calendar_and_clears_state() -> None:
+    """3.3.2 At Service Limit (marker box == Levy box): Disband to the
+    Calendar (service_rating boxes right) and clear all cleanup fields
+    (Pattern 8)."""
+    from almoravid.state import ServiceMarker
     s = load_scenario("scenario_a_toledo_beset")
-    # Pre-flag Alfonso with non-default state
     s.lords["alfonso"].moved_fought = True
     s.lords["alfonso"].lordship_used = 2
     s.lords["alfonso"].first_march_used_this_card = True
     _drive_to_levy_step(s, "service_disband")
-    apply_action(s, {"type": "disband_lord", "side": "christian",
-                     "lord_id": "alfonso"})
+    # Force Alfonso AT the limit (marker on the current Levy box).
+    cur = s.calendar.current_box
+    s.calendar.service_markers = [m for m in s.calendar.service_markers
+                                  if m.lord_id != "alfonso"]
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id="alfonso", box=cur))
+    while s.meta.active_player != "christian":
+        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    r = apply_action(s, {"type": "disband_lord", "side": "christian",
+                         "lord_id": "alfonso"})
+    assert r["permanent"] is False
     assert s.lords["alfonso"].cylinder.kind == "calendar"
-    # All cleanup fields cleared
+    assert s.lords["alfonso"].cylinder.box == cur + s.lords["alfonso"].service_rating
     assert s.lords["alfonso"].forces == {}
     assert s.lords["alfonso"].assets == {}
     assert s.lords["alfonso"].vassals == []
@@ -77,6 +88,48 @@ def test_disband_lord_clears_state_and_places_on_calendar() -> None:
     assert s.lords["alfonso"].moved_fought is False
     assert s.lords["alfonso"].lordship_used == 0
     assert s.lords["alfonso"].first_march_used_this_card is False
+    assert not any(m.lord_id == "alfonso"
+                   for m in s.calendar.service_markers)
+
+
+def test_disband_beyond_limit_permanently_removes() -> None:
+    """3.3.1 Beyond Service Limit (marker box < Levy box): permanent
+    removal (cylinder kind='removed')."""
+    from almoravid.state import ServiceMarker
+    s = load_scenario("scenario_a_toledo_beset")
+    _drive_to_levy_step(s, "service_disband")
+    cur = s.calendar.current_box
+    # Put the Levy marker ahead so Alfonso's marker is to the LEFT.
+    s.calendar.current_box = cur + 2
+    s.calendar.service_markers = [m for m in s.calendar.service_markers
+                                  if m.lord_id != "alfonso"]
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id="alfonso", box=cur))
+    while s.meta.active_player != "christian":
+        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    r = apply_action(s, {"type": "disband_lord", "side": "christian",
+                         "lord_id": "alfonso"})
+    assert r["permanent"] is True
+    assert s.lords["alfonso"].cylinder.kind == "removed"
+
+
+def test_disband_rejects_lord_right_of_marker() -> None:
+    """A Lord whose Service marker is RIGHT of the Levy marker is not
+    subject to Disband (3.3)."""
+    from almoravid.state import ServiceMarker
+    s = load_scenario("scenario_a_toledo_beset")
+    _drive_to_levy_step(s, "service_disband")
+    cur = s.calendar.current_box
+    s.calendar.service_markers = [m for m in s.calendar.service_markers
+                                  if m.lord_id != "alfonso"]
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id="alfonso", box=cur + 2))
+    while s.meta.active_player != "christian":
+        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    with pytest.raises(IllegalAction) as ei:
+        apply_action(s, {"type": "disband_lord", "side": "christian",
+                         "lord_id": "alfonso"})
+    assert ei.value.code == "not_at_limit"
 
 
 # ---- 3.4 Lordship spending ---------------------------------------
@@ -156,12 +209,26 @@ def test_legal_moves_offers_pay_when_coin_and_service() -> None:
                for m in moves)
 
 
-def test_legal_moves_offers_disband_during_disband_step() -> None:
+def test_legal_moves_offers_disband_only_for_at_or_beyond_limit() -> None:
+    """3.3: only Lords at/beyond the Service limit are offered Disband.
+    At scenario start every mustered Lord's marker is ahead, so none
+    are offered; forcing one to the limit makes it appear."""
+    from almoravid.state import ServiceMarker
     s = load_scenario("scenario_a_toledo_beset")
     _drive_to_levy_step(s, "service_disband")
-    moves = legal_moves(s)
-    disband_moves = [m for m in moves if m["type"] == "disband_lord"]
-    assert disband_moves
+    while s.meta.active_player != "christian":
+        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    assert not [m for m in legal_moves(s) if m["type"] == "disband_lord"]
+    cur = s.calendar.current_box
+    s.calendar.service_markers = [m for m in s.calendar.service_markers
+                                  if m.lord_id != "alfonso"]
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id="alfonso", box=cur))
+    dm = [m for m in legal_moves(s) if m["type"] == "disband_lord"]
+    assert any(m["lord_id"] == "alfonso" for m in dm)
+    # pass_step must NOT be offered while a mandatory Disband is pending.
+    assert not [m for m in legal_moves(s)
+                if m["type"] == "pass_step" and m["side"] == "christian"]
 
 
 def test_legal_moves_offers_take_vassal_during_muster() -> None:
