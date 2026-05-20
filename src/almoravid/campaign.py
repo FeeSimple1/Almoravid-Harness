@@ -2479,38 +2479,66 @@ def _h_respond_stand_battle(state, action):
         and l.cylinder.locale_id == locale_id
         and l.in_stronghold and _isb(state, l.id)
     ]
+    # B6 (4.4.1): the relieving Marchers and the Sallying (Besieged)
+    # Lords are SEPARATE groups in the Array, not one merged Attacker.
+    marcher_ids = list(attacker_lord_ids)
     for rid in relief_sally_ids:
-        if rid not in attacker_lord_ids:
-            attacker_lord_ids.append(rid)
+        if rid not in marcher_ids:
             state.lords[rid].in_stronghold = False  # Sallied out
+    sallyer_ids = [rid for rid in relief_sally_ids if rid not in marcher_ids]
     defender_lord_ids = list(payload["defender_lord_ids"])
-    _require(attacker_lord_ids, "no attacker Lords at Battle locale",
-             code="no_attacker")
+    _require(marcher_ids or sallyer_ids,
+             "no attacker Lords at Battle locale", code="no_attacker")
     _require(defender_lord_ids, "no defender Lords at Battle locale",
              code="no_defender")
 
-    atk = battleside_for_lords(state, attacker_lord_ids, active_side,
-                               "attacker",
-                               active_lord_id=state.meta.active_lord_id)
-    # B4 (4.4.1): Defender Front count capped at the Attacker's.
-    dfd = battleside_for_lords(state, defender_lord_ids, other, "defender",
-                               front_limit=_front_lord_count(atk))
-    result = resolve_battle(state, atk, dfd)
-    commit_forces_after_battle(state, atk)
-    commit_forces_after_battle(state, dfd)
-    # Bug P fix: Retreat aftermath FIRST so it can consult Hold events
-    # (C7 Baggage Parapet opt-out) in this_levy_events before
-    # apply_aftermath clears that bucket.
     from almoravid.battle import (
         apply_retreat_aftermath, apply_battle_losses,
     )
-    retreat_summary = apply_retreat_aftermath(
-        state, result,
-        approach_from_locale=payload.get("from_locale_id"),
-        approach_way_type=payload.get("via_way_type"),
-    )
-    losses = apply_battle_losses(state, result, retreat_summary)
-    apply_aftermath(state, result)
+
+    if sallyer_ids:
+        # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
+        from almoravid.battle import (
+            resolve_relief_sally, apply_relief_sally_aftermath,
+        )
+        result, lanes = resolve_relief_sally(
+            state, marcher_ids, sallyer_ids, defender_lord_ids,
+            besieger_side=other, locale_id=locale_id)
+        marchers, sallyers, def_front, def_rear, shared = lanes
+        commit_forces_after_battle(state, marchers)
+        commit_forces_after_battle(state, sallyers)
+        if def_front is not None:
+            commit_forces_after_battle(state, def_front)
+        if def_rear is not None and not shared:
+            commit_forces_after_battle(state, def_rear)
+        retreat_summary = apply_relief_sally_aftermath(
+            state, result,
+            locale_id=locale_id, besieger_side=other,
+            approach_from_locale=payload.get("from_locale_id"),
+            approach_way_type=payload.get("via_way_type"))
+        atk = result.attacker
+        dfd = result.defender
+    else:
+        # ---- Standard Approach Battle (no Relief Sally). ----
+        atk = battleside_for_lords(state, marcher_ids, active_side,
+                                   "attacker",
+                                   active_lord_id=state.meta.active_lord_id)
+        # B4 (4.4.1): Defender Front count capped at the Attacker's.
+        dfd = battleside_for_lords(state, defender_lord_ids, other,
+                                   "defender",
+                                   front_limit=_front_lord_count(atk))
+        result = resolve_battle(state, atk, dfd)
+        commit_forces_after_battle(state, atk)
+        commit_forces_after_battle(state, dfd)
+        # Bug P fix: Retreat aftermath FIRST so it can consult Hold events
+        # (C7 Baggage Parapet opt-out) in this_levy_events before
+        # apply_aftermath clears that bucket.
+        retreat_summary = apply_retreat_aftermath(
+            state, result,
+            approach_from_locale=payload.get("from_locale_id"),
+            approach_way_type=payload.get("via_way_type"))
+        losses = apply_battle_losses(state, result, retreat_summary)
+        apply_aftermath(state, result)
 
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining

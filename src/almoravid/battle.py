@@ -1669,6 +1669,237 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
     )
 
 
+
+
+# ---------------------------------------------------------------------------
+# B6 (rule 4.4.1 RELIEF SALLY): dual-lane resolution.
+# ---------------------------------------------------------------------------
+
+
+def _pooled_battleside(state: GameState, lord_ids: list[str],
+                       side: Side, role: Role) -> BattleSide:
+    """Build a pooled (array=None) BattleSide from a list of Lords. The
+    pooled path is used for Relief Sally lanes because it supports
+    Walls/Siegeworks cancellation (the per-pair path does not)."""
+    forces: dict[UnitType, int] = {}
+    caps: list[str] = []
+    for lid in lord_ids:
+        l = state.lords[lid]
+        for ut, n in l.forces.items():
+            forces[ut] = forces.get(ut, 0) + n
+        caps.extend(l.capabilities)
+    return BattleSide(side=side, role=role, lord_ids=list(lord_ids),
+                      forces=forces, capabilities_in_play=caps)
+
+
+def resolve_relief_sally(
+    state: GameState,
+    marcher_ids: list[str],
+    sallyer_ids: list[str],
+    defender_ids: list[str],
+    *,
+    besieger_side: Side,
+    locale_id: str,
+    max_rounds: int = 6,
+):
+    """Rule 4.4.1 RELIEF SALLY. The Approaching (relieving) side's
+    Besieged Lords Sally out to join the Attack against the besiegers.
+
+    Array geometry (two lanes resolved within the SAME Battle):
+      - Lane M (open field): the relieving Marchers Strike, and are
+        Struck by, the Front Defenders directly opposite them. No Walls.
+      - Lane S (Siegeworks): the Sallying Attackers, arrayed behind the
+        Defenders, Attack up to three Reserve Defenders arrayed as a
+        Front facing them -- or, if the Defender has no Reserve, the
+        Front Defenders. The besieging DEFENDER cancels the Sallying
+        Attackers' Hits via Siegeworks-as-Walls (Walls range 1..Siege
+        markers). The Sallying Attackers themselves get NO Walls.
+        Reserve-Defenders (when present) Strike the Sallying Attackers
+        back; when the Sallying Attackers instead Flank the Front
+        Defenders (no Reserve case), those Front Defenders Strike the
+        Marchers in Lane M and are not double-counted Striking the
+        Sallyers.
+
+    The Sallying Attackers Strike "as if Flanking all of them equally
+    closely": pooling each lane's Forces realises this (all Sallyer
+    Hits combine into one rounded total against the pooled Reserve/Front
+    Defenders).
+
+    Returns (result, lanes) where lanes = (marchers, sallyers, def_front,
+    def_rear, shared). The caller commits each lane and runs the standard
+    Battle aftermath (apply_retreat_aftermath handles the Sallyers'
+    Withdraw-back-into-Stronghold via the friendly-Stronghold-at-Locale
+    rule); the Siege-marker reduction to one on Attacker loss is applied
+    by the caller / apply_relief_sally_aftermath.
+
+    DOCUMENTED SCOPE: lanes are pooled (consistent with single-Lord
+    Battle resolution), so multi-Lord lanes commit Losses proportionally
+    (4.4.4) rather than per-Lord. Round-level AoW reorders (M6 Feigned
+    Retreat) are not applied within a Relief Sally; the per-step Hills
+    (C1/M1) and C8 hooks inside _resolve_step still apply. Excess
+    Defenders beyond Front + three Reserve-as-Front do not participate.
+    """
+    active_side: Side = state.lords[
+        (marcher_ids or sallyer_ids)[0]].side
+    other: Side = besieger_side
+
+    # Siegeworks-as-Walls available to the besieging Defender vs the
+    # Sallying Attackers' Strikes only (rule 4.5.3).
+    loc = state.locales.get(locale_id)
+    siege = 0
+    if loc is not None:
+        siege = (loc.siege_yellow if besieger_side == "christian"
+                 else loc.siege_green)
+    walls = (1, siege) if siege > 0 else None
+
+    marchers = _pooled_battleside(state, marcher_ids, active_side, "attacker")
+    sallyers = _pooled_battleside(state, sallyer_ids, active_side, "attacker")
+
+    # Defender split. Front faces the Marchers (one opposite each, capped
+    # at three); up to three of the REMAINDER face the Sallyers; any
+    # further Defenders are true Reserve and do not participate.
+    if marcher_ids:
+        n_front = max(1, min(len(marcher_ids), 3))
+        front_ids = defender_ids[:n_front]
+        rear_ids = defender_ids[n_front:n_front + 3]
+        excess_ids = defender_ids[n_front + 3:]
+    else:
+        front_ids = []
+        rear_ids = defender_ids[:3]
+        excess_ids = defender_ids[3:]
+
+    def_front = (_pooled_battleside(state, front_ids, other, "defender")
+                 if front_ids else None)
+    shared = False
+    if rear_ids:
+        def_rear = _pooled_battleside(state, rear_ids, other, "defender")
+    elif def_front is not None:
+        # No Reserve Defenders: Sallyers Flank the Front Defenders.
+        def_rear = def_front
+        shared = True
+    else:
+        def_rear = None
+
+    result = BattleResult(
+        engagement="battle",
+        attacker=_pooled_battleside(
+            state, list(marcher_ids) + list(sallyer_ids), active_side,
+            "attacker"),
+        defender=_pooled_battleside(state, list(defender_ids), other,
+                                    "defender"),
+    )
+
+    # Card hooks (parity with resolve_battle): M7 Spear Wall on Muslim
+    # Defenders; Camp Attack consumed at Battle start in the open lane.
+    for ds in (def_front, def_rear):
+        if ds is not None and not (shared and ds is def_front
+                                   and def_rear is def_front):
+            init_m7_cap(state, ds)
+    if def_front is not None:
+        init_m7_cap(state, def_front)
+    if marcher_ids and def_front is not None:
+        _consume_camp_attack(state, marchers, def_front, result)
+
+    def _atk_alive() -> bool:
+        return marchers.has_unrouted() or sallyers.has_unrouted()
+
+    def _def_alive() -> bool:
+        a = def_front.has_unrouted() if def_front is not None else False
+        b = (def_rear.has_unrouted()
+             if (def_rear is not None and not shared) else False)
+        c = any(bool(state.lords[r].forces) for r in excess_ids)
+        return a or b or c
+
+    def _over() -> bool:
+        return (not _atk_alive()) or (not _def_alive())
+
+    for rnd_i in range(1, max_rounds + 1):
+        rnd = BattleRound(index=rnd_i)
+        for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
+            # Lane M: Marchers <-> Front Defenders (open field).
+            if (def_front is not None
+                    and (marchers.has_unrouted()
+                         or def_front.has_unrouted())):
+                rnd.steps.append(_resolve_step(
+                    state, step_id, actor_role, step_type, unit_class,
+                    marchers, def_front, context="battle"))
+            # Lane S: Sallyers <-> Reserve/Front Defenders. Siegeworks
+            # cancels the Sallyers' (attacker) Hits only; when `shared`
+            # the Defenders already Strike in Lane M, so skip Lane S
+            # defender Strikes to avoid double-counting.
+            if def_rear is not None:
+                run_step = (actor_role == "attacker"
+                            or (actor_role == "defender" and not shared))
+                if run_step and (sallyers.has_unrouted()
+                                 or def_rear.has_unrouted()):
+                    rnd.steps.append(_resolve_step(
+                        state, step_id, actor_role, step_type, unit_class,
+                        sallyers, def_rear, context="battle",
+                        walls_range=walls))
+            if _over():
+                break
+        result.rounds.append(rnd)
+        if rnd_i == 1:
+            _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        if _over():
+            break
+
+    # Winner: a side is defeated when all its participants are Routed.
+    if not _atk_alive() and _def_alive():
+        result.winner = other
+    elif _atk_alive() and not _def_alive():
+        result.winner = active_side
+    else:
+        result.winner = None
+        if not _atk_alive() and not _def_alive():
+            result.notes.append("Relief Sally: mutual elimination")
+        else:
+            result.notes.append(
+                "Relief Sally inconclusive after max rounds")
+    return result, (marchers, sallyers, def_front, def_rear, shared)
+
+
+def apply_relief_sally_aftermath(
+    state: GameState,
+    result: BattleResult,
+    *,
+    locale_id: str,
+    besieger_side: Side,
+    approach_from_locale: str | None = None,
+    approach_way_type: str | None = None,
+) -> dict:
+    """Relief-Sally aftermath (rule 4.4.1 / 4.5.3).
+
+    Movement uses the standard Battle aftermath: apply_retreat_aftermath
+    Withdraws losing Attacker Lords into the friendly Stronghold at the
+    Battle Locale (this is exactly the Sallying Lords going back inside)
+    and Retreats the relieving Marchers to their Approach origin. Then
+    4.4.4 Losses and 4.4.5 Aftermath run.
+
+    Relief-Sally extra: if the Attackers lose, reduce the besieger's
+    Siege markers at the Locale to one (4.5.3).
+    """
+    retreat_summary = apply_retreat_aftermath(
+        state, result,
+        approach_from_locale=approach_from_locale,
+        approach_way_type=approach_way_type,
+    )
+    apply_battle_losses(state, result, retreat_summary, storm=False)
+    apply_aftermath(state, result)
+    if result.winner is not None and result.winner == besieger_side:
+        loc = state.locales.get(locale_id)
+        if loc is not None:
+            if besieger_side == "christian":
+                if loc.siege_yellow > 1:
+                    loc.siege_yellow = 1
+            else:
+                if loc.siege_green > 1:
+                    loc.siege_green = 1
+        result.notes.append(
+            f"Relief Sally failed: Sallying Lords withdrew, siege at "
+            f"{locale_id} reduced to 1")
+    return retreat_summary
+
 # ---------------------------------------------------------------------------
 # Phase 6a helpers: combat-event discards + Camp Attack consumption.
 # ---------------------------------------------------------------------------
