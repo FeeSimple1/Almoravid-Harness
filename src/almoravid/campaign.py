@@ -1284,19 +1284,34 @@ def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _is_laden(lord) -> bool:
-    """A Lord is Laden if Cart or Mule carries two Provender (incl.
-    shared, 1.5.2), or Cart carries any Provender over a Pass, or
-    moving any Loot (rule 4.3.2).
+def _is_laden(lord, way_type: str | None = None) -> bool:
+    """A Lord is Laden if (rule 4.3.2):
+      - a Mule or Cart carries TWO Provender (i.e. Provender exceeds the
+        number of Transport units, so at least one unit must double up);
+      - a Cart carries any Provender over a Pass (only Carts are hindered
+        on Passes — Mules carry Provender over a Pass freely; the Cart
+        must carry Provender only when Provender exceeds Mule capacity,
+        2 per Mule); or
+      - the Lord is moving any Loot.
 
-    Phase 5a simplification: 'two or more Provender total' AND 'any
-    Loot' are the two-action triggers. The Cart-over-Pass conditional
-    is checked separately at March time so it can fire even with one
-    Provender.
-    """
+    C4 (4.3.2): transport-carrying is now accounted for — Provender that
+    fits one-per-Transport-unit is NOT Laden (the old code treated any
+    >=2 Provender as Laden regardless of Transport). `way_type='pass'`
+    adds the Cart-over-Pass trigger (so a single Cart carrying one
+    Provender across a Pass is legal but Laden)."""
     prov = lord.assets.get("prov", 0)
     loot = lord.assets.get("loot", 0)
-    return prov >= 2 or loot >= 1
+    cart = lord.assets.get("cart", 0)
+    mule = lord.assets.get("mule", 0)
+    transport = cart + mule
+    if loot >= 1:
+        return True
+    if prov > transport:           # some Transport unit carries two
+        return True
+    if way_type == "pass" and cart > 0 and prov > 2 * mule:
+        # Provender beyond Mule capacity must ride a Cart -> Laden on a Pass.
+        return True
+    return False
 
 
 def _h_cmd_march(state, action):
@@ -1351,21 +1366,17 @@ def _h_cmd_march(state, action):
              f"{target} is not reachable from {from_loc} via {way_type}",
              code="not_adjacent")
 
-    laden = _is_laden(lord)
+    laden = _is_laden(lord, way_type=way_type)
     cost = 2 if laden else 1
     _require(state.meta.actions_remaining >= cost,
              f"March costs {cost} actions ({'Laden' if laden else 'Unladen'}), "
              f"only {state.meta.actions_remaining} remaining",
              code="not_enough_actions")
 
-    # Cart cannot cross a Pass with Provender (rule 4.3.2).
-    if (way_type == "pass" and lord.assets.get("cart", 0) > 0
-            and lord.assets.get("prov", 0) > 0):
-        raise IllegalAction(
-            "Cart laden with Provender cannot cross a Pass (4.3.2). "
-            "Discard Provender or use a Road.",
-            code="cart_over_pass_with_prov",
-        )
+    # C4 (4.3.2): a Cart carrying Provender over a Pass is LEGAL but
+    # Laden (already reflected in `laden`/`cost` above) — no longer
+    # rejected. (Only Carts are hindered on Passes; Mules carry
+    # Provender over a Pass freely.)
 
     # Phase 6h: enemy Hold-event auto-triggers on March.
     enemy = _other(side)

@@ -65,8 +65,10 @@ def test_march_unladen_costs_one_action() -> None:
 
 
 def test_march_laden_costs_two_actions() -> None:
-    """Alfonso has 2 Prov (Laden)."""
+    """C4 (4.3.2): Laden when Provender exceeds Transport (a unit carries
+    two). Alfonso has Transport 2; give him 3 Provender -> Laden."""
     s = _setup_alfonso_active()
+    s.lords["alfonso"].assets["prov"] = 3   # 3 > transport(2) -> Laden
     before = s.meta.actions_remaining
     r = apply_action(s, {"type": "cmd_march", "side": "christian",
                          "target_locale_id": "leon", "way_type": "road"})
@@ -97,15 +99,19 @@ def test_march_pattern_4_way_type_honored() -> None:
     assert ei.value.code == "not_adjacent"
 
 
-def test_march_cart_over_pass_with_prov_rejected() -> None:
-    """Rule 4.3.2: Cart Laden with Provender cannot cross a Pass."""
+def test_march_cart_over_pass_with_prov_is_legal_laden() -> None:
+    """C4 (4.3.2): a Cart carrying Provender over a Pass is LEGAL but
+    Laden (costs two actions) — not rejected. A single Cart with one
+    Provender (no Mule) over a Pass triggers the Laden Pass rule."""
     s = _setup_alfonso_active()
-    # Move Alfonso to Pamplona, which has Pass to Jaca.
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="pamplona")
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_march", "side": "christian",
+    s.lords["alfonso"].assets = {"cart": 1, "prov": 1}  # cart carries prov
+    before = s.meta.actions_remaining
+    r = apply_action(s, {"type": "cmd_march", "side": "christian",
                          "target_locale_id": "jaca", "way_type": "pass"})
-    assert ei.value.code == "cart_over_pass_with_prov"
+    assert r["laden"] is True
+    assert r["cost"] == 2
+    assert s.meta.actions_remaining == before - 2
 
 
 def test_besieged_lord_cannot_march() -> None:
@@ -126,6 +132,7 @@ def test_besieged_lord_cannot_march() -> None:
 def test_march_not_enough_actions() -> None:
     """Laden March needs 2 actions; if only 1 left, reject."""
     s = _setup_alfonso_active()
+    s.lords["alfonso"].assets["prov"] = 3   # 3 > transport(2) -> Laden
     # Pass three times to leave 1 action remaining (Alfonso command=4)
     apply_action(s, {"type": "cmd_pass", "side": "christian"})
     apply_action(s, {"type": "cmd_pass", "side": "christian"})
