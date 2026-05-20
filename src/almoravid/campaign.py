@@ -1906,6 +1906,7 @@ def _h_cmd_battle(state, action):
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
+    _apply_absorption_policy(state, side, action)
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
@@ -2005,6 +2006,7 @@ def _h_cmd_storm(state, action):
              message=f"{lord_id} not on {side}'s side") if False else _require(lord.side == side, f"{lord_id} not on {side}'s side", code="wrong_side")
     _require(not is_besieged(state, lord_id),
              "Besieged Lord must Sally not Storm", code="besieged")
+    _apply_absorption_policy(state, side, action)
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
     here = lord.cylinder.locale_id
@@ -2143,6 +2145,7 @@ def _h_cmd_sally(state, action):
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
+    _apply_absorption_policy(state, side, action)
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
@@ -2398,6 +2401,7 @@ def _h_respond_stand_battle(state, action):
 
     side = _require_side(action)
     pd = _require_pending(state, "march_arrival_response", side)
+    _apply_absorption_policy(state, side, action)
     payload = pd.payload
     locale_id = payload["locale_id"]
     active_side = payload["active_side"]
@@ -2996,6 +3000,44 @@ def _h_dinars_deposit(state, action):
             "taifas_box_coin": state.taifas_box_coin}
 
 
+
+# ---------------------------------------------------------------------------
+# Hit-absorption policy (4.4.2 ASSIGN HITS — per-combat owner choice).
+# ---------------------------------------------------------------------------
+
+_ABSORB_POLICIES = ("weakest_first", "armored_first")
+
+
+def _apply_absorption_policy(state, side: Side, action: dict) -> None:
+    """If a combat action carries an 'absorption_policy', set it as the
+    acting side's standing policy for this (and subsequent) combats.
+    The Storm Attacker is still rule-forced to armored_first (4.5.2)
+    inside battle resolution regardless."""
+    pol = action.get("absorption_policy")
+    if pol is None:
+        return
+    _require(pol in _ABSORB_POLICIES,
+             f"absorption_policy must be one of {_ABSORB_POLICIES}",
+             code="bad_arg")
+    state.meta.absorption_policy[side] = pol
+
+
+def _h_set_absorption_policy(state, action):
+    """Set a side's Hit-absorption policy (rule 4.4.2 ASSIGN HITS) at
+    any time — the owner's standing strategic choice for how its units
+    soak Hits: 'weakest_first' (shield strong units) or 'armored_first'
+    (armored soak to maximize cancels). Usable so a side that will be
+    a passive Defender (e.g. in an Approach Battle or a Storm) can set
+    its policy before the enemy's combat action resolves."""
+    side = _require_side(action)
+    pol = action.get("policy")
+    _require(pol in _ABSORB_POLICIES,
+             f"policy must be one of {_ABSORB_POLICIES}", code="bad_arg")
+    state.meta.absorption_policy[side] = pol
+    _record(state, action, f"{side} sets absorption policy = {pol}")
+    return {"side": side, "absorption_policy": pol}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -3024,4 +3066,5 @@ CAMPAIGN_HANDLERS = {
     "toggle_lieutenant": _h_toggle_lieutenant,
     "cmd_encamp": _h_cmd_encamp,
     "dinars_deposit": _h_dinars_deposit,
+    "set_absorption_policy": _h_set_absorption_policy,
 }

@@ -851,6 +851,19 @@
           "title": "Advanced Vassal Service",
           "type": "boolean"
         },
+        "absorption_policy": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Absorption Policy",
+          "type": "object"
+        },
         "surprise_storm_pending_locale_id": {
           "anyOf": [
             {

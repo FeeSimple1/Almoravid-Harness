@@ -395,6 +395,7 @@ def _resolve_protection_roll(
     context: Literal["battle", "storm"] = "battle",
     striker_selects: bool = False,
     striker_unit_class: UnitClass | None = None,
+    absorb_policy: str = "weakest_first",
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -441,12 +442,18 @@ def _resolve_protection_roll(
             # before Armored. Otherwise the TARGETED side picks, and
             # its optimal choice is the opposite: Armored first.
             if striker_selects:
-                # Striker picks: unarmored (auto_remove first) before armored
+                # Crossbow: the FIRING side selects the target to
+                # maximize routs — least-protected first.
                 prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
                         "none": 3}.get(ptype, 4)
-            else:
-                # Target picks: armored before unarmored (absorb safely)
+            elif absorb_policy == "armored_first":
+                # Owner policy: armored soak Hits first (maximize cancels).
                 prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                        "none": 3}.get(ptype, 4)
+            else:
+                # Owner policy weakest_first (default): sacrifice the
+                # least-protected first to shield strong units (4.4.2).
+                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
                         "none": 3}.get(ptype, 4)
             cs.append((prio, unit_type))
         cs.sort()
@@ -686,6 +693,14 @@ def _resolve_step(
 
     # Apply Hits per kind. Crossbow Hits use striker-selects
     # target selection; other Hits use target-selects.
+    # 4.4.2 ASSIGN HITS — the absorbing owner's policy (per-combat LLM
+    # choice); the Storm Attacker is rule-forced to armored_first
+    # (4.5.2 "must absorb Hits with any Armored units before others").
+    if context == "storm" and target.role == "attacker":
+        absorb_policy = "armored_first"
+    else:
+        absorb_policy = state.meta.absorption_policy.get(
+            target.side, "weakest_first")
     for kind, count in hits_to_apply_by_kind.items():
         if count <= 0:
             continue
@@ -702,6 +717,7 @@ def _resolve_step(
                 context=context,
                 striker_selects=striker_selects_target,
                 striker_unit_class=unit_class,
+                absorb_policy=absorb_policy,
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
@@ -1864,6 +1880,7 @@ def _resolve_protection_roll_for_lp(
     context: Literal["battle", "storm"] = "battle",
     striker_selects: bool = False,
     striker_unit_class: UnitClass | None = None,
+    absorb_policy: str = "weakest_first",
 ) -> tuple[bool, UnitType | None]:
     """Protection roll that drains from a single LordPosition's forces.
 
@@ -1889,8 +1906,11 @@ def _resolve_protection_roll_for_lp(
             if striker_selects:
                 prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
                         "none": 3}.get(ptype, 4)
-            else:
+            elif absorb_policy == "armored_first":
                 prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                        "none": 3}.get(ptype, 4)
+            else:
+                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
                         "none": 3}.get(ptype, 4)
             cs.append((prio, unit_type))
         cs.sort()
@@ -2097,6 +2117,9 @@ def _resolve_step_per_pair(
         else:
             per_kind_hits = {"melee": rounded}
 
+        # 4.4.2 ASSIGN HITS — absorbing owner's per-combat policy.
+        absorb_policy = state.meta.absorption_policy.get(
+            target.side, "weakest_first")
         for kind, count in per_kind_hits.items():
             if count <= 0:
                 continue
@@ -2110,6 +2133,7 @@ def _resolve_step_per_pair(
                     context="battle",
                     striker_selects=striker_selects_target,
                     striker_unit_class=unit_class,
+                    absorb_policy=absorb_policy,
                 )
                 if routed is not None:
                     step_res.losses[routed] = step_res.losses.get(routed, 0) + 1

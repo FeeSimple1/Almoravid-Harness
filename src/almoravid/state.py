@@ -125,6 +125,16 @@ class Meta(StrictModel):
     # Mustered Vassals get their own Calendar Service markers and Lord
     # Service shifts cascade to them.
     advanced_vassal_service: bool = False
+    # Hit-absorption policy per side (rule 4.4.2 ASSIGN HITS — the
+    # owner chooses which unit absorbs each Hit). Per-combat strategic
+    # choice supplied by the controlling LLM: "weakest_first" (sacrifice
+    # least-protected to shield strong units) or "armored_first"
+    # (armored units soak Hits to maximize cancels / minimize losses).
+    # Default weakest_first (matches Nevsky). NOTE: the Storm Attacker
+    # is RULE-FORCED to armored_first (4.5.2) regardless of this value.
+    absorption_policy: dict[Side, str] = Field(
+        default_factory=lambda: {"christian": "weakest_first",
+                                 "muslim": "weakest_first"})
     # Phase 6i: Surprise (C6) consumed on March into empty Enemy
     # Stronghold — payload tells the next cmd_storm to use Walls-1
     # and applies +2 Siege markers (already placed by the cmd_march
