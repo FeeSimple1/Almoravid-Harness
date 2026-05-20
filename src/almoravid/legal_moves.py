@@ -203,16 +203,30 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for seat in free:
                 out.append({"type": "muster_lord", "side": side,
                             "lord_id": lid, "seat": seat})
-        # Path 2: Spend Lordship on a Mustered Lord
+        # Path 2: Spend Lordship on a Mustered Lord. 3.4 intro gate:
+        # the Lord must be on the map at a Friendly Locale and Unbesieged
+        # (Bypassed is OK) to take any Levy action.
         if (lord.cylinder.kind == "locale"
                 and lord.lordship_used < lord.lordship_rating):
-            for i, v in enumerate(lord.vassals):
-                if v.ready:
-                    out.append({"type": "levy_take_vassal", "side": side,
-                                "lord_id": lid, "vassal_index": i})
-            for card_id in state.decks.board_edge.get(side, []):
-                out.append({"type": "levy_take_capability", "side": side,
-                            "lord_id": lid, "card_id": card_id})
+            from almoravid.effective import is_friendly_locale, is_besieged
+            here = lord.cylinder.locale_id
+            try:
+                eligible = (is_friendly_locale(state, here, side)
+                            and not is_besieged(state, lid))
+            except Exception:
+                eligible = False
+            if eligible:
+                for i, v in enumerate(lord.vassals):
+                    if v.ready:
+                        out.append({"type": "levy_take_vassal", "side": side,
+                                    "lord_id": lid, "vassal_index": i})
+                for card_id in state.decks.board_edge.get(side, []):
+                    out.append({"type": "levy_take_capability", "side": side,
+                                "lord_id": lid, "card_id": card_id})
+                # 3.4.3 Levy Transport: add a Cart or a Mule.
+                for tr in ("cart", "mule"):
+                    out.append({"type": "levy_transport", "side": side,
+                                "lord_id": lid, "transport": tr})
     return out
 
 

@@ -1271,6 +1271,67 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _require_levy_actor_eligible(state: GameState, lord, lord_id: str) -> None:
+    """3.4 Muster intro: a Lord taking Levy actions must be on the map
+    at a Friendly Locale with no Siege there (he may be Bypassed,
+    4.3.5). Applies to all Lordship-spending Levy actions (Levy Lord
+    to Muster, Levy Vassal, Levy Transport, Levy Capability)."""
+    from almoravid.effective import is_friendly_locale, is_besieged
+    _require(lord.cylinder.kind == "locale",
+             f"{lord_id} not on the map (3.4)", code="not_on_map")
+    here = lord.cylinder.locale_id
+    _require(is_friendly_locale(state, here, lord.side),
+             f"{lord_id} is not at a Friendly Locale ({here}); cannot take "
+             f"Levy actions (3.4)", code="not_friendly_locale")
+    _require(not is_besieged(state, lord_id),
+             f"{lord_id} is Besieged; cannot take Levy actions (3.4, "
+             f"Bypassed is OK)", code="besieged")
+
+
+def _h_levy_transport(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.4.3 Levy Transport. Spend one Lordship action to add one
+    Transport (Cart or Mule) to the Lord's mat. If the Lord has lost a
+    Serf unit, return one Serf to his mat (required).
+
+    Args:
+      side, lord_id, transport ("cart" | "mule").
+    """
+    side = _require_side(action)
+    _require_levy_step(state, "muster")
+    _require_active(state, side)
+    lord_id = action.get("lord_id")
+    _require(isinstance(lord_id, str), "lord_id required", code="bad_arg")
+    lord_id = cast(str, lord_id)
+    _require(lord_id in state.lords, f"unknown lord {lord_id}",
+             code="unknown_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require_levy_actor_eligible(state, lord, lord_id)
+    _require(lord.lordship_used < lord.lordship_rating,
+             f"{lord_id} has already spent {lord.lordship_used}/"
+             f"{lord.lordship_rating} Lordship", code="lordship_exhausted")
+    transport = action.get("transport")
+    _require(transport in ("cart", "mule"),
+             "transport must be 'cart' or 'mule' (3.4.3)", code="bad_arg")
+    lord.assets[transport] = lord.assets.get(transport, 0) + 1
+    lord.lordship_used += 1
+    # Return one lost Serf (required) — compare to the Lord's starting
+    # Serf count from static data.
+    start_serfs = load_lords()["lords"][lord_id]["forces"].get("serfs", 0)
+    cur_serfs = lord.forces.get("serfs", 0)
+    returned_serf = False
+    if start_serfs > 0 and cur_serfs < start_serfs:
+        lord.forces["serfs"] = cur_serfs + 1
+        returned_serf = True
+    _record(state, action,
+            f"{side} {lord_id} Levies Transport (+1 {transport})"
+            + ("; returned 1 lost Serf" if returned_serf else ""))
+    return {"lord_id": lord_id, "transport": transport,
+            "returned_serf": returned_serf,
+            "lordship_used": lord.lordship_used}
+
+
 def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """3.4 Muster Levy action: spend 1 Lordship to add a Vassal's Forces
     to the Lord's mat. The Vassal must be Ready.
@@ -1297,6 +1358,7 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
              code="wrong_side")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not mustered", code="not_on_map")
+    _require_levy_actor_eligible(state, lord, lord_id)
     _require(lord.lordship_used < lord.lordship_rating,
              f"{lord_id} has already spent {lord.lordship_used}/"
              f"{lord.lordship_rating} Lordship",
@@ -1357,6 +1419,7 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
              code="wrong_side")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not mustered", code="not_on_map")
+    _require_levy_actor_eligible(state, lord, lord_id)
     _require(lord.lordship_used < lord.lordship_rating,
              "lordship exhausted", code="lordship_exhausted")
     # Card must be in the side's board_edge stock
@@ -1393,6 +1456,7 @@ _HANDLERS = {
     "disband_lord": _h_disband_lord,
     "levy_take_vassal": _h_levy_take_vassal,
     "levy_take_capability": _h_levy_take_capability,
+    "levy_transport": _h_levy_transport,
     # 3.5 Call to Arms (FIX-A / L2)
     "cta_reconcile_rodrigo": _h_cta_reconcile_rodrigo,
     "cta_employ_rodrigo": _h_cta_employ_rodrigo,
