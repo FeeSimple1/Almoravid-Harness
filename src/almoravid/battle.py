@@ -1411,21 +1411,33 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
     If the Sallying side lost: their Lords Withdraw back into the
     Stronghold (in_stronghold=True) and Siege markers there reduce to 1.
     """
-    apply_aftermath(state, result)
     sallying_side = result.attacker.side
-    if result.winner == sallying_side:
-        return  # Sally succeeded; no Siege-reduction trigger.
-    # Sallying side lost: Withdraw back inside, reduce Siege to 1.
-    for lid in result.attacker.lord_ids:
-        if lid in state.lords:
-            state.lords[lid].in_stronghold = True
     loc = state.locales[locale_id]
-    if sallying_side == "muslim":
-        if loc.siege_yellow > 1:
-            loc.siege_yellow = 1
-    else:
-        if loc.siege_green > 1:
-            loc.siege_green = 1
+    # Build the loser-fate summary (4.5.3): a losing Sallying side
+    # Withdraws back into the Stronghold; losing Defenders (besiegers)
+    # Retreat normally.
+    losers: list[dict] = []
+    if result.winner is not None and result.winner != sallying_side:
+        # Sallying side lost -> Withdraw back inside; reduce Siege to 1.
+        for lid in result.attacker.lord_ids:
+            if lid in state.lords:
+                state.lords[lid].in_stronghold = True
+            losers.append({"lord_id": lid, "fate": "withdraw"})
+        if sallying_side == "muslim":
+            if loc.siege_yellow > 1:
+                loc.siege_yellow = 1
+        else:
+            if loc.siege_green > 1:
+                loc.siege_green = 1
+    elif result.winner is not None and result.winner == sallying_side:
+        # Besiegers lost -> they Retreat normally (4.5.3).
+        for lid in result.defender.lord_ids:
+            losers.append({"lord_id": lid, "fate": "retreat"})
+    # 4.4.4 Losses for both sides, then 4.4.5 Aftermath.
+    apply_battle_losses(state, result, {"losers": losers}, storm=False)
+    apply_aftermath(state, result)
+    if result.winner == sallying_side:
+        return  # Sally succeeded; no further Siege-reduction note.
     result.notes.append(
         f"Sally raid: {sallying_side} withdrew, siege at {locale_id} "
         f"reduced to 1"

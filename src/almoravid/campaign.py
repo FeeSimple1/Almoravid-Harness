@@ -2072,7 +2072,6 @@ def _h_cmd_storm(state, action):
     # Defender: only commit back if single-Lord (Phase 5f limit)
     if len(dfd.lord_ids) == 1:
         commit_forces_after_battle(state, dfd)
-    apply_aftermath(state, result)
 
     # 4.5.2 SACK: if the Besieged Defenders lose the Storm, the
     # Stronghold is Sacked.
@@ -2117,6 +2116,14 @@ def _h_cmd_storm(state, action):
             distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
         sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
                 "recipients": besiegers_here}
+
+    # 4.5.2 -> 4.4.4 Losses: both sides roll for Routed units. The
+    # Storm Attacker's Routed units always need a 1; the Defender
+    # always rolls Protection (handled by apply_battle_losses storm
+    # flag + winner path). Then 4.4.5 Aftermath.
+    from almoravid.battle import apply_battle_losses
+    apply_battle_losses(state, result, {"losers": []}, storm=True)
+    apply_aftermath(state, result)
 
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
