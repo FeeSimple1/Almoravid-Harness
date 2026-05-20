@@ -492,6 +492,13 @@ def _resolve_protection_roll(
             elo, ehi = unit["protection"]["evade"]["range"]
             if elo <= rng <= ehi:
                 canceled = True
+        # M10 Andalusians (Phase 7a): Muslim Light Horse gain Evade 1-3
+        # vs Battle Melee while the side-wide capability is in play.
+        if (not canceled and context == "battle" and striker_kind == "melee"
+                and chosen == "light_horse" and target_side.side == "muslim"):
+            from almoravid.capabilities import side_has_capability
+            if side_has_capability(state, "muslim", "M10") and 1 <= rng <= 3:
+                canceled = True
     if canceled:
         return (True, None)
     # Failed Protection -> Rout
@@ -1150,13 +1157,25 @@ def resolve_storm(
         loc = state.locales[locale_id]
         siegeworks_count = (loc.siege_yellow if attacker.side == "christian"
                             else loc.siege_green)
+    # Siege Towers (C6 Christian / M13 Muslim, this_lord, Phase 7a):
+    # an Attacking Lord with the capability weakens the Stronghold to
+    # Walls -1 from Round 2 onward (no effect Round 1).
+    from almoravid.capabilities import any_lord_with_capability
+    st_card = "C6" if attacker.side == "christian" else "M13"
+    siege_towers = bool(
+        set(any_lord_with_capability(state, attacker.side, st_card))
+        & set(attacker.lord_ids)
+    )
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
+        round_walls = walls_range
+        if siege_towers and round_idx >= 2 and walls_range is not None:
+            round_walls = (walls_range[0], max(0, walls_range[1] - 1))
         for step_id, actor_role, step_type, unit_class in storm_steps:
             step_res = _resolve_step(
                 state, step_id, actor_role, step_type, unit_class,
                 attacker, defender, context="storm",
-                walls_range=walls_range,
+                walls_range=round_walls,
                 siege_markers=siegeworks_count,
                 round_index=round_idx,
             )
@@ -1824,6 +1843,12 @@ def _resolve_protection_roll_for_lp(
                 and "evade" in unit["protection"]):
             elo, ehi = unit["protection"]["evade"]["range"]
             if elo <= rng <= ehi:
+                canceled = True
+        # M10 Andalusians (Phase 7a): Muslim Light Horse Evade 1-3.
+        if (not canceled and context == "battle" and striker_kind == "melee"
+                and chosen == "light_horse" and side.side == "muslim"):
+            from almoravid.capabilities import side_has_capability
+            if side_has_capability(state, "muslim", "M10") and 1 <= rng <= 3:
                 canceled = True
     if canceled:
         return (True, None)

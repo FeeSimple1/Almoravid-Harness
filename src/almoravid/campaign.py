@@ -232,17 +232,20 @@ def _h_command_reveal(state: GameState, action: dict[str, Any]) -> dict[str, Any
                 "active_lord_id": state.meta.active_lord_id,
                 "campaign_step": state.meta.campaign_step}
 
-    # A Lord is now active for command_rating actions.
+    # A Lord is now active for effective-Command actions (rule 1.5.3:
+    # base Command rating + Mesnada/Hasham +1 capability bonuses).
     assert entry.lord_id is not None
     lord = state.lords[entry.lord_id]
+    from almoravid.capabilities import effective_command
+    cmd = effective_command(state, entry.lord_id)
     state.meta.active_lord_id = entry.lord_id
-    state.meta.actions_remaining = lord.command_rating
+    state.meta.actions_remaining = cmd
     _record(state, action,
             f"{side} reveals command card for {entry.lord_id} "
-            f"({lord.command_rating} actions)")
+            f"({cmd} actions)")
     return {"revealed": entry.model_dump(), "auto_pass": False,
             "active_lord_id": entry.lord_id,
-            "actions_remaining": lord.command_rating}
+            "actions_remaining": cmd}
 
 
 def _advance_or_end_campaign(state: GameState) -> None:
@@ -1037,24 +1040,56 @@ def _h_cmd_march(state, action):
         )
     swollen_id = "C3" if enemy == "christian" else "M3"
     if swollen_id in enemy_hold:
+        # Adalides (C3/C10, Christian this_lord, Phase 7a): if the
+        # Marching Christian Lord has Adalides, Muslim Swollen River
+        # (M3) is discarded without effect (M3 Tips / rule 1.9.1).
+        from almoravid.capabilities import capabilities_for_lord
+        adalides = (side == "christian" and swollen_id == "M3"
+                    and bool(set(capabilities_for_lord(state, lord_id))
+                             & {"C3", "C10"}))
         enemy_hold.remove(swollen_id)
         state.decks.discard.append(swollen_id)
-        state.meta.swollen_river_blocked_card_lord_id = lord_id
-        raise IllegalAction(
-            f"Swollen River ({swollen_id}) played by {enemy} blocks "
-            f"{lord_id}'s March on this card (4.3.4)",
-            code="swollen_river_blocked",
-        )
+        if adalides:
+            _record(state, action,
+                    f"Adalides cancels {enemy} Swollen River ({swollen_id}) "
+                    f"at {lord_id}'s Locale — no effect")
+        else:
+            state.meta.swollen_river_blocked_card_lord_id = lord_id
+            raise IllegalAction(
+                f"Swollen River ({swollen_id}) played by {enemy} blocks "
+                f"{lord_id}'s March on this card (4.3.4)",
+                code="swollen_river_blocked",
+            )
     # C4/M4 Arid Terrain: forces an immediate Feed on the Marching Lord
     # BEFORE the March (per Tips). Discards regardless of Feed outcome.
     arid_id = "C4" if enemy == "christian" else "M4"
     if arid_id in enemy_hold:
         enemy_hold.remove(arid_id)
         state.decks.discard.append(arid_id)
-        _feed_lord(state, lord_id, force=True)
-        _record(state, action,
-                f"{enemy} Arid Terrain ({arid_id}) forces "
-                f"{lord_id} to Feed before March")
+        # Camels (M16, Muslim side_wide, Phase 7a): the Muslim player
+        # may discard Camels to ignore Arid Terrain. Greedy: auto-
+        # discard when the marching side is Muslim and holds Camels.
+        from almoravid.capabilities import side_has_capability
+        camels_negate = (side == "muslim"
+                         and side_has_capability(state, "muslim", "M16"))
+        if camels_negate:
+            # Remove Camels from play (board-edge + capabilities_in_play).
+            state.decks.capabilities_in_play = [
+                c for c in state.decks.capabilities_in_play
+                if c.card_id != "M16"
+            ]
+            for edge in state.decks.board_edge.values():
+                if "M16" in edge:
+                    edge.remove("M16")
+            state.decks.discard.append("M16")
+            _record(state, action,
+                    f"Muslim discards Camels (M16) to ignore Arid "
+                    f"Terrain ({arid_id})")
+        else:
+            _feed_lord(state, lord_id, force=True)
+            _record(state, action,
+                    f"{enemy} Arid Terrain ({arid_id}) forces "
+                    f"{lord_id} to Feed before March")
 
     # Phase 6i: C6 Surprise auto-trigger for Christian attacker.
     # When Christian holds C6 AND Marches to an Enemy Stronghold
@@ -1303,7 +1338,13 @@ def _h_cmd_supply(state, action):
             transport_consumed = f"{has_mule} mule + {hops - has_mule} cart"
 
     # Apply: +1 Provender (cap at 8 per Pattern 12 / rule 1.7.3).
-    new_prov = min(8, lord.assets.get("prov", 0) + 1)
+    # Dawud ibn Aisha (M8, this_lord, Phase 7a): this Lord's Supply
+    # adds 1 extra Prov.
+    from almoravid.capabilities import lord_has_capability
+    supply_amount = 1
+    if lord_has_capability(state, lord_id, "M8"):
+        supply_amount = 2
+    new_prov = min(8, lord.assets.get("prov", 0) + supply_amount)
     lord.assets["prov"] = new_prov
     state.meta.actions_remaining -= 1
     _record(state, action,
@@ -1495,17 +1536,32 @@ def _h_cmd_ravage(state, action):
     # with our color since the model only stores one). Q-001 candidate.
     loc.ravaged = color  # type: ignore[assignment]
 
+    # War Drums (M22, Muslim side_wide, Phase 7a): Yusuf, Sir, and
+    # Muslim Lieutenants Ravage for 1 extra Prov.
+    from almoravid.capabilities import side_has_capability
+    war_drums_bonus = 0
+    if (side == "muslim"
+            and side_has_capability(state, "muslim", "M22")
+            and (lord_id in ("yusuf", "sir") or lord.is_lieutenant)):
+        war_drums_bonus = 1
+
     # Rustling: assets to the Ravaging Lord.
     if loc.base_type == "region":
         new_loot = min(8, lord.assets.get("loot", 0) + 1)
         lord.assets["loot"] = new_loot
         rustling_note = f"+1 Loot -> {new_loot} (Region)"
+        if war_drums_bonus:
+            new_prov = min(8, lord.assets.get("prov", 0) + war_drums_bonus)
+            lord.assets["prov"] = new_prov
+            rustling_note += f", +{war_drums_bonus} Prov (War Drums) -> {new_prov}"
     else:
         new_loot = min(8, lord.assets.get("loot", 0) + 1)
-        new_prov = min(8, lord.assets.get("prov", 0) + 1)
+        new_prov = min(8, lord.assets.get("prov", 0) + 1 + war_drums_bonus)
         lord.assets["loot"] = new_loot
         lord.assets["prov"] = new_prov
-        rustling_note = f"+1 Loot -> {new_loot}, +1 Prov -> {new_prov} (Stronghold)"
+        rustling_note = (f"+1 Loot -> {new_loot}, "
+                         f"+{1 + war_drums_bonus} Prov -> {new_prov} "
+                         f"(Stronghold{'/War Drums' if war_drums_bonus else ''})")
 
     # VP: 1/2 per Ravaged marker (5.1)
     if side == "christian":

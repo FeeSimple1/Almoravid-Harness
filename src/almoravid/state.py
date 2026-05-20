@@ -281,6 +281,11 @@ class Lord(StrictModel):
     # 2 Knights "attached" (modeled by adding 2 Knights to forces
     # on placement). Removed when the marker is consumed.
     crusader_markers: int = 0
+    # Phase 7c: Lieutenant stacking (rule 4.1.3). When True this Lord
+    # is a Lower Lord stacked on `lieutenant_of` (an Upper Lord at the
+    # same Locale). Set/cleared by the Lieutenant designation action.
+    is_lieutenant: bool = False
+    lieutenant_of: str | None = None
 
     # Lifecycle cleanup contract (Pattern 8). Class-level, not a field.
     cleanup_on_removal_fields: ClassVar[tuple[str, ...]] = (
@@ -296,6 +301,8 @@ class Lord(StrictModel):
         "raiders_used_this_card",
         "routed_units",
         "crusader_markers",
+        "is_lieutenant",
+        "lieutenant_of",
     )
 
 

@@ -88,8 +88,12 @@ def is_friendly_locale(state: GameState, locale_id: str, side: Side) -> bool:
         # encoded contextually (Christian places on Muslim territory by
         # default; Muslim Conquered = Kingdoms-territory Muslim conquest).
         # Phase 4 will split if the rules require — Q-NNN candidate.
+        # Bug U fix: Taifa has no `.side` attribute — every Taifa is
+        # Muslim territory, so Conquered markers there were placed by
+        # Christians (Friendly to Christian). Conquered on a Christian
+        # Kingdom (leon/aragon) is Muslim-placed (Friendly to Muslim).
         territory_taifa = state.taifas.get(loc.territory)
-        if territory_taifa is not None and territory_taifa.side == "muslim":
+        if territory_taifa is not None:
             return side == "christian"
         return side == "muslim"  # Conquered on Christian Kingdom
     if loc.jihad_markers:

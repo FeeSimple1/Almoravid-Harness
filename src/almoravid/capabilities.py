@@ -107,3 +107,40 @@ def any_capability(
             return lord_has_capability(state, lord_id, card_id)
         return bool(any_lord_with_capability(state, side, card_id))
     return False
+
+
+# ---------------------------------------------------------------------------
+# Phase 7a: Capability-derived stat helpers.
+# ---------------------------------------------------------------------------
+
+
+def _lord_has_horse(state: GameState, lord_id: str) -> bool:
+    """Does the Lord have at least one Horse unit on his mat?"""
+    from almoravid.static_data import load_forces
+    horse = set(load_forces()["horse"].keys())
+    lord = state.lords.get(lord_id)
+    if lord is None:
+        return False
+    return any(lord.forces.get(ut, 0) > 0 for ut in horse)
+
+
+def effective_command(state: GameState, lord_id: str) -> int:
+    """Lord's Command rating including capability bonuses (rule 1.5.3).
+
+    Mesnada (C11/C12, this_lord): +1 Command if the Lord has any
+    Knights unit. Hasham (M11/M21, this_lord): +1 Command if the Lord
+    has any Horse unit. A Lord may hold only one Mesnada and one
+    Hasham (3.4.4), so each contributes at most +1.
+    """
+    lord = state.lords.get(lord_id)
+    if lord is None:
+        return 0
+    cmd = lord.command_rating
+    caps = set(capabilities_for_lord(state, lord_id))
+    # Mesnada: +1 with Knights.
+    if (caps & {"C11", "C12"}) and lord.forces.get("knights", 0) > 0:
+        cmd += 1
+    # Hasham: +1 with any Horse.
+    if (caps & {"M11", "M21"}) and _lord_has_horse(state, lord_id):
+        cmd += 1
+    return cmd
