@@ -950,7 +950,8 @@ def spring_muster(state) -> dict:
 
 
 def adjust_taifa_status(state, taifa_id: str, new_status: str,
-                        *, award_parias_coin: bool = True) -> dict:
+                        *, award_parias_coin: bool = True,
+                        neutrality_choices: dict | None = None) -> dict:
     """Apply a Taifa status transition and its cascades per 1.4.3.
 
     Returns dict with the cascade effects: ravaged flips, forced Conquests,
@@ -1099,17 +1100,44 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
         # Siege/Bypass rather than place Christian Conquered markers.
         if (old_status == "reconquista" and new_status == "parias"):
             if present_muslim and (loc.siege_green > 0 or loc.bypass_green):
-                loc.siege_green = 0
-                loc.bypass_green = False
-                results["siege_removed"].append((lid, "muslim_or_clause"))
+                # T4 (1.4.3 RECOGNITION OF NEUTRALITY): the besieging
+                # side CHOOSES either to remove its Siege/Bypass OR to
+                # add Enemy victory markers (= Stronghold Value): a
+                # Muslim besieger adds Christian Conquered. The choice is
+                # surfaced via neutrality_choices[locale]="remove"|"add"
+                # (no greedy default beyond the conservative "remove"
+                # when the caller does not specify).
+                choice = (neutrality_choices or {}).get(lid, "remove")
+                if choice == "add":
+                    from almoravid.static_data import load_strongholds
+                    v = load_strongholds()["strongholds"][loc.base_type]["value"]
+                    loc.conquered_markers += v
+                    state.score.christian += v
+                    results["auto_conquered"].append(
+                        (lid, "christian_recognition", v))
+                else:
+                    loc.siege_green = 0
+                    loc.bypass_green = False
+                    results["siege_removed"].append((lid, "muslim_or_clause"))
         # Bug C (mirror gap audit): INDEPENDENT -> PARIAS —
         # Christian Lord at Muslim Stronghold that would go Neutral:
         # OR clause (1.4.3). Conservative: remove Siege/Bypass.
         if (old_status == "independent" and new_status == "parias"):
             if present_christian and (loc.siege_yellow > 0 or loc.bypass_yellow):
-                loc.siege_yellow = 0
-                loc.bypass_yellow = False
-                results["siege_removed"].append((lid, "christian_or_clause"))
+                # T4 (1.4.3 RECOGNITION OF NEUTRALITY): a Christian
+                # besieger CHOOSES to remove its Siege/Bypass OR add
+                # Jihad markers (= Stronghold Value).
+                choice = (neutrality_choices or {}).get(lid, "remove")
+                if choice == "add":
+                    from almoravid.static_data import load_strongholds
+                    v = load_strongholds()["strongholds"][loc.base_type]["value"]
+                    loc.jihad_markers += v
+                    state.score.muslim += 0.5 * v
+                    results["jihad_added"].append((lid, v))
+                else:
+                    loc.siege_yellow = 0
+                    loc.bypass_yellow = False
+                    results["siege_removed"].append((lid, "christian_or_clause"))
         # Christian Lord at Neutral Stronghold "would go Muslim": Conquer
         if going_neutral or (new_status == "independent"
                               and old_status != "independent"):
