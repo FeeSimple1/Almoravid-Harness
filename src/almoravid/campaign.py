@@ -1922,6 +1922,7 @@ def _h_cmd_battle(state, action):
     from almoravid.battle import (
         apply_aftermath,
         battleside_for_lord,
+        _front_lord_count,
         battleside_for_lords,
         commit_forces_after_battle,
         resolve_battle,
@@ -1970,8 +1971,13 @@ def _h_cmd_battle(state, action):
         and not l.in_stronghold
     ]
     other = "muslim" if side == "christian" else "christian"
-    atk = battleside_for_lords(state, our_at_here, side, "attacker")
-    dfd = battleside_for_lords(state, enemy_lord_ids, other, "defender")
+    atk = battleside_for_lords(state, our_at_here, side, "attacker",
+                               active_lord_id=state.meta.active_lord_id)
+    # B4 (4.4.1): the Defender places one Lord opposite each Attacking
+    # Front Lord; extras go to Reserve. Cap the Defender's Front count
+    # at the Attacker's populated Front-Lord count.
+    dfd = battleside_for_lords(state, enemy_lord_ids, other, "defender",
+                               front_limit=_front_lord_count(atk))
     result = resolve_battle(state, atk, dfd)
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
@@ -2441,6 +2447,7 @@ def _h_respond_stand_battle(state, action):
     card (rule 4.4.5)."""
     from almoravid.battle import (
         apply_aftermath,
+        _front_lord_count,
         battleside_for_lords,
         commit_forces_after_battle,
         resolve_battle,
@@ -2483,8 +2490,11 @@ def _h_respond_stand_battle(state, action):
              code="no_defender")
 
     atk = battleside_for_lords(state, attacker_lord_ids, active_side,
-                               "attacker")
-    dfd = battleside_for_lords(state, defender_lord_ids, other, "defender")
+                               "attacker",
+                               active_lord_id=state.meta.active_lord_id)
+    # B4 (4.4.1): Defender Front count capped at the Attacker's.
+    dfd = battleside_for_lords(state, defender_lord_ids, other, "defender",
+                               front_limit=_front_lord_count(atk))
     result = resolve_battle(state, atk, dfd)
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)

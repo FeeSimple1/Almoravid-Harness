@@ -759,11 +759,28 @@ def _apply_step_cancellation_and_hits(
 # ---------------------------------------------------------------------------
 
 
+def _side_all_lords_routed(side: BattleSide) -> bool:
+    """B4 (rule 4.4.2): a side is defeated when ALL its Lords have
+    Routed -- i.e. no Lord in ANY Array position (Front or Reserve)
+    still has unrouted units. For a multi-Lord array we check every
+    LordPosition; for a pooled (single-Lord / legacy) side we fall back
+    to the unit-level view (a pooled side's units belong to one Lord,
+    so 'no unrouted units' == 'that Lord Routed'). Garrison units (Storm
+    Defender) also keep the side alive."""
+    if side.array is not None:
+        any_lord_alive = any(lp.has_unrouted() for lp in side.array)
+        any_garrison = any(v > 0 for v in side.garrison_forces.values())
+        return not (any_lord_alive or any_garrison)
+    return not side.has_unrouted()
+
+
 def _battle_over(attacker: BattleSide, defender: BattleSide) -> bool:
-    """Per rule 4.4.2 new_round_check: end when either side has all
-    Lords (here: units) Routed. Multi-Lord arrays will refine to
-    'all Lords Routed' once Reserves/Front are modeled."""
-    return not attacker.has_unrouted() or not defender.has_unrouted()
+    """Per rule 4.4.2 new_round_check: the Battle ends when either side
+    has all its Lords Routed (not merely all *Front* Lords -- Reserve
+    Lords keep the side in the Battle and Advance to Front at the next
+    Reposition)."""
+    return (_side_all_lords_routed(attacker)
+            or _side_all_lords_routed(defender))
 
 
 def resolve_battle(
@@ -852,9 +869,11 @@ def resolve_battle(
         result.winner = defender.side
     elif defender.conceded and not attacker.conceded:
         result.winner = attacker.side
-    elif attacker.has_unrouted() and not defender.has_unrouted():
+    elif (not _side_all_lords_routed(attacker)
+          and _side_all_lords_routed(defender)):
         result.winner = attacker.side
-    elif defender.has_unrouted() and not attacker.has_unrouted():
+    elif (not _side_all_lords_routed(defender)
+          and _side_all_lords_routed(attacker)):
         result.winner = defender.side
     else:
         result.winner = None
@@ -1061,10 +1080,24 @@ def battleside_for_lord(
     )
 
 
+def _front_lord_count(side: BattleSide) -> int:
+    """Number of Front Lords (with unrouted units) currently arrayed on
+    `side`. Used to cap the Defender's Front count to the Attacker's
+    (rule 4.4.1). A single-Lord (pooled) side has exactly one Front
+    Lord."""
+    if side.array is None:
+        return 1
+    n = sum(1 for lp in side.array
+            if lp.position in ("front_center", "front_left", "front_right")
+            and lp.has_unrouted())
+    return max(1, n)
+
+
 def battleside_for_lords(
     state: GameState, lord_ids: list[str], side: Side, role: Role,
     *,
     active_lord_id: str | None = None,
+    front_limit: int = 3,
 ) -> BattleSide:
     """Aggregate multiple Lords into one BattleSide and (Phase 6e)
     populate the per-Lord `array` when multi-Lord.
@@ -1077,6 +1110,15 @@ def battleside_for_lords(
     positions: one Defending Lord directly opposite each Attacking
     Front Lord, beginning center, then left and/or right, as able.
     Remainder to Reserve.
+
+    B4 (rule 4.4.1): `front_limit` caps how many Front positions this
+    side may fill (1..3). The Attacker uses the default 3 (Active Lord
+    at center, up to two others at left/right, rest Reserve). For the
+    Defender the caller passes the Attacker's actual Front-Lord count
+    so the Defender places exactly one Lord opposite each Attacking
+    Front Lord and sends all extras to Reserve -- preventing a
+    permanently-unopposed Front Defender that never takes Hits and
+    spins the Battle to its round cap.
 
     For single-Lord BattleSides the pooled `forces` dict remains the
     sole source of truth and `array` stays None — preserving Phase
@@ -1099,12 +1141,18 @@ def battleside_for_lords(
     if len(lord_ids) > 1:
         array: list[LordPosition] = []
         positions_order = ["front_center", "front_left", "front_right"]
+        # Number of Front positions this side may fill (1..3). B4: the
+        # Defender is capped at the Attacker's Front-Lord count so each
+        # extra Lord goes to Reserve.
+        front_n = max(1, min(int(front_limit), 3))
         # Active Lord (or the first lord_id) occupies Front center.
         center_lid = active_lord_id if (active_lord_id in lord_ids)             else lord_ids[0]
         others = [lid for lid in lord_ids if lid != center_lid]
         slots = [(center_lid, "front_center")]
         for i, lid in enumerate(others):
-            if i < 2:
+            # center already filled position 0; remaining Front slots
+            # are positions_order[1 .. front_n-1].
+            if i + 1 < front_n:
                 slots.append((lid, positions_order[i + 1]))
             else:
                 slots.append((lid, "reserve"))
