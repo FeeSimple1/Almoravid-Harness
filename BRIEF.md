@@ -61,6 +61,16 @@ You don't. If a rule is ambiguous, the resolution path is the consultation chain
 
 You may and should use proper names from the game (Lords, Vassals, Locales, Capabilities, Strongholds, Taifas) for state tracking, code identifiers, file names, comments, and user-facing displays. Use them exactly as the rules use them. Do not annotate them with historical context, do not gloss them, do not transliterate alternates. The rules' spelling and form are canonical even where the historical record uses different conventions.
 
+## Rules Faithfulness Is Non-Optional — ABSOLUTE CONSTRAINT (2026-05-20)
+
+NO simplifications, approximations, greedy defaults standing in for rules-defined player choice, "minimal/structural" partial implementations, or convenience shortcuts of ANY kind are permitted. The harness MUST reflect the published Rules of Play exactly. There is no acceptable amount of "extra time or effort" that justifies a shortcut — faithfulness wins regardless of cost.
+
+If information needed to implement a rule accurately is missing (a source not in the repo, an OCR gap, an unreadable chart), STOP and ask the user for it. Do NOT fill the gap with a guess, a "reasonable default", or an interpolation from a secondary/summary source.
+
+Every rules-bearing line of code must trace to a clause in the official **Rules of Play** (`source/Almoravid+Rules+of+Play+-+LIVING+RULES+(1).pdf`, extracted to `reference/Almoravid_Rules_of_Play.txt`), the official Errata, or printed card/component text. Secondary/curated docs (Sequence of Play summary, Battle & Storm Reference, Quick Reference, Background Book, Strategy Notes) may aid navigation but are NOT authoritative where they conflict with or are vaguer than the rulebook.
+
+This supersedes any earlier "Phase N stub / Phase N+1 will fix it" allowance. A stub is a divergence; a divergence is a defect.
+
 ## Rules Accuracy Trumps Simplification — HARD CONSTRAINT
 
 Where the rules are clear, the harness MUST implement them faithfully. Simplifications, approximations, "Phase N+ deferrals", and convenience shortcuts are NOT acceptable when the rules are explicit about a behavior.
