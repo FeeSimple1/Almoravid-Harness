@@ -86,15 +86,46 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.2 Pay: spend 1 Coin to shift Service marker 1 box left."""
+    """3.2 Pay: spend Coin (3.2.1) / Loot (3.2.2) / Taifa-box Coin to
+    shift a Service marker rightward. Surfaces the simplest faithful
+    options (pay 1 to a payer's own marker, and Taifa-box Coin to any
+    Unbesieged Muslim Lord); richer same-Locale / multi-amount targets
+    are reachable by supplying explicit parameters."""
+    from almoravid.effective import is_friendly_locale, is_besieged
     out: list[dict[str, Any]] = []
+    has_marker = {sm.lord_id for sm in state.calendar.service_markers
+                  if sm.vassal_id is None}
     for lid, lord in state.lords.items():
-        if (lord.side == side
-                and lord.cylinder.kind == "locale"
-                and lord.assets.get("coin", 0) >= 1):
-            # Must have a Service marker to shift
-            if any(sm.lord_id == lid for sm in state.calendar.service_markers):
-                out.append({"type": "pay_lord", "side": side, "lord_id": lid})
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        if lid not in has_marker:
+            continue
+        if lord.assets.get("coin", 0) >= 1:
+            out.append({"type": "pay_lord", "side": side,
+                        "payer_lord_id": lid, "target_lord_id": lid,
+                        "resource": "coin", "amount": 1})
+        if lord.assets.get("loot", 0) >= 1:
+            try:
+                here = lord.cylinder.locale_id
+                if (is_friendly_locale(state, here, side)
+                        and not is_besieged(state, lid)):
+                    out.append({"type": "pay_lord", "side": side,
+                                "payer_lord_id": lid, "target_lord_id": lid,
+                                "resource": "loot", "amount": 1})
+            except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                pass
+    # Taifa-box Coin -> any Unbesieged Muslim Lord with a marker.
+    if side == "muslim" and state.taifas_box_coin >= 1:
+        for lid, lord in state.lords.items():
+            if (lord.side == "muslim" and lid in has_marker
+                    and lord.cylinder.kind == "locale"):
+                try:
+                    if not is_besieged(state, lid):
+                        out.append({"type": "pay_lord", "side": "muslim",
+                                    "target_lord_id": lid,
+                                    "resource": "taifa_coin", "amount": 1})
+                except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                    pass
     return out
 
 

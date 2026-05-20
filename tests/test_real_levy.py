@@ -33,10 +33,13 @@ def test_pay_lord_consumes_coin_and_shifts_service() -> None:
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     coin_before = s.lords["al_mutamid"].assets["coin"]
     apply_action(s, {"type": "pay_lord", "side": "muslim",
-                     "lord_id": "al_mutamid"})
+                     "payer_lord_id": "al_mutamid",
+                     "target_lord_id": "al_mutamid",
+                     "resource": "coin", "amount": 1})
     assert s.lords["al_mutamid"].assets["coin"] == coin_before - 1
     sm = next(s for s in s.calendar.service_markers if s.lord_id == "al_mutamid")
-    assert sm.box == 5
+    # 3.2.1: Coin shifts Service RIGHTWARD (ahead, away from Disband).
+    assert sm.box == 7
 
 
 def test_pay_lord_rejects_no_coin() -> None:
@@ -47,7 +50,9 @@ def test_pay_lord_rejects_no_coin() -> None:
     _drive_to_levy_step(s, "pay")
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "pay_lord", "side": "christian",
-                          "lord_id": "alfonso"})
+                          "payer_lord_id": "alfonso",
+                          "target_lord_id": "alfonso",
+                          "resource": "coin", "amount": 1})
     assert ei.value.code == "no_coin"
 
 
@@ -145,7 +150,9 @@ def test_legal_moves_offers_pay_when_coin_and_service() -> None:
         ServiceMarker(lord_id="alfonso", box=4))
     _drive_to_levy_step(s, "pay")
     moves = legal_moves(s)
-    assert any(m["type"] == "pay_lord" and m["lord_id"] == "alfonso"
+    assert any(m["type"] == "pay_lord"
+               and m.get("target_lord_id") == "alfonso"
+               and m.get("resource") == "coin"
                for m in moves)
 
 

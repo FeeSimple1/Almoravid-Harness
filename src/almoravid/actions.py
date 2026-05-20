@@ -406,6 +406,24 @@ def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
     sm.box = new_box
     return new_box
 
+def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
+    """Shift a Lord's Service marker N boxes right (ahead / away from
+    Disband), per Pay (3.2). Box caps at 17 (the "17+" box). If the
+    marker was off-left, it re-enters at box `boxes` from box 0.
+    Returns the new box (1..17)."""
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == lord_id and s.vassal_id is None), None)
+    if sm is None:
+        # Off-left lane: re-enter onto the track.
+        if lord_id in state.calendar.off_left_service:
+            state.calendar.off_left_service.remove(lord_id)
+        from almoravid.state import ServiceMarker
+        sm = ServiceMarker(lord_id=lord_id, box=0)
+        state.calendar.service_markers.append(sm)
+    sm.box = min(17, sm.box + boxes)
+    return sm.box
+
+
 def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
     """Errata p.12: where the Disbanding Lord's cylinder lands.
 
@@ -429,48 +447,92 @@ def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
 
 
 def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """3.2 Pay: an Active-side Lord with current Service shifts his
-    Service marker LEFT (toward Disband) one box per Coin spent.
+    """3.2 Pay. Spend Coin (3.2.1) or Loot (3.2.2) to shift a Service
+    marker RIGHTWARD (ahead, away from Disband) one 40-Days box per
+    marker spent. Coin/Loot may be removed in this step ONLY to
+    actually shift a marker (1.7.2).
 
-    Phase 5g baseline: handle the single common case — spend 1 Coin
-    to shift Service 1 box left. Multi-coin payments and shared
-    payments from co-located Lords are Phase 5g+ work.
+    Action parameters (all explicit — the paying player chooses; no
+    greedy defaults):
+      side: acting side.
+      payer_lord_id: the Lord whose mat the Coin/Loot comes from
+        (omit for Taifa-box Coin).
+      resource: "coin" | "loot" | "taifa_coin".
+      amount: number of markers to spend (>=1).
+      target_lord_id: whose Service marker shifts.
+
+    Rules enforced:
+      3.2.1 Coin: paying Lord's own marker, OR another Lord at the
+        SAME Locale, OR (Taifa-box Coin) any Unbesieged Muslim Lord.
+      3.2.2 Loot: payer must be in a Friendly Locale free of Siege
+        (Bypassed OK); shifts his own or a same-Locale Lord's marker.
     """
-    from almoravid.state import ServiceMarker
+    from almoravid.effective import is_besieged, is_friendly_locale
     side = _require_side(action)
     _require_levy_step(state, "pay")
     _require_active(state, side)
-    lord_id = action.get("lord_id")
-    _require(isinstance(lord_id, str), "lord_id required (str)", code="bad_arg")
-    lord_id = cast(str, lord_id)
-    _require(lord_id in state.lords, f"unknown lord {lord_id}",
-             code="unknown_lord")
-    lord = state.lords[lord_id]
-    _require(lord.side == side, f"{lord_id} not on {side}'s side",
-             code="wrong_side")
-    _require(lord.cylinder.kind == "locale",
-             f"{lord_id} not on map; cannot Pay", code="not_on_map")
-    coin = lord.assets.get("coin", 0)
-    _require(coin >= 1, f"{lord_id} has no Coin to spend", code="no_coin")
-    # Find the Service marker for this Lord
-    sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id), None)
-    _require(sm is not None, f"{lord_id} has no Service marker",
-             code="no_service_marker")
-    # Spend 1 Coin, shift Service 1 box left (toward Disband / smaller).
-    lord.assets["coin"] = coin - 1
-    new_box = sm.box - 1
-    if new_box < 0:
-        new_box = 0  # off-left service lane
-        state.calendar.off_left_service.append(lord_id)
-        state.calendar.service_markers = [s for s in state.calendar.service_markers
-                                           if s.lord_id != lord_id]
+    resource = action.get("resource", "coin")
+    _require(resource in ("coin", "loot", "taifa_coin"),
+             "resource must be coin|loot|taifa_coin", code="bad_arg")
+    amount = action.get("amount", 1)
+    _require(isinstance(amount, int) and amount >= 1,
+             "amount must be a positive int", code="bad_arg")
+    target_lord_id = action.get("target_lord_id")
+    _require(target_lord_id in state.lords,
+             "target_lord_id required (str)", code="bad_arg")
+    target = state.lords[target_lord_id]
+
+    if resource == "taifa_coin":
+        _require(side == "muslim", "Taifa-box Coin is Muslim only",
+                 code="wrong_side")
+        _require(state.taifas_box_coin >= amount,
+                 f"Taifas box has {state.taifas_box_coin} Coin, need {amount}",
+                 code="no_coin")
+        _require(target.side == "muslim", "Taifa Coin shifts a Muslim Lord",
+                 code="wrong_side")
+        _require(not is_besieged(state, target_lord_id),
+                 f"{target_lord_id} is Besieged (3.2.1 Taifa-Coin needs "
+                 f"Unbesieged)", code="besieged")
+        state.taifas_box_coin -= amount
     else:
-        sm.box = new_box
+        payer_lord_id = action.get("payer_lord_id")
+        _require(payer_lord_id in state.lords,
+                 "payer_lord_id required (str)", code="bad_arg")
+        payer = state.lords[payer_lord_id]
+        _require(payer.side == side, f"{payer_lord_id} not on {side}'s side",
+                 code="wrong_side")
+        _require(payer.cylinder.kind == "locale",
+                 f"{payer_lord_id} not on map", code="not_on_map")
+        have = payer.assets.get(resource, 0)
+        _require(have >= amount,
+                 f"{payer_lord_id} has {have} {resource}, need {amount}",
+                 code="no_coin" if resource == "coin" else "no_loot")
+        # Target eligibility: own marker, or another Lord at SAME Locale.
+        if target_lord_id != payer_lord_id:
+            _require(target.cylinder.kind == "locale"
+                     and target.cylinder.locale_id == payer.cylinder.locale_id,
+                     f"{target_lord_id} not at the same Locale as "
+                     f"{payer_lord_id} (3.2)", code="not_same_locale")
+        if resource == "loot":
+            here = payer.cylinder.locale_id
+            _require(is_friendly_locale(state, here, side),
+                     f"Pay-with-Loot requires a Friendly Locale (3.2.2); "
+                     f"{here} is not Friendly to {side}",
+                     code="not_friendly_locale")
+            _require(not is_besieged(state, payer_lord_id),
+                     f"Pay-with-Loot requires a Locale free of Siege "
+                     f"(3.2.2); {payer_lord_id} is Besieged",
+                     code="besieged")
+        payer.assets[resource] = have - amount
+        if payer.assets[resource] == 0:
+            payer.assets.pop(resource, None)
+
+    new_box = _shift_service_right(state, target_lord_id, boxes=amount)
     _record(state, action,
-            f"{side} {lord_id} pays 1 Coin -> Service to box {new_box}")
-    return {"lord_id": lord_id, "service_box": new_box,
-            "coin_after": lord.assets["coin"]}
+            f"{side} pays {amount} {resource} -> {target_lord_id} "
+            f"Service to box {new_box} (rightward)")
+    return {"target_lord_id": target_lord_id, "service_box": new_box,
+            "resource": resource, "amount": amount}
 
 
 # ---------------------------------------------------------------------------
