@@ -2128,6 +2128,10 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
             loc.seat_marker_lord_ids = [
                 sid for sid in loc.seat_marker_lord_ids
                 if sid not in christian_seats]
+        # A Cathedral Seat is removed when the Enemy Conquers the City.
+        if locale_id in state.cathedral_seat_locales:
+            state.cathedral_seat_locales.remove(locale_id)
+            removed["cathedral_seat"] = locale_id
         loc.jihad_markers += sh_value
         vp_delta = 0.5 * sh_value
         marker = "jihad"
@@ -3436,6 +3440,8 @@ def compute_final_vp(state) -> tuple[float, float]:
             christian += 9.0 if is_sevilla else 3.0
         elif tf.status == "parias":
             christian += 3.0 if is_sevilla else 1.0
+    # 5.1: +1 Christian VP per Cathedral Seat marker on the map.
+    christian += float(len(state.cathedral_seat_locales))
     # Taifas-box VP (rule 1.4.2) counts for the Muslims.
     muslim += state.taifas_box_vp
     return christian, muslim
@@ -3737,7 +3743,80 @@ def _h_set_absorption_policy(state, action):
     return {"side": side, "absorption_policy": pol}
 
 
+def _h_place_cathedral_seat(state, action):
+    """C16 Cathedrals (Arts of War ref): Alfonso at a Conquered City may
+    place a Cathedral Seat marker if none is there yet. The marker acts
+    as a Christian Seat AND is worth +1 Christian VP (5.1); placing it
+    triggers +1 Jihad for the Muslims (1.4.4). Up to two such markers
+    exist — when both are on the map the Christians may relocate one
+    (relocate_from). Scenario F: may not place until Yusuf or Sir Muster.
+
+    Modeled as a free (0-action) placement during Alfonso's Activation;
+    optional (the Christian chooses). The +1 Jihad rider is placed
+    deterministically via _add_jihad (the Muslim 'where' choice is a
+    minor placement detail; VP totals are unaffected by which eligible
+    Stronghold receives it)."""
+    side = _require_side(action)
+    _require(side == "christian", "Cathedrals is a Christian capability",
+             code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id == "alfonso",
+             "only Alfonso may place a Cathedral Seat (C16)",
+             code="not_alfonso")
+    alfonso = state.lords["alfonso"]
+    _require("C16" in alfonso.capabilities,
+             "Alfonso does not have the Cathedrals (C16) capability",
+             code="no_cathedrals")
+    _require(alfonso.cylinder.kind == "locale", "Alfonso not on the map",
+             code="not_on_map")
+    # Scenario F gate: no Cathedral Seats until Yusuf or Sir Muster.
+    if state.meta.scenario_letter == "F":
+        gate_ok = any(
+            lid in state.lords and state.lords[lid].cylinder.kind == "locale"
+            for lid in ("yusuf", "sir"))
+        _require(gate_ok,
+                 "Scenario F: Cathedrals may not place Seats until Yusuf "
+                 "or Sir Muster", code="cathedrals_gated")
+    here = alfonso.cylinder.locale_id
+    loc = state.locales[here]
+    _require(loc.base_type == "city",
+             f"{here} is not a City (Cathedral Seat requires a Conquered "
+             f"City)", code="not_city")
+    _require(loc.conquered_markers > 0 and loc.territory in state.taifas,
+             f"{here} is not a Christian-Conquered City",
+             code="not_conquered_city")
+    _require(here not in state.cathedral_seat_locales,
+             f"{here} already has a Cathedral Seat", code="already_seat")
+    # Two-marker cap; relocate one if both already placed.
+    relocate_from = action.get("relocate_from")
+    if len(state.cathedral_seat_locales) >= 2:
+        _require(relocate_from in state.cathedral_seat_locales,
+                 "both Cathedral Seats are placed; specify relocate_from "
+                 "(a current Cathedral Seat locale) to move one",
+                 code="cathedral_cap")
+        state.cathedral_seat_locales.remove(relocate_from)
+        rloc = state.locales.get(relocate_from)
+        if rloc is not None and "alfonso" in rloc.seat_marker_lord_ids:
+            rloc.seat_marker_lord_ids.remove("alfonso")
+    # Place: Cathedral Seat acts as Alfonso's (Christian) Seat too.
+    state.cathedral_seat_locales.append(here)
+    if "alfonso" not in loc.seat_marker_lord_ids:
+        loc.seat_marker_lord_ids.append("alfonso")
+    # Jihad rider: Muslims add +1 Jihad (1.4.4).
+    from almoravid.events import _add_jihad
+    jihad = _add_jihad(state, 1, {})
+    _record(state, action,
+            f"christian places Cathedral Seat at {here} (+1 VP, C16)"
+            + (f"; relocated from {relocate_from}" if relocate_from else "")
+            + f"; Muslim +1 Jihad rider: {jihad}")
+    return {"cathedral_seat": here, "relocated_from": relocate_from,
+            "jihad_rider": jihad,
+            "cathedral_seats": list(state.cathedral_seat_locales)}
+
+
 CAMPAIGN_HANDLERS = {
+    "place_cathedral_seat": _h_place_cathedral_seat,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,

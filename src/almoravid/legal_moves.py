@@ -460,6 +460,26 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
         if state.meta.active_lord_id is None:
             out.append({"type": "command_reveal", "side": active})
         else:
+            # C16 Cathedrals: Alfonso at a Christian-Conquered City with
+            # the capability may place a Cathedral Seat (free, optional).
+            if (state.meta.active_lord_id == "alfonso"
+                    and "C16" in state.lords.get("alfonso").capabilities
+                    and state.lords["alfonso"].cylinder.kind == "locale"):
+                _al = state.lords["alfonso"]
+                _loc = state.locales.get(_al.cylinder.locale_id)
+                _gate = (state.meta.scenario_letter != "F"
+                         or any(state.lords.get(x) is not None
+                                and state.lords[x].cylinder.kind == "locale"
+                                for x in ("yusuf", "sir")))
+                if (_loc is not None and _loc.base_type == "city"
+                        and _loc.conquered_markers > 0
+                        and _loc.territory in state.taifas
+                        and _al.cylinder.locale_id
+                        not in state.cathedral_seat_locales
+                        and len(state.cathedral_seat_locales) < 2
+                        and _gate):
+                    out.append({"type": "place_cathedral_seat",
+                                "side": "christian"})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

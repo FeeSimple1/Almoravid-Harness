@@ -499,5 +499,9 @@ class GameState(StrictModel):
     # Devaluation totals; taifas_box_vp is added to Muslim VP at end.
     taifas_box_coin: int = 0
     taifas_box_vp: float = 0.0
+    # Cathedral Seat markers (C16 Cathedrals capability, Alfonso). Each
+    # locale_id here holds one of Alfonso's <=2 Cathedral Seats: it acts
+    # as a Christian Seat AND is worth +1 Christian VP (5.1).
+    cathedral_seat_locales: list[str] = Field(default_factory=list)
     history: list[HistoryEntry] = Field(default_factory=list)
     score: Score = Field(default_factory=Score)

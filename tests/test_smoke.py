@@ -101,6 +101,7 @@ def test_schema_has_expected_top_keys() -> None:
         "pending",
         "taifas_box_coin",
         "taifas_box_vp",
+        "cathedral_seat_locales",
         "history",
         "score",
     }

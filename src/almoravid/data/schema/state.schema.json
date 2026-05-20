@@ -1257,6 +1257,13 @@
       "title": "Taifas Box Vp",
       "type": "number"
     },
+    "cathedral_seat_locales": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cathedral Seat Locales",
+      "type": "array"
+    },
     "history": {
       "items": {
         "$ref": "#/$defs/HistoryEntry"

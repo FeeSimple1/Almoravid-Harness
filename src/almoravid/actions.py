@@ -1259,6 +1259,11 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     for loc in state.locales.values():
         if lord_id in loc.seat_marker_lord_ids:
             loc.seat_marker_lord_ids.remove(lord_id)
+    # Cathedral Seats belong to Alfonso; remove them if he leaves the map
+    # (rule 1.3.1 / 5.1: Seat markers — including Cathedrals — are removed
+    # when that Lord leaves the map).
+    if lord_id == "alfonso":
+        state.cathedral_seat_locales = []
 
     # Route "This Lord" Capability cards: 3.3.1 returns them to the
     # side's board-edge stock; 3.3.2 discards them (cards at his mat).
