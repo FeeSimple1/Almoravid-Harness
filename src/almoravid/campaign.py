@@ -2864,24 +2864,39 @@ def _h_respond_avoid_battle(state, action):
     # divided among them.
     avoiding = _approach_subset(payload, action)   # C2 partition subset
     discarded = {"loot": 0, "prov": 0}
-    for lid in avoiding:
-        if lid not in state.lords:
-            continue
+    # E7 / 4.3.4 + 1.5.2 SHARED TRANSPORT: avoiding Lords move together
+    # and Share Transport, so Provender capacity is the GROUP total —
+    # one per Cart/Mule on a Road, one per Mule only across a Pass (no
+    # Cart carries Provender when Avoiding over a Pass). All Loot is
+    # discarded (no Loot may be taken when Avoiding).
+    avoiders = [lid for lid in avoiding if lid in state.lords]
+    for lid in avoiders:
         l = state.lords[lid]
         loot = l.assets.get("loot", 0)
         if loot > 0:
             discarded["loot"] += loot
             l.assets.pop("loot", None)
-        cart = l.assets.get("cart", 0)
-        mule = l.assets.get("mule", 0)
-        max_prov = mule if way_type == "pass" else cart + mule
-        prov = l.assets.get("prov", 0)
-        if prov > max_prov:
-            discarded["prov"] += prov - max_prov
-            if max_prov > 0:
-                l.assets["prov"] = max_prov
-            else:
+    group_cap = sum(
+        (state.lords[lid].assets.get("mule", 0) if way_type == "pass"
+         else state.lords[lid].assets.get("cart", 0)
+         + state.lords[lid].assets.get("mule", 0))
+        for lid in avoiders)
+    group_prov = sum(state.lords[lid].assets.get("prov", 0)
+                     for lid in avoiders)
+    excess = max(0, group_prov - group_cap)
+    discarded["prov"] = excess
+    to_drop = excess
+    for lid in avoiders:
+        if to_drop <= 0:
+            break
+        l = state.lords[lid]
+        have = l.assets.get("prov", 0)
+        drop = min(have, to_drop)
+        if drop > 0:
+            l.assets["prov"] = have - drop
+            if l.assets["prov"] == 0:
                 l.assets.pop("prov", None)
+            to_drop -= drop
     # Distribute discarded Assets to the Approaching attackers as Spoils.
     spoils = {k: v for k, v in discarded.items() if v > 0}
     attackers = [
