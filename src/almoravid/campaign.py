@@ -1697,21 +1697,41 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
     #   - Muslim conquers Christian: place Conquered green markers
     #   - Muslim conquers Conquered (Reconquista) Christian Stronghold:
     #     place Jihad markers
-    place_jihad = False
-    if conquering_side == "muslim":
-        # If the Locale shows yellow Conquered (Christian-conquered)
-        # then Muslim re-conquest places Jihad markers (rule 1.4.4).
-        if loc.conquered_markers > 0 and taifa and taifa.status == "reconquista":
-            place_jihad = True
+    # 1.4.4 / 4.5: Muslim Conquest of ANY Stronghold in a Parias or
+    # Reconquista Taifa places Jihad markers (1 per Stronghold Value)
+    # AND removes any Christian Conquered + Christian Seat markers
+    # there. Christian Conquest (anywhere), and Muslim Conquest of a
+    # Christian Kingdom, place Conquered markers AND remove all Jihad.
+    # A Locale never holds both Conquered and Jihad markers.
+    is_taifa = taifa is not None
+    place_jihad = (conquering_side == "muslim" and is_taifa
+                   and taifa.status in ("parias", "reconquista"))
+    removed = {}
     if place_jihad:
+        if loc.conquered_markers:
+            removed["conquered"] = loc.conquered_markers
+            loc.conquered_markers = 0
+        # Remove Christian Seat markers (Muslim Jihad cannot coexist).
+        christian_seats = [sid for sid in loc.seat_marker_lord_ids
+                           if state.lords.get(sid)
+                           and state.lords[sid].side == "christian"]
+        if christian_seats:
+            removed["christian_seats"] = christian_seats
+            loc.seat_marker_lord_ids = [
+                sid for sid in loc.seat_marker_lord_ids
+                if sid not in christian_seats]
         loc.jihad_markers += sh_value
         vp_delta = 0.5 * sh_value
         marker = "jihad"
     else:
-        loc.conquered_markers += sh_value
+        if loc.jihad_markers:
+            removed["jihad"] = loc.jihad_markers
+            loc.jihad_markers = 0
+        # Conquered markers = exactly the Stronghold Value (1.3.1).
+        loc.conquered_markers = sh_value
         vp_delta = 1.0 * sh_value
         marker = "conquered"
-    # Remove Siege markers (Conquest ends Siege).
+    # Remove the Conquering side's Siege markers (Conquest ends Siege).
     if conquering_side == "christian":
         loc.siege_yellow = 0
         state.score.christian += vp_delta
@@ -1720,7 +1740,7 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
         state.score.muslim += vp_delta
     return {"locale": locale_id, "marker": marker, "value": sh_value,
             "vp_delta": vp_delta, "conquered_total": loc.conquered_markers,
-            "jihad_total": loc.jihad_markers}
+            "jihad_total": loc.jihad_markers, "removed": removed}
 
 
 
