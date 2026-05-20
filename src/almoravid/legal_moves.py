@@ -144,9 +144,14 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     for lid, lord in state.lords.items():
         if lord.side != side:
             continue
-        # Path 1: Muster a Lord from Calendar
+        # Path 1: Muster a Lord from Calendar. 3.4.1: must have a
+        # Fealty rating, be Ready (cylinder box at or left of the Levy
+        # marker), and not be under a M16/M17 Muster ban.
         if (lord.fealty is not None
-                and lord.cylinder.kind == "calendar"):
+                and lord.cylinder.kind == "calendar"
+                and (lord.cylinder.box is None
+                     or lord.cylinder.box <= state.calendar.current_box)
+                and lid not in state.meta.muster_banned_this_levy_lord_ids):
             free = _free_seats_for(state, lid)
             for seat in free:
                 out.append({"type": "muster_lord", "side": side,

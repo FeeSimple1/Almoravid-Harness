@@ -322,6 +322,13 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.cylinder.kind == "calendar",
              f"{lord_id} is not on the Calendar (cylinder.kind={lord.cylinder.kind})",
              code="not_on_calendar")
+    # 3.4.1: the rolling Lord must be Ready — cylinder in a 40-Days box
+    # at or LEFT of the Levy marker (box <= current_box).
+    cyl_box = lord.cylinder.box
+    _require(cyl_box is None or cyl_box <= state.calendar.current_box,
+             f"{lord_id} is not Ready (cylinder box {cyl_box} is right of "
+             f"the Levy marker {state.calendar.current_box}, 3.4.1)",
+             code="not_ready")
     free = _free_seats_for(state, lord_id)
     _require(free, f"{lord_id} has no free Seat to Muster at", code="no_free_seat")
     # Roll vs Fealty (rule 3.4)
@@ -341,13 +348,28 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     static = load_lords()["lords"][lord_id]
     lord.forces = dict(static["forces"])
     lord.assets = dict(static["assets"])
-    # Advance lord's Service marker: Service-rating boxes ahead from
-    # current Levy/Campaign marker (rule 3.4.1). Implementation deferred
-    # to Phase 3 alongside Calendar mutators.
+    # 3.4.1: place the Lord's own Service marker service_rating boxes
+    # RIGHT (ahead) of the current Levy marker; cap at the 17+ box.
+    from almoravid.state import ServiceMarker
+    state.calendar.service_markers = [
+        s for s in state.calendar.service_markers
+        if not (s.lord_id == lord_id and s.vassal_id is None)
+    ]
+    svc_box = min(17, state.calendar.current_box + lord.service_rating)
+    state.calendar.service_markers.append(
+        ServiceMarker(lord_id=lord_id, box=svc_box))
     lord.just_arrived_this_levy = True
+    # 3.4.1 TAIFA POLITICS: Mustering a Taifa Lord adjusts his Taifa to
+    # Independent (1.4.3).
+    taifa_adjust = None
+    if lord.is_taifa and lord.home_taifa:
+        from almoravid.campaign import adjust_taifa_status
+        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "independent")
     _record(state, action,
-            f"{lord_id} Mustered at {seat}: rolled {roll} <= Fealty {lord.fealty}")
+            f"{lord_id} Mustered at {seat}: rolled {roll} <= Fealty "
+            f"{lord.fealty}; Service marker -> box {svc_box}")
     return {"success": True, "roll": roll, "seat": seat,
+            "service_box": svc_box, "taifa_adjust": taifa_adjust,
             "fealty": lord.fealty}
 
 
