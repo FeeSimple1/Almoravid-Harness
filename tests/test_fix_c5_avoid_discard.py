@@ -79,7 +79,6 @@ def test_avoid_shared_transport_group_capacity() -> None:
     Carts+Mules set the combined Provender capacity (Road)."""
     from almoravid.actions import apply_action as _aa
     s = load_scenario("scenario_a_toledo_beset", seed=11)
-    a, b = "al_mustam", None
     # Two Muslim defenders avoiding together from sevilla.
     d1, d2 = "al_mutamid", "abu_bakr"
     for d in (d1, d2):

@@ -1371,9 +1371,11 @@ def resolve_storm(
     Round after the first (concede_after_round); the Storm also ends
     when Rounds completed equals the Siege-marker count.
 
-    NOTE (documented scope): the Attacker is the single Active Lord
-    (cmd_storm launches one-Lord Storms); multi-besieger Attacker Storms
-    with Attacker Reserves are not modeled here.
+    S11b: the Attacker also has a per-Lord Front/Reserve array — the
+    Active Lord begins at Front, other besieging Lords start in Reserve
+    and Advance via Reposition (forced when all Front Rout), Front capped
+    by Stronghold Capacity. Per-Lord post-Storm forces are exposed on the
+    result (attacker_lord_forces / defender_lord_forces).
     """
     from almoravid.static_data import load_strongholds
     from almoravid.capabilities import any_lord_with_capability
