@@ -2365,11 +2365,16 @@ def _h_cmd_battle(state, action):
     # Battle ends the card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
-
+    # C1b (4.3.5): if the losing Enemy Withdrew into the Stronghold here
+    # and our (winning) Lord(s) are outside it Unbesieged/Unbypassed, we
+    # must Besiege or Bypass before Feed/Pay/Disband.
+    bb = _set_besiege_or_bypass_pending(state, here, side,
+                                        state.meta.active_lord_id)
     _record(state, action,
             f"{side} {our_at_here} Battles {enemy_lord_ids} at {here}: "
             f"winner={result.winner}, rounds={len(result.rounds)}; "
-            f"card spent ({consumed} actions)")
+            f"card spent ({consumed} actions)"
+            + ("; Besiege-or-Bypass pending" if bb else ""))
     return {
         "winner": result.winner,
         "rounds": len(result.rounds),
@@ -3115,8 +3120,12 @@ def _h_respond_stand_battle(state, action):
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
-    _clear_approach_pending(state, active_side)
-
+    # C1b (4.3.5): after the Battle, if the losing Enemy Withdrew inside
+    # and the Active side has Lord(s) outside, force Besiege-or-Bypass;
+    # otherwise restore control to the Active side.
+    if not _set_besiege_or_bypass_pending(
+            state, locale_id, active_side, payload.get("active_lord_id")):
+        _clear_approach_pending(state, active_side)
     _record(state, action,
             f"{side} stands; Battle at {locale_id}: "
             f"winner={result.winner}, rounds={len(result.rounds)}")
