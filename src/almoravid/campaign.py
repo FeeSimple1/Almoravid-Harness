@@ -449,16 +449,23 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Check Scenario End marker
     if new_box > len(state.calendar.boxes):
         state.meta.phase = "ended"
-        _record(state, action, f"Campaign end at box {prev_box}; scenario ended (off calendar)")
-        return {"phase": "ended", "current_box": prev_box}
+        verdict = compute_victory(state)
+        _record(state, action,
+                f"Campaign end at box {prev_box}; scenario ended "
+                f"(off calendar); winner={verdict['winner']}")
+        return {"phase": "ended", "current_box": prev_box,
+                "victory": verdict}
     state.calendar.current_box = new_box
     # If new box has scenario_end marker, end the game
     new_box_obj = state.calendar.boxes[new_box - 1]
     if "scenario_end" in new_box_obj.decorations:
         state.meta.phase = "ended"
+        verdict = compute_victory(state)
         _record(state, action,
-                f"Campaign end; advanced box {prev_box} -> {new_box} (Scenario End)")
-        return {"phase": "ended", "current_box": new_box}
+                f"Campaign end; advanced box {prev_box} -> {new_box} "
+                f"(Scenario End); winner={verdict['winner']}")
+        return {"phase": "ended", "current_box": new_box,
+                "victory": verdict}
     # Otherwise return to Levy
     state.meta.phase = "levy"
     state.meta.campaign_step = None
@@ -2582,6 +2589,97 @@ def _h_cmd_march_port_to_port(state, action):
             f"{target} (Port to Port, card spent)")
     return {"from": from_loc, "to": target,
             "actions_consumed": consumed}
+
+# ---------------------------------------------------------------------------
+# Phase 7b: Victory determination (rules 5.1 / 5.2 / 5.3).
+# ---------------------------------------------------------------------------
+
+
+def _mustered_lords_on_map(state, side: Side) -> int:
+    """Count a side's Lords with a cylinder on a map Locale."""
+    return sum(
+        1 for l in state.lords.values()
+        if l.side == side and l.cylinder.kind == "locale"
+    )
+
+
+def check_campaign_victory(state) -> str | None:
+    """Rule 5.2: during the Campaign, if a side has no Mustered Lords
+    on the map, the OTHER side wins immediately regardless of VP.
+    Returns the winning side, or None."""
+    if _mustered_lords_on_map(state, "christian") == 0:
+        return "muslim"
+    if _mustered_lords_on_map(state, "muslim") == 0:
+        return "christian"
+    return None
+
+
+def compute_final_vp(state) -> tuple[float, float]:
+    """Recompute board VP per rule 5.1 (independent of the running
+    incremental score, which doesn't track Taifa-status VP).
+
+    Christian:
+      +1 per Conquered marker on a Taifa (Muslim-territory) Locale
+      +0.5 per yellow Ravaged marker
+      +3 per Reconquista Taifa, +1 per Parias Taifa
+    Muslim:
+      +0.5 per Jihad marker
+      +1 per Conquered marker on a Christian Kingdom Locale
+      +0.5 per green Ravaged marker
+    """
+    christian = 0.0
+    muslim = 0.0
+    for lid, loc in state.locales.items():
+        is_taifa_terr = loc.territory in state.taifas
+        if loc.conquered_markers:
+            if is_taifa_terr:
+                christian += 1.0 * loc.conquered_markers
+            else:
+                muslim += 1.0 * loc.conquered_markers
+        muslim += 0.5 * loc.jihad_markers
+        if loc.ravaged == "yellow":
+            christian += 0.5
+        elif loc.ravaged == "green":
+            muslim += 0.5
+    for t in state.taifas.values():
+        if t.status == "reconquista":
+            christian += 3.0
+        elif t.status == "parias":
+            christian += 1.0
+    return christian, muslim
+
+
+def compute_victory(state) -> dict:
+    """Determine the winner (rule 5.1/5.2/5.3) and store the verdict
+    on state.score. Campaign victory (5.2) takes precedence; otherwise
+    higher recomputed VP wins, tie = draw."""
+    campaign_winner = check_campaign_victory(state)
+    cvp, mvp = compute_final_vp(state)
+    state.score.christian_final = cvp
+    state.score.muslim_final = mvp
+    if campaign_winner is not None:
+        state.score.winner = campaign_winner
+        state.score.victory_reason = (
+            f"Campaign victory (5.2): {('muslim' if campaign_winner=='muslim' else 'christian')} "
+            f"opponent had no Mustered Lords on map"
+        )
+        return {"winner": campaign_winner,
+                "christian_vp": cvp, "muslim_vp": mvp,
+                "reason": state.score.victory_reason}
+    if cvp > mvp:
+        winner = "christian"
+    elif mvp > cvp:
+        winner = "muslim"
+    else:
+        winner = "draw"
+    state.score.winner = winner
+    state.score.victory_reason = (
+        f"End of scenario (5.1/5.3): Christian {cvp} vs Muslim {mvp}"
+    )
+    return {"winner": winner, "christian_vp": cvp, "muslim_vp": mvp,
+            "reason": state.score.victory_reason}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,

@@ -107,6 +107,16 @@ def render_summary(state: GameState) -> str:
     )
 
     lines = [header, ""]
+    # Phase 7b: show the final verdict once the scenario has ended.
+    if state.meta.phase == "ended" and state.score.winner is not None:
+        lines.append(
+            f"GAME OVER — winner: {state.score.winner.upper()}  "
+            f"(final VP: C {state.score.christian_final} / "
+            f"M {state.score.muslim_final})"
+        )
+        if state.score.victory_reason:
+            lines.append(f"  {state.score.victory_reason}")
+        lines.append("")
 
     # Taifa status row
     t_parts = []

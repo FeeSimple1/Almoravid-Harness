@@ -431,6 +431,15 @@ class Score(StrictModel):
     christian: float = 0.0
     muslim: float = 0.0
 
+    # Phase 7b: end-of-game verdict (rule 5.1/5.2/5.3). Populated by
+    # campaign.compute_victory when the scenario ends. `winner` is
+    # 'christian', 'muslim', or 'draw'; *_final are the recomputed
+    # board VP totals; reason explains the trigger.
+    winner: str | None = None
+    christian_final: float | None = None
+    muslim_final: float | None = None
+    victory_reason: str | None = None
+
 
 class GameState(StrictModel):
     """The full game state.
