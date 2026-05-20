@@ -3,6 +3,7 @@ adjusts a Taifa Lord to Independent (3.4.1)."""
 from __future__ import annotations
 import pytest
 from almoravid.actions import IllegalAction, apply_action
+from almoravid.effective import is_friendly_locale, is_besieged
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 
@@ -13,12 +14,28 @@ def _to_muster(s):
     return s
 
 
-def _muster_until_success(s, side, lord_id, seed_tries=30):
-    """Retry Muster until the Fealty roll succeeds (deterministic seed
-    advances each call)."""
+def _pick_levier(s, side):
+    """An eligible Levying Lord: on map, side, Friendly+Unbesieged,
+    has Lordship, not newly Mustered this segment (3.4.1)."""
+    for lid, l in s.lords.items():
+        if (l.side == side and l.cylinder.kind == "locale"
+                and not l.just_arrived_this_levy
+                and l.lordship_rating > 0
+                and is_friendly_locale(s, l.cylinder.locale_id, side)
+                and not is_besieged(s, lid)):
+            return lid
+    return None
+
+
+def _muster_until_success(s, side, lord_id, levier_id, seed_tries=30):
+    """Retry Muster until the Fealty roll succeeds. The levier's
+    Lordship is refreshed each attempt so the test can iterate the
+    deterministic RNG without exhausting Lordship."""
     for _ in range(seed_tries):
+        s.lords[levier_id].lordship_used = 0
         r = apply_action(s, {"type": "muster_lord", "side": side,
-                             "lord_id": lord_id})
+                             "lord_id": lord_id,
+                             "levying_lord_id": levier_id})
         if r["success"]:
             return r
     return None
@@ -37,7 +54,9 @@ def test_muster_places_service_marker_ahead():
     _to_muster(s)
     while s.meta.active_player != "christian":
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
-    r = _muster_until_success(s, "christian", lid)
+    levier = _pick_levier(s, "christian")
+    assert levier is not None
+    r = _muster_until_success(s, "christian", lid, levier)
     if r is None:
         pytest.skip("Fealty roll never succeeded in window")
     expected = min(17, s.calendar.current_box + svc_rating)
@@ -56,9 +75,11 @@ def test_muster_rejects_unready_lord():
     _to_muster(s)
     while s.meta.active_player != "christian":
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    levier = _pick_levier(s, "christian")
+    assert levier is not None
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "muster_lord", "side": "christian",
-                         "lord_id": lid})
+                         "lord_id": lid, "levying_lord_id": levier})
     assert ei.value.code == "not_ready"
 
 
@@ -79,7 +100,10 @@ def test_muster_taifa_lord_sets_independent():
     _to_muster(s)
     while s.meta.active_player != "muslim":
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
-    r = _muster_until_success(s, "muslim", lid)
+    levier = _pick_levier(s, "muslim")
+    if levier is None:
+        pytest.skip("no eligible Muslim Levying Lord")
+    r = _muster_until_success(s, "muslim", lid, levier)
     if r is None:
         pytest.skip("Fealty roll never succeeded")
     assert s.taifas[home].status == "independent"

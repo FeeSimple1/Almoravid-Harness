@@ -187,13 +187,29 @@ def pending_mandatory_disbands(state: GameState, side: Side) -> list[str]:
 
 def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     """3.4 Muster: Lord-Muster + Lordship-spending Levy actions."""
+    from almoravid.effective import is_friendly_locale, is_besieged
     out: list[dict[str, Any]] = []
+    # 3.4.1: a Levying Lord (on the map, eligible, with spare Lordship,
+    # not newly Mustered this segment) must spend a point to enable a
+    # Muster roll. Enumerate the eligible leviers once.
+    leviers: list[str] = []
+    for clid, cl in state.lords.items():
+        if (cl.side == side and cl.cylinder.kind == "locale"
+                and not cl.just_arrived_this_levy
+                and cl.lordship_used < cl.lordship_rating):
+            try:
+                if (is_friendly_locale(state, cl.cylinder.locale_id, side)
+                        and not is_besieged(state, clid)):
+                    leviers.append(clid)
+            except Exception:
+                pass
     for lid, lord in state.lords.items():
         if lord.side != side:
             continue
         # Path 1: Muster a Lord from Calendar. 3.4.1: must have a
         # Fealty rating, be Ready (cylinder box at or left of the Levy
-        # marker), and not be under a M16/M17 Muster ban.
+        # marker), and not be under a M16/M17 Muster ban; AND an
+        # eligible Levying Lord must be available to spend Lordship.
         if (lord.fealty is not None
                 and lord.cylinder.kind == "calendar"
                 and (lord.cylinder.box is None
@@ -201,8 +217,10 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 and lid not in state.meta.muster_banned_this_levy_lord_ids):
             free = _free_seats_for(state, lid)
             for seat in free:
-                out.append({"type": "muster_lord", "side": side,
-                            "lord_id": lid, "seat": seat})
+                for levier_id in leviers:
+                    out.append({"type": "muster_lord", "side": side,
+                                "lord_id": lid, "seat": seat,
+                                "levying_lord_id": levier_id})
         # Path 2: Spend Lordship on a Mustered Lord. 3.4 intro gate:
         # the Lord must be on the map at a Friendly Locale and Unbesieged
         # (Bypassed is OK) to take any Levy action.

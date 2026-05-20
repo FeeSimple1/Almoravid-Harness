@@ -206,6 +206,10 @@ def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.meta.cta_option_used_christian = False
     state.meta.cta_option_used_muslim = False
     state.meta.cta_crusade_jihad_pending = False
+    # Per-Levy reset (3.4.1): the "newly Mustered this segment" flag is
+    # scoped to one Levy; clear it for all Lords at Levy start.
+    for _l in state.lords.values():
+        _l.just_arrived_this_levy = False
     state.meta.active_player = ACTOR_ORDER[0]
     _record(state, action, "Begin Levy phase (3.1 arts_of_war)")
     return {"phase": "levy", "levy_step": "arts_of_war"}
@@ -336,6 +340,28 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"{lord_id} cannot Muster this Levy "
              f"(M16/M17 Revolt ban active)",
              code="muster_banned")
+    # 3.4.1: a Levying Lord spends one point of his Lordship to enable
+    # the roll (L9b). The Levying Lord must be on the map, eligible to
+    # take Levy actions (Friendly + Unbesieged, 3.4), have spare
+    # Lordship, and not have been newly Mustered this same segment
+    # ("A Lord newly Mustered by another Lord cannot use his Lordship
+    # that same segment"). Arts-of-War auto-Muster cards bypass this via
+    # their own handlers, not muster_lord.
+    levying_lord_id = action.get("levying_lord_id")
+    _require(levying_lord_id in state.lords,
+             "levying_lord_id required — a Lord must spend Lordship to "
+             "Muster another (3.4.1)", code="bad_arg")
+    levier = state.lords[levying_lord_id]
+    _require(levier.side == side,
+             f"{levying_lord_id} is not on {side}'s side", code="wrong_side")
+    _require(not levier.just_arrived_this_levy,
+             f"{levying_lord_id} was newly Mustered this segment and cannot "
+             f"use Lordship now (3.4.1)", code="levier_just_arrived")
+    _require_levy_actor_eligible(state, levier, levying_lord_id)
+    _require(levier.lordship_used < levier.lordship_rating,
+             f"{levying_lord_id} has no Lordship left "
+             f"({levier.lordship_used}/{levier.lordship_rating})",
+             code="lordship_exhausted")
     _require(lord.cylinder.kind == "calendar",
              f"{lord_id} is not on the Calendar (cylinder.kind={lord.cylinder.kind})",
              code="not_on_calendar")
@@ -348,13 +374,19 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="not_ready")
     free = _free_seats_for(state, lord_id)
     _require(free, f"{lord_id} has no free Seat to Muster at", code="no_free_seat")
+    # 3.4.1: spend the Levying Lord's Lordship point for this attempt
+    # (whether or not the roll succeeds; a failed roll may be retried by
+    # spending more Lordship).
+    levier.lordship_used += 1
     # Roll vs Fealty (rule 3.4)
     roll = roll_d6(state)
     success = roll <= cast(int, lord.fealty)
     if not success:
         _record(state, action,
-                f"{lord_id} Muster failed: rolled {roll} > Fealty {lord.fealty}")
-        return {"success": False, "roll": roll, "fealty": lord.fealty}
+                f"{lord_id} Muster failed: rolled {roll} > Fealty "
+                f"{lord.fealty} ({levying_lord_id} spent 1 Lordship)")
+        return {"success": False, "roll": roll, "fealty": lord.fealty,
+                "levying_lord_id": levying_lord_id}
 
     # Success: place at chosen Seat (or default to first free Seat),
     # set starting forces / assets from static data, advance Service.
@@ -387,7 +419,7 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             f"{lord.fealty}; Service marker -> box {svc_box}")
     return {"success": True, "roll": roll, "seat": seat,
             "service_box": svc_box, "taifa_adjust": taifa_adjust,
-            "fealty": lord.fealty}
+            "fealty": lord.fealty, "levying_lord_id": levying_lord_id}
 
 
 # ---------------------------------------------------------------------------
