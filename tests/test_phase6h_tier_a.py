@@ -147,15 +147,22 @@ def test_c5_drought_no_op_when_all_muslims_at_gardens() -> None:
 
 def test_m8_adds_two_jihad_to_first_eligible_locale() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    # Force at least one Parias Taifa to exist.
+    # M8 requires Yusuf/Sir/al-Mutamid in the target Taifa (card text).
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "parias"
     target_loc = target_taifa.locale_ids[0]
     s.locales[target_loc].jihad_markers = 0
+    s.locales[target_loc].conquered_markers = 0
+    # Place al-Mutamid inside the target Taifa so it qualifies.
+    assert "al_mutamid" in s.lords
+    s.lords["al_mutamid"].cylinder = Cylinder(kind="locale",
+                                              locale_id=target_loc)
+    s.lords["al_mutamid"].in_stronghold = False
     r = resolve_event(s, "muslim", "M8")
     assert r.get("no_op") is not True
     assert r["jihad_added"] == 2
-    assert s.locales[r["locale_id"]].jihad_markers >= 2
+    placed = sum(r["placement"].values())
+    assert placed == 2
 
 
 # ---------------------------------------------------------------------------

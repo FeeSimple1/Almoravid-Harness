@@ -1419,14 +1419,13 @@ def apply_retreat_aftermath(
                       else result.defender)
     if (loser_side_obj.side == "christian"
             and "M13" in state.decks.this_levy_events.get("muslim", [])):
-        from almoravid.events import _first_jihad_eligible_locale
-        jloc = _first_jihad_eligible_locale(state)
-        if jloc is not None:
-            state.locales[jloc].jihad_markers += 4
+        from almoravid.events import _add_jihad
+        placement = _add_jihad(state, 4, {})
+        if placement is not None:
             state.decks.this_levy_events["muslim"].remove("M13")
             state.decks.discard.append("M13")
             summary["m13_severed_heads_jihad"] = {
-                "locale_id": jloc, "added": 4,
+                "placement": placement, "added": 4,
             }
 
     loser_side_obj = (result.attacker if result.winner == result.defender.side

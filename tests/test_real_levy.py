@@ -101,27 +101,33 @@ def test_levy_take_vassal_rejects_when_lordship_exhausted() -> None:
 
 
 def test_levy_take_capability_from_board_edge() -> None:
-    """Move a board-edge card onto a Lord's mat."""
-    s = load_scenario("scenario_d_arrival")  # has board-edge cards
-    # Scenario D has ANDALUSIANS, AL-YAZIRAT AL-HADRA, CAMELS in Muslim edge.
-    assert s.decks.board_edge.get("muslim")
+    """Move a this_lord-scope board-edge Capability onto a Lord's mat.
+
+    Rather than depend on whichever cards a scenario happens to seed in
+    the board-edge (Scenario D's Muslim edge is all side-wide), we
+    inject a known this_lord-scope Capability (M8 Dawud ibn Aisha,
+    "Lords: Yusuf or Sir") so the handler path is exercised
+    deterministically and the test never has to skip.
+    """
+    s = load_scenario("scenario_d_arrival")
+    cards = load_cards_local()["cards"]
+    # M8 is a this_lord-scope Muslim Capability for Yusuf/Sir.
+    target_card = "M8"
+    assert not cards[target_card]["no_capability"]
+    assert cards[target_card]["capability_scope"] == "this_lord"
+    s.decks.board_edge.setdefault("muslim", [])
+    if target_card not in s.decks.board_edge["muslim"]:
+        s.decks.board_edge["muslim"].append(target_card)
     _drive_to_levy_step(s, "muster")
-    # Drive to Muslim's turn
     while s.meta.active_player != "muslim":
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
-    # Yusuf is mustered at Algeciras in Scenario D
-    cards_before = list(s.lords["yusuf"].capabilities)
-    available = s.decks.board_edge["muslim"]
-    target_card = next(
-        (c for c in available
-         if not load_cards_local()["cards"][c]["no_capability"]
-         and load_cards_local()["cards"][c]["capability_scope"] == "this_lord"),
-        None,
-    )
-    if target_card is None:
-        pytest.skip("No this_lord-scope cap in Muslim board-edge")
+    # Yusuf is mustered at Algeciras in Scenario D; ensure he can spend
+    # Lordship (reset the per-card counter for a clean assertion).
+    assert s.lords["yusuf"].cylinder.kind == "locale"
+    s.lords["yusuf"].lordship_used = 0
     r = apply_action(s, {"type": "levy_take_capability", "side": "muslim",
                          "lord_id": "yusuf", "card_id": target_card})
+    assert r["scope"] == "this_lord"
     assert target_card in s.lords["yusuf"].capabilities
     assert target_card not in s.decks.board_edge["muslim"]
 
