@@ -1314,6 +1314,29 @@ def _is_laden(lord, way_type: str | None = None) -> bool:
     return False
 
 
+def _group_laden(state, lord_ids, way_type: str | None = None) -> bool:
+    """C3/C4 (4.3.1/4.3.2 SHARED TRANSPORT): a March group's Laden status
+    is computed from the COMBINED Provender, Loot, Carts and Mules of all
+    Lords moving together (1.5.2). Same triggers as _is_laden."""
+    prov = loot = cart = mule = 0
+    for lid in lord_ids:
+        l = state.lords.get(lid)
+        if l is None:
+            continue
+        prov += l.assets.get("prov", 0)
+        loot += l.assets.get("loot", 0)
+        cart += l.assets.get("cart", 0)
+        mule += l.assets.get("mule", 0)
+    transport = cart + mule
+    if loot >= 1:
+        return True
+    if prov > transport:
+        return True
+    if way_type == "pass" and cart > 0 and prov > 2 * mule:
+        return True
+    return False
+
+
 def _h_cmd_march(state, action):
     """4.3 March: move the active Lord to an adjacent Locale.
 
@@ -1366,7 +1389,40 @@ def _h_cmd_march(state, action):
              f"{target} is not reachable from {from_loc} via {way_type}",
              code="not_adjacent")
 
-    laden = _is_laden(lord, way_type=way_type)
+    # C3 (4.3.1) Group March: a Marshal may lead any/all Unbesieged
+    # same-Locale Lords (an explicit player-chosen group_lord_ids — no
+    # greedy default). A Lieutenant's Lower Lord always moves with it.
+    from almoravid.effective import is_besieged as _isb_grp
+    group_req = list(action.get("group_lord_ids", []) or [])
+    if group_req:
+        _require(_is_marshal(lord_id, side),
+                 f"only a Marshal may lead a Group March (4.3.1); "
+                 f"{lord_id} is not a Marshal", code="not_marshal")
+        for gid in group_req:
+            _require(gid in state.lords and gid != lord_id,
+                     f"bad group member {gid!r}", code="bad_group")
+            g = state.lords[gid]
+            _require(g.side == side, f"{gid} not on {side}'s side",
+                     code="wrong_side")
+            _require(g.cylinder.kind == "locale"
+                     and g.cylinder.locale_id == from_loc,
+                     f"{gid} is not at {from_loc} with the Marshal (4.3.1)",
+                     code="not_same_locale")
+            _require(not _isb_grp(state, gid),
+                     f"{gid} is Besieged and cannot Group March (4.3.1)",
+                     code="besieged")
+    # The full moving set: the active Lord + the chosen group + every
+    # Lower Lord stacked under any mover (Lieutenants move their Lower
+    # Lord, 4.1.3/4.3.1).
+    moving = {lord_id, *group_req}
+    for mover in list(moving):
+        for l in state.lords.values():
+            if (l.lieutenant_of == mover and l.cylinder.kind == "locale"
+                    and l.cylinder.locale_id == from_loc):
+                moving.add(l.id)
+    moving_lords = sorted(moving)
+    # Shared Transport (4.3.2): Laden status uses the COMBINED assets.
+    laden = _group_laden(state, moving_lords, way_type=way_type)
     cost = 2 if laden else 1
     _require(state.meta.actions_remaining >= cost,
              f"March costs {cost} actions ({'Laden' if laden else 'Unladen'}), "
@@ -1467,25 +1523,15 @@ def _h_cmd_march(state, action):
                     f"christian Surprise (C6) at {target}: placed 2 Siege, "
                     f"forced Storm with Walls -1 pending")
 
-    # Execute March.
+    # Execute March: move the whole group (Marshal + chosen Lords +
+    # Lieutenant Lower Lords) together (4.3.1). On arrival at a
+    # Stronghold each Lord is outside walls by default.
     from almoravid.state import Cylinder
-    # Group March (4.3.1): Lower Lords stacked with this Lieutenant at
-    # the same Locale move along for the same action.
-    group_followers = [
-        l for l in state.lords.values()
-        if l.lieutenant_of == lord_id and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == from_loc
-    ]
-    lord.cylinder = Cylinder(kind="locale", locale_id=target)
-    for follower in group_followers:
-        follower.cylinder = Cylinder(kind="locale", locale_id=target)
-        follower.in_stronghold = False
-        follower.moved_fought = True
-    # On arrival at a Stronghold, Lord is outside walls by default
-    # (entering requires explicit action — to be defined in a later
-    # Phase 5 commit for stronghold-entry mechanics).
-    lord.in_stronghold = False
-    lord.moved_fought = True
+    for mid in moving_lords:
+        m = state.lords[mid]
+        m.cylinder = Cylinder(kind="locale", locale_id=target)
+        m.in_stronghold = False
+        m.moved_fought = True
     lord.first_march_used_this_card = True  # Pattern 3 per-card flag
     state.meta.actions_remaining -= cost
     _record(state, action,
