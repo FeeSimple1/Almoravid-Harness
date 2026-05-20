@@ -220,6 +220,10 @@ def _h_command_reveal(state: GameState, action: dict[str, Any]) -> dict[str, Any
         lord = state.lords[entry.lord_id]
         if lord.cylinder.kind != "locale":
             auto_pass = True
+        # Rule 4.2.3 / 4.1.3: a Lower Lord's own Command card is passed
+        # (he moves only when his Lieutenant activates).
+        elif lord.is_lieutenant and lord.lieutenant_of is not None:
+            auto_pass = True
 
     if auto_pass:
         # No actions taken — flip baton and check campaign end.
@@ -437,6 +441,8 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require_campaign_step(state, "end_campaign")
     # Clear plans (per-Campaign window — Pattern 13)
     state.decks.plan = {"christian": [], "muslim": []}
+    # Phase 7c: unstack all Lieutenants / Lower Lords (4.1.3).
+    _unstack_all_lieutenants(state)
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -1126,7 +1132,18 @@ def _h_cmd_march(state, action):
 
     # Execute March.
     from almoravid.state import Cylinder
+    # Group March (4.3.1): Lower Lords stacked with this Lieutenant at
+    # the same Locale move along for the same action.
+    group_followers = [
+        l for l in state.lords.values()
+        if l.lieutenant_of == lord_id and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == from_loc
+    ]
     lord.cylinder = Cylinder(kind="locale", locale_id=target)
+    for follower in group_followers:
+        follower.cylinder = Cylinder(kind="locale", locale_id=target)
+        follower.in_stronghold = False
+        follower.moved_fought = True
     # On arrival at a Stronghold, Lord is outside walls by default
     # (entering requires explicit action — to be defined in a later
     # Phase 5 commit for stronghold-entry mechanics).
@@ -2680,6 +2697,128 @@ def compute_victory(state) -> dict:
             "reason": state.score.victory_reason}
 
 
+
+# ---------------------------------------------------------------------------
+# Phase 7c: Lieutenants / Marshal / Group March (4.1.3, 4.3.1).
+# ---------------------------------------------------------------------------
+
+
+# Per-side Marshal (cannot be a Lieutenant / Lower Lord, rule 4.1.3).
+_MARSHALS = {"christian": "alfonso", "muslim": "yusuf"}
+
+
+def _is_marshal(lord_id: str, side: Side) -> bool:
+    return _MARSHALS.get(side) == lord_id
+
+
+def _h_designate_lieutenant(state, action):
+    """4.1.3 (Plan step): stack `lord_id` as a Lower Lord with
+    `commander_id` (its Lieutenant) at the same Locale.
+
+    Restrictions:
+      - both same side, both on the map at the same Locale;
+      - neither is the Marshal;
+      - the commander isn't itself a Lower Lord;
+      - a Lieutenant has at most one Lower Lord.
+    """
+    side = _require_side(action)
+    _require(state.meta.campaign_step == "plan",
+             "Lieutenants are designated during the Plan step (4.1.3)",
+             code="wrong_step")
+    lord_id = action.get("lord_id")
+    commander_id = action.get("commander_id")
+    _require(lord_id in state.lords and commander_id in state.lords,
+             "lord_id and commander_id required", code="bad_arg")
+    _require(lord_id != commander_id, "a Lord cannot be his own Lieutenant",
+             code="bad_arg")
+    lord = state.lords[lord_id]
+    cmd = state.lords[commander_id]
+    _require(lord.side == side and cmd.side == side,
+             "both Lords must be on the acting side", code="wrong_side")
+    _require(not _is_marshal(lord_id, side),
+             f"{lord_id} is the Marshal — cannot be a Lower Lord (4.1.3)",
+             code="marshal_cannot_subordinate")
+    _require(not _is_marshal(commander_id, side),
+             f"{commander_id} is the Marshal — cannot be a Lieutenant",
+             code="marshal_cannot_subordinate")
+    _require(lord.cylinder.kind == "locale"
+             and cmd.cylinder.kind == "locale"
+             and lord.cylinder.locale_id == cmd.cylinder.locale_id,
+             "both Lords must be at the same Locale", code="not_same_locale")
+    _require(cmd.lieutenant_of is None,
+             f"{commander_id} is itself a Lower Lord — cannot lead",
+             code="commander_is_subordinate")
+    existing = [l.id for l in state.lords.values()
+                if l.lieutenant_of == commander_id]
+    _require(not existing,
+             f"{commander_id} already has Lower Lord {existing}",
+             code="lieutenant_full")
+    lord.is_lieutenant = True
+    lord.lieutenant_of = commander_id
+    _record(state, action,
+            f"{side} designates {lord_id} as Lower Lord of {commander_id}")
+    return {"lower_lord": lord_id, "lieutenant": commander_id}
+
+
+def _h_toggle_lieutenant(state, action):
+    """C15 Alferez (capability): a Lord with Alferez may spend 1 Command
+    action to become, or stop being, a Lower Lord stacked on another
+    Christian Lord at the same Locale (rule 4.1.3 exception).
+
+    Args:
+      side, lord_id (must hold C15 cap), commander_id (to stack onto),
+      or mode='unstack' to detach.
+    """
+    from almoravid.capabilities import lord_has_capability
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    lord_id = state.meta.active_lord_id
+    _require(lord_id is not None, "no active Lord", code="no_active_lord")
+    _require(lord_has_capability(state, lord_id, "C15"),
+             f"{lord_id} lacks Alferez (C15)", code="no_alferez")
+    _require(state.meta.actions_remaining >= 1,
+             "toggle costs 1 Command action", code="not_enough_actions")
+    lord = state.lords[lord_id]
+    mode = action.get("mode", "stack")
+    if mode == "unstack":
+        lord.is_lieutenant = False
+        lord.lieutenant_of = None
+        state.meta.actions_remaining -= 1
+        _record(state, action, f"{lord_id} unstacks (Alferez)")
+        return {"unstacked": lord_id,
+                "actions_remaining": state.meta.actions_remaining}
+    commander_id = action.get("commander_id")
+    _require(commander_id in state.lords, "commander_id required",
+             code="bad_arg")
+    cmd = state.lords[commander_id]
+    _require(cmd.side == side and not _is_marshal(commander_id, side),
+             "invalid commander", code="bad_arg")
+    _require(lord.cylinder.kind == "locale"
+             and cmd.cylinder.kind == "locale"
+             and lord.cylinder.locale_id == cmd.cylinder.locale_id,
+             "must be at the same Locale", code="not_same_locale")
+    existing = [l.id for l in state.lords.values()
+                if l.lieutenant_of == commander_id]
+    _require(not existing, f"{commander_id} already has a Lower Lord",
+             code="lieutenant_full")
+    lord.is_lieutenant = True
+    lord.lieutenant_of = commander_id
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{lord_id} stacks as Lower Lord of {commander_id} (Alferez)")
+    return {"lower_lord": lord_id, "lieutenant": commander_id,
+            "actions_remaining": state.meta.actions_remaining}
+
+
+def _unstack_all_lieutenants(state) -> None:
+    """End-of-Campaign cleanup (4.1.3 / SoP 'Unstack Lieutenants and
+    Lower Lords')."""
+    for l in state.lords.values():
+        l.is_lieutenant = False
+        l.lieutenant_of = None
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -2704,4 +2843,6 @@ CAMPAIGN_HANDLERS = {
     "play_cluniacs": _h_play_cluniacs,
     "play_de_vivar_reconcile": _h_play_de_vivar_reconcile,
     "cmd_march_port_to_port": _h_cmd_march_port_to_port,
+    "designate_lieutenant": _h_designate_lieutenant,
+    "toggle_lieutenant": _h_toggle_lieutenant,
 }
