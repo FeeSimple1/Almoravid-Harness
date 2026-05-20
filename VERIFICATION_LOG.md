@@ -54,7 +54,7 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 - C4 Laden simplified: ignores transport-carrying, mishandles Cart-over-Pass-with-1-Prov as illegal vs legal-laden (4.3.2) — FIX.
 - C5 Avoid-Battle discard-to-Unladen + Spoils transfer (4.3.4) missing — FIX.
 - C6 Campaign-start Capability excess discard (4.0) missing — FIX.
-- C7 Plan: no per-Lord card cap 3/4 (1.9.2/4.1.1), no 5-Pass cap, accepts un-Mustered Lords — FIX (critical).
+- C7 Plan: no per-Lord card cap 3/4 (1.9.2/4.1.1), no 5-Pass cap, accepts un-Mustered Lords — FIXED 2026-05-20. _h_plan_add_card now enforces: (a) only Mustered (on-map) Lords' Command cards (code not_mustered); (b) per-Lord Command cap of 3 (4 for the side's Marshal) via _is_marshal (code lord_card_cap); (c) the five-Pass-cards-per-side limit (code pass_cap). The legal_moves Plan enumerator mirrors all three so enumerator/handler stay in lockstep (no illegal offers). Rule 5.2 is now also enforced at Campaign entry (both the Levy->Campaign transition in actions._advance_step_if_both_done and _h_begin_campaign): a side with no Mustered Lords loses immediately (it likewise cannot build a legal 7/8-card Plan with <=5 Pass). Test-harness note: the prior plan-padding idiom (1 command + 6-7 Pass) was illegal under the cap; added tests/_plan_helpers.legal_pad (pads <=5 Pass then minimum Command cards) and refactored 14 setup helpers + the inline test_campaign builders to build legal minimal Plans. Tests: tests/test_fix_c7_plan_caps.py (6).
 - C8 Lieutenant/Lower-Lord disband-orphan cleanup (4.1.3) — FIX (low).
 - C9 Lieutenant+Lower-Lord may not Withdraw into Castle (4.1.3 note) — FIX (low).
 

@@ -421,14 +421,23 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             from almoravid.campaign import _plan_target_size
             target = _plan_target_size(state)
             if len(plan) < target:
-                # Lords with cylinder on map can be planned;
-                # any Lord could in principle (rule 4.1 doesn't gate on
-                # location). Phase 3a offers the simplest variant:
-                # offer 'pass' entry plus one command entry per Lord
-                # currently on the map (most useful subset).
-                out.append({"type": "plan_add_card", "side": side, "plan_kind": "pass"})
+                # C7 (1.9.2/4.1.1): only Mustered (on-map) Lords' Command
+                # cards may be planned; each Lord has 3 cards (4 Marshal);
+                # and a side has only five Pass cards. Offer only LEGAL
+                # additions so the enumerator/handler stay in lockstep.
+                from almoravid.campaign import _is_marshal
+                pass_used = sum(1 for e in plan if e.kind == "pass")
+                if pass_used < 5:
+                    out.append({"type": "plan_add_card", "side": side,
+                                "plan_kind": "pass"})
                 for lid, lord in state.lords.items():
-                    if lord.side == side and lord.cylinder.kind == "locale":
+                    if not (lord.side == side
+                            and lord.cylinder.kind == "locale"):
+                        continue
+                    cap = 4 if _is_marshal(lid, side) else 3
+                    used = sum(1 for e in plan
+                               if e.kind == "command" and e.lord_id == lid)
+                    if used < cap:
                         out.append({"type": "plan_add_card", "side": side,
                                     "plan_kind": "command", "lord_id": lid})
             already_fin = (state.meta.plan_finalized_christian

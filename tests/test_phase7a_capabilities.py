@@ -12,6 +12,7 @@ from almoravid.battle import (
 )
 from almoravid.scenarios import load_scenario
 from almoravid.state import CardInPlay, Cylinder
+from tests._plan_helpers import legal_pad
 
 
 def _give_this_lord_cap(s, lord_id, card_id):
@@ -73,12 +74,8 @@ def test_command_reveal_uses_effective_command() -> None:
     base = s.lords["alfonso"].command_rating
     apply_action(s, {"type": "plan_add_card", "side": side,
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": side,
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": other,
-                         "plan_kind": "pass"})
+    legal_pad(s, side)
+    legal_pad(s, other)
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     for _ in range(20):

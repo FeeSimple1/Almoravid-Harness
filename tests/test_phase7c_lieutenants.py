@@ -7,6 +7,7 @@ import pytest
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests._plan_helpers import legal_pad
 
 
 def _two_christian_lords_same_locale(s, loc="leon"):
@@ -130,12 +131,8 @@ def test_lower_lord_command_card_auto_passes() -> None:
                      "plan_kind": "command", "lord_id": cmd})
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": sub})
-    for _ in range(5):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": other,
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, other)
     # Designate sub as Lower Lord of cmd during the Plan step (before
     # finalizing — the step leaves 'plan' once both sides finalize).
     apply_action(s, {"type": "designate_lieutenant", "side": "christian",

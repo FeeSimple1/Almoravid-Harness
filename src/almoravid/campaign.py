@@ -82,6 +82,19 @@ def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(state.meta.phase == "campaign",
              f"begin_campaign requires phase=campaign (got {state.meta.phase})",
              code="bad_phase")
+    # Rule 5.2: a side with no Mustered Lords on the map at any moment
+    # during the Campaign loses immediately (the other side wins). A
+    # side with zero Mustered Lords also cannot legally build a Plan
+    # (it has no Command cards and only five Pass cards < the 7/8 target,
+    # 4.1.1/1.9.2), so check here at Campaign entry before the Plan step.
+    cw = check_campaign_victory(state)
+    if cw is not None:
+        verdict = compute_victory(state)
+        state.meta.phase = "ended"
+        _record(state, action,
+                f"Begin Campaign: rule 5.2 — {cw} wins (opponent has no "
+                f"Mustered Lords on the map)")
+        return {"phase": "ended", "victory": verdict}
     state.meta.campaign_step = "plan"
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
@@ -129,11 +142,33 @@ def _h_plan_add_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]
         _require(lord.side == side,
                  f"{lord_id} is not on {side}'s side",
                  code="wrong_side")
+        # C7 (4.1.1): only currently Mustered Lords' Command cards may
+        # be selected. Mustered == cylinder on a map Locale.
+        _require(lord.cylinder.kind == "locale",
+                 f"{lord_id} is not Mustered (on the map); only Mustered "
+                 f"Lords' Command cards may be planned (4.1.1)",
+                 code="not_mustered")
     plan = state.decks.plan.setdefault(side, [])
     target = _plan_target_size(state)
     _require(len(plan) < target,
              f"plan already at target size {target}",
              code="plan_full")
+    if kind == "command":
+        # C7 (1.9.2/4.1.1): each Lord has only three Command cards
+        # (four if a Marshal), so a Lord may appear at most that many
+        # times in a Plan.
+        cap = 4 if _is_marshal(lord_id, side) else 3
+        used = sum(1 for e in plan
+                   if e.kind == "command" and e.lord_id == lord_id)
+        _require(used < cap,
+                 f"{lord_id} already has {used} Command cards in the Plan "
+                 f"(max {cap}; 1.9.2)", code="lord_card_cap")
+    else:
+        # C7 (1.9.2): each side has only FIVE Pass cards.
+        used_pass = sum(1 for e in plan if e.kind == "pass")
+        _require(used_pass < 5,
+                 f"{side} already has {used_pass} Pass cards in the Plan "
+                 f"(max 5; 1.9.2)", code="pass_cap")
     plan.append(PlanEntry(kind=kind, lord_id=lord_id if kind == "command" else None))
     _record(state, action, f"{side} adds {kind} card"
             + (f" for {lord_id}" if lord_id else ""))

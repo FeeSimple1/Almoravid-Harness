@@ -8,6 +8,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.campaign import PLAN_SIZE_BY_SEASON, _plan_target_size
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import list_scenarios, load_scenario
+from tests._plan_helpers import legal_pad
 
 
 def _drive_to_campaign(s) -> None:
@@ -44,9 +45,7 @@ def test_plan_add_card_rejects_overfull_plan() -> None:
     apply_action(s, {"type": "begin_campaign"})
     target = _plan_target_size(s)
     # Fill Christian plan to target with pass cards
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "plan_add_card", "side": "christian",
                          "plan_kind": "pass"})
@@ -80,11 +79,8 @@ def test_both_finalize_advances_to_activation() -> None:
     _drive_to_campaign(s)
     apply_action(s, {"type": "begin_campaign"})
     target = _plan_target_size(s)
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     # After only one side finalizes, still in plan step
     assert s.meta.campaign_step == "plan"
@@ -99,11 +95,8 @@ def test_command_reveal_pass_card_auto_passes() -> None:
     _drive_to_campaign(s)
     apply_action(s, {"type": "begin_campaign"})
     target = _plan_target_size(s)
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     r = apply_action(s, {"type": "command_reveal", "side": "christian"})
@@ -121,12 +114,8 @@ def test_command_reveal_active_lord_with_actions() -> None:
     # Christian plans Alfonso command first, then 6 passes
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(target - 1):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     r = apply_action(s, {"type": "command_reveal", "side": "christian"})
@@ -143,12 +132,8 @@ def test_cmd_pass_consumes_action() -> None:
     target = _plan_target_size(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(target - 1):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     apply_action(s, {"type": "command_reveal", "side": "christian"})
@@ -170,12 +155,8 @@ def test_end_card_clears_per_card_flags() -> None:
     target = _plan_target_size(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(target - 1):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     apply_action(s, {"type": "command_reveal", "side": "christian"})
@@ -189,19 +170,20 @@ def test_end_campaign_advances_calendar_and_returns_to_levy() -> None:
     _drive_to_campaign(s)
     apply_action(s, {"type": "begin_campaign"})
     target = _plan_target_size(s)
-    for _ in range(target):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     # Reveal all pass cards
-    for _ in range(target * 2):
+    for _ in range(target * 6):
         if s.meta.campaign_step != "activation":
             break
-        apply_action(s, {"type": "command_reveal",
-                         "side": s.meta.active_player})
+        if s.meta.active_lord_id is not None:
+            apply_action(s, {"type": "end_card",
+                             "side": s.meta.active_player})
+        else:
+            apply_action(s, {"type": "command_reveal",
+                             "side": s.meta.active_player})
     assert s.meta.campaign_step == "end_campaign"
     prev_box = s.calendar.current_box
     apply_action(s, {"type": "end_campaign"})

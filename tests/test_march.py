@@ -17,6 +17,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests._plan_helpers import legal_pad
 
 
 def _setup_alfonso_active(seed: int = 1):
@@ -29,12 +30,8 @@ def _setup_alfonso_active(seed: int = 1):
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     apply_action(s, {"type": "command_reveal", "side": "christian"})
@@ -53,12 +50,8 @@ def test_march_unladen_costs_one_action() -> None:
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alvar_fanez"})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     apply_action(s, {"type": "command_reveal", "side": "christian"})

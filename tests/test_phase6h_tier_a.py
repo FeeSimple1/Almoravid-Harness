@@ -8,6 +8,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.events import resolve_event
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests._plan_helpers import legal_pad
 
 
 # ---------------------------------------------------------------------------
@@ -28,12 +29,8 @@ def _setup_active_lord(scenario, lord_id, locale_id, seed=11):
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     apply_action(s, {"type": "plan_add_card", "side": side,
                      "plan_kind": "command", "lord_id": lord_id})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": side,
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": other,
-                         "plan_kind": "pass"})
+    legal_pad(s, side)
+    legal_pad(s, other)
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     for _ in range(20):

@@ -174,6 +174,13 @@ def _advance_step_if_both_done(state: GameState) -> None:
         state.meta.first_levy_done = True
         state.meta.muster_banned_this_levy_lord_ids = []  # Phase 6d
         state.meta.active_player = ACTOR_ORDER[0]
+        # Rule 5.2: entering the Campaign, a side with no Mustered Lords
+        # on the map loses immediately (it also could not legally build a
+        # Plan, 4.1.1/1.9.2). Check at this Levy->Campaign boundary.
+        from almoravid.campaign import check_campaign_victory, compute_victory
+        if check_campaign_victory(state) is not None:
+            compute_victory(state)
+            state.meta.phase = "ended"
 
 
 def _record(state: GameState, action: dict[str, Any], summary: str) -> None:

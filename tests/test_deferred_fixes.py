@@ -7,6 +7,7 @@ import pytest
 from almoravid.actions import _shift_service_left, apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
+from tests._plan_helpers import legal_pad
 
 
 def _replace_service(s, lord_id: str, box: int) -> None:
@@ -57,12 +58,8 @@ def test_enforcing_parias_shifts_taifa_lord_service() -> None:
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alvar_fanez"})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     # Reveal until alvar_fanez is active
@@ -127,12 +124,8 @@ def test_fpd_auto_disband_at_service_limit() -> None:
         apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
-    for _ in range(6):
-        apply_action(s, {"type": "plan_add_card", "side": "christian",
-                         "plan_kind": "pass"})
-    for _ in range(7):
-        apply_action(s, {"type": "plan_add_card", "side": "muslim",
-                         "plan_kind": "pass"})
+    legal_pad(s, "christian")
+    legal_pad(s, "muslim")
     apply_action(s, {"type": "finalize_plan", "side": "christian"})
     apply_action(s, {"type": "finalize_plan", "side": "muslim"})
     apply_action(s, {"type": "command_reveal", "side": "christian"})
