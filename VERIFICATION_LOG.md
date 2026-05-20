@@ -67,17 +67,17 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 - B6 Relief Sally array geometry (4.4.1) simplified — FIX.
 
 ### Siege/Storm/Sally (§4.5)
-- S1 Siegeworks adds +2 markers; rule = +1 max 4 (4.5.1) — FIX (critical).
-- S2 Surrender/Siegeworks order inverted; Surrender counts post-placement markers (4.5.1) — FIX (critical).
-- S3 Garrison never Strikes in Storm (4.5.2) — FIX (critical).
-- S4 Storm round-cap defaults to 4 not Siege-marker count in normal path (4.5.2) — FIX (critical).
-- S5 Storm Sack: no Lord removal, no Lord-Spoils, no Stronghold-Spoils (4.5.2) — FIX (critical).
-- S6 Surrender Ravaged count: whole-Taifa uncapped vs locale max-1 (4.5.1) — FIX.
-- S7 Storm attacker absorbs with Armored units first (4.5.2) — FIX.
-- S8 6-Melee cap per-step vs per-Lord (4.5.2) — FIX.
-- S9 Sally defenders' Siegeworks-as-Walls missing (4.5.3) — FIX.
-- S10 Storm Concede (attacker, after Round 1) (4.5.2) — FIX.
-- S11 Storm Array/Front<=Capacity/Reserve (4.5.2) — FIX.
+- S1 Siegeworks adds +2 markers; rule = +1 max 4 (4.5.1) — FIXED (prior session): cmd_siege Siegeworks +1 (max 4), capacity-gated. Tests: test_fix_siege_451.py.
+- S2 Surrender/Siegeworks order inverted (4.5.1) — FIXED (prior session): Surrender rolled FIRST vs existing markers, then Siegeworks +1. Tests: test_fix_siege_451.py.
+- S3 Garrison never Strikes in Storm (4.5.2) — FIXED (prior session): Garrison MaA crossbows + Militia bowmen + melee strike rows in Storm. Tests: test_fix_garrison_strikes.py.
+- S4 Storm round-cap (4.5.2) — FIXED (prior session): max_rounds = besieger Siege-marker count at the Locale. Tests: test_storm_walls_and_cap.py.
+- S5 Storm Sack (4.5.2) — FIXED (prior session): losing Defenders permanently removed + Lord Spoils + Stronghold Spoils distributed; Conquest applied. Tests: test_fix_storm_sack.py.
+- S6 Surrender Ravaged count (4.5.1) — FIXED (prior session): Ravaged bonus is the per-Locale flag (+1 if this Locale ravaged by besieger color), not whole-Taifa. Tests: test_fix_siege_451.py.
+- S7 Storm attacker Armored-first absorption (4.5.2) — FIXED (prior session): Storm attacker forced absorb_policy='armored_first'. Tests: test_absorption_policy.py.
+- S8 6-Melee cap per-step vs per-Lord (4.5.2) — PARTIAL. battle.py caps the POOLED side melee at 6; rule = each Lord adds <=6 (so a multi-Lord Storm should allow up to 6*N). A faithful per-Lord cap needs per-Lord Storm strike computation, which is coupled to S11 (Storm Array: Front/Reserve/Capacity). Tracked with S11 as the FIX-B per-Lord Storm-resolver refactor.
+- S9 Sally defenders' Siegeworks-as-Walls (4.5.3) — PENDING (FIX-B).
+- S10 Storm Concede — attacker-only, start of each Round after the first (4.5.2) — PENDING (FIX-B). Needs a per-Storm Attacker concede policy/parameter since combat resolves atomically.
+- S11 Storm Array: Front begins with <=1 Lord (Attacker=Active Lord), others Reserve; Front never exceeds Stronghold Capacity; Reposition adds one Lord/Round; all-Front-Routed forces a Reserve up (4.5.2) — PENDING (FIX-B). The Storm resolver currently pools all forces with no Front/Reserve distinction; this is the core FIX-B refactor (carries S8 per-Lord cap with it).
 
 ### Taifa / Conquest / Victory (§1.4, 5)
 - T1 Sevilla 3x VP weighting (Reconquista 9 / Parias 3) missing (1.4.2/5.1) — FIX (critical).
