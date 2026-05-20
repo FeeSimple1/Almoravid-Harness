@@ -35,6 +35,15 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.extend(_march_response_moves(state))
         return moves
 
+    # C1 (4.3.5): after a Withdraw, the Active side must choose Besiege
+    # or Bypass before any other action.
+    if (state.pending is not None
+            and state.pending.kind == "besiege_or_bypass"):
+        side = state.pending.waiting_on
+        moves.append({"type": "respond_besiege", "side": side})
+        moves.append({"type": "respond_bypass", "side": side})
+        return moves
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.

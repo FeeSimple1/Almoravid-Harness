@@ -2726,9 +2726,110 @@ def _h_respond_withdraw(state, action):
     _record(state, action,
             f"{side} withdraws inside {locale_id} Stronghold "
             f"({payload['defender_lord_ids']})")
+    # C1 (4.3.5): the Active (Marching) side now has Lord(s) outside an
+    # Enemy Stronghold that just had Enemy Lords Withdraw inside and is
+    # not yet Besieged or Bypassed — it MUST immediately choose Besiege
+    # or Bypass before continuing. Set that pending decision (on the
+    # Active side); otherwise restore control normally.
+    active_lord_id = payload.get("active_lord_id")
+    if _set_besiege_or_bypass_pending(state, locale_id, active_side,
+                                      active_lord_id):
+        return {"withdrew_to_stronghold": locale_id,
+                "lord_ids": payload["defender_lord_ids"],
+                "besiege_or_bypass_pending": True}
     _clear_approach_pending(state, active_side)
     return {"withdrew_to_stronghold": locale_id,
             "lord_ids": payload["defender_lord_ids"]}
+
+
+def _set_besiege_or_bypass_pending(state, locale_id: str, active_side: Side,
+                                   active_lord_id) -> bool:
+    """4.3.5: if `active_side` has Lord(s) outside the Enemy Stronghold
+    at `locale_id`, that Stronghold is not already Besieged/Bypassed by
+    that side, and Enemy Lords are inside it, set a `besiege_or_bypass`
+    pending decision (waiting on the Active side) and return True."""
+    from almoravid.state import PendingDecision
+    loc = state.locales.get(locale_id)
+    if loc is None or loc.base_type == "region":
+        return False
+    other = _other(active_side)
+    # Enemy Lords inside the Stronghold here?
+    enemy_inside = any(
+        l.side == other and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id and l.in_stronghold
+        for l in state.lords.values())
+    if not enemy_inside:
+        return False
+    # Active-side Lord(s) outside the Stronghold here?
+    ours_outside = [
+        l.id for l in state.lords.values()
+        if l.side == active_side and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id and not l.in_stronghold]
+    if not ours_outside:
+        return False
+    # Already Besieged or Bypassed by this side?
+    if active_side == "christian":
+        already = loc.siege_yellow > 0 or loc.bypass_yellow
+    else:
+        already = loc.siege_green > 0 or loc.bypass_green
+    if already:
+        return False
+    state.pending = PendingDecision(
+        kind="besiege_or_bypass",
+        waiting_on=active_side,
+        payload={"locale_id": locale_id, "active_side": active_side,
+                 "active_lord_id": active_lord_id,
+                 "lord_ids": ours_outside})
+    state.meta.active_player = active_side
+    return True
+
+
+def _h_respond_besiege(state, action):
+    """4.3.5 Besiege: place one Siege marker of the Active side's color
+    on the Enemy Stronghold, skip any remaining actions on this card,
+    and proceed to Feed/Pay/Disband (the card ends)."""
+    side = _require_side(action)
+    pd = _require_pending(state, "besiege_or_bypass", side)
+    locale_id = pd.payload["locale_id"]
+    loc = state.locales[locale_id]
+    if side == "christian":
+        loc.siege_yellow += 1
+    else:
+        loc.siege_green += 1
+    state.pending = None
+    state.meta.active_player = side
+    # Skip remaining actions -> Feed/Pay/Disband (4.3.5).
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} Besieges {locale_id} (4.3.5): +1 Siege marker, "
+            f"card ends -> Feed/Pay/Disband")
+    return {"besieged": locale_id,
+            "siege_marker": "siege_yellow" if side == "christian"
+            else "siege_green"}
+
+
+def _h_respond_bypass(state, action):
+    """4.3.5 Bypass: place a Bypass marker of the Active side's color on
+    the Lord(s) outside and continue any remaining actions on the card
+    without leaving the Locale."""
+    side = _require_side(action)
+    pd = _require_pending(state, "besiege_or_bypass", side)
+    locale_id = pd.payload["locale_id"]
+    loc = state.locales[locale_id]
+    if side == "christian":
+        loc.bypass_yellow = True
+    else:
+        loc.bypass_green = True
+    state.pending = None
+    state.meta.active_player = side
+    # Card continues with whatever actions remain (4.3.5 / 4.3.6).
+    _record(state, action,
+            f"{side} Bypasses {locale_id} (4.3.5): Bypass marker placed, "
+            f"card continues ({state.meta.actions_remaining} actions left)")
+    return {"bypassed": locale_id,
+            "bypass_marker": "bypass_yellow" if side == "christian"
+            else "bypass_green",
+            "actions_remaining": state.meta.actions_remaining}
 
 
 def _h_respond_stand_battle(state, action):
@@ -3436,6 +3537,8 @@ CAMPAIGN_HANDLERS = {
     "respond_avoid_battle": _h_respond_avoid_battle,
     "respond_withdraw": _h_respond_withdraw,
     "respond_stand_battle": _h_respond_stand_battle,
+    "respond_besiege": _h_respond_besiege,
+    "respond_bypass": _h_respond_bypass,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
     "play_de_vivar_reconcile": _h_play_de_vivar_reconcile,

@@ -48,7 +48,7 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 - L13 AoW draw: Capability-deploy (3.1.2) vs Event-implement (3.1.3) not modeled; pending_draw dumped — FIX.
 
 ### Campaign / March (§4.0-4.3)
-- C1 Besiege-or-Bypass mandatory choice after Withdraw (4.3.5) missing; Bypass markers never created — FIX (critical).
+- C1 Besiege-or-Bypass mandatory choice after Withdraw (4.3.5); Bypass markers never created — FIXED 2026-05-20. After a Withdraw (_h_respond_withdraw), _set_besiege_or_bypass_pending fires a `besiege_or_bypass` PendingDecision (waiting on the Active/Marching side) whenever that side has Lord(s) outside an Enemy Stronghold that is not already Besieged/Bypassed by it and Enemy Lords have just Withdrawn inside. Two handlers: respond_besiege places one Siege marker of the Active side's color (siege_yellow/green), zeroes actions_remaining (skip to Feed/Pay/Disband); respond_bypass sets the Active side's Bypass flag (bypass_yellow/green) and continues the card. The legal_moves enumerator gates on the pending kind and offers exactly {respond_besiege, respond_bypass}. Tests: tests/test_fix_c1_besiege_bypass.py (4). RESIDUAL (C1b): the same Besiege-or-Bypass trigger after a Lord Withdraws into a Stronghold following a BATTLE loss is not yet wired (the Battle path ends the card immediately); the Approach->Withdraw path — the common case — is covered.
 - C2 Approach cannot partition defenders (avoid some / withdraw some / fight rest) (4.3.4) — FIX.
 - C3 Marshal Group March (4.3.1) unimplemented (only Lieutenant Lower-Lord moves) — FIX.
 - C4 Laden simplified: ignores transport-carrying, mishandles Cart-over-Pass-with-1-Prov as illegal vs legal-laden (4.3.2) — FIX.
