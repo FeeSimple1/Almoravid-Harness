@@ -1387,6 +1387,51 @@ def _consume_camp_attack(
 # ---------------------------------------------------------------------------
 
 
+def _transfer_retreat_spoils(
+    state: GameState,
+    lord,
+    fate: str,
+    conceded: bool,
+    winner_lord_ids: list[str],
+) -> dict[str, int]:
+    """Rule 4.4.3 Spoils-on-Retreat. Move the losing Lord's Assets to
+    the winning Lords (round-robin), per fate:
+      - Withdrew: nothing.
+      - Retreated WITHOUT having Conceded, or permanently Removed:
+        ALL Assets transfer.
+      - Conceded then Retreated: all Loot AND excess Provender (Prov
+        beyond Transport capacity, rule 4.3.2) transfer; the rest stays.
+    Returns the transferred-Asset dict.
+    """
+    if fate == "withdraw" or not winner_lord_ids:
+        return {}
+    take: dict[str, int] = {}
+    if fate == "removed" or (fate == "retreat" and not conceded):
+        # All Assets.
+        for atype, n in list(lord.assets.items()):
+            if n > 0:
+                take[atype] = n
+        lord.assets = {}
+    elif fate == "retreat" and conceded:
+        # Loot + excess Provender only.
+        loot = lord.assets.get("loot", 0)
+        if loot > 0:
+            take["loot"] = loot
+            lord.assets.pop("loot", None)
+        transport = lord.assets.get("cart", 0) + lord.assets.get("mule", 0)
+        prov = lord.assets.get("prov", 0)
+        excess = max(0, prov - transport)
+        if excess > 0:
+            take["prov"] = excess
+            lord.assets["prov"] = prov - excess
+            if lord.assets["prov"] == 0:
+                lord.assets.pop("prov", None)
+    if take:
+        from almoravid.battle import distribute_spoils_round_robin
+        distribute_spoils_round_robin(state, winner_lord_ids, take)
+    return take
+
+
 def apply_retreat_aftermath(
     state: GameState,
     result: BattleResult,
@@ -1463,6 +1508,23 @@ def apply_retreat_aftermath(
     if battle_locale is None:
         return summary
 
+    # Phase 7f: winner-side Lords at the Battle Locale receive Spoils
+    # (rule 4.4.3). The losing side conceded iff its BattleSide flag
+    # is still set at Battle end (Concede ends the Battle that Round).
+    winner_side_obj = (result.attacker
+                       if result.winner == result.attacker.side
+                       else result.defender)
+    winner_lord_ids = [
+        wid for wid in winner_side_obj.lord_ids
+        if state.lords.get(wid) is not None
+        and state.lords[wid].cylinder.kind == "locale"
+        and state.lords[wid].cylinder.locale_id == battle_locale
+    ]
+    loser_conceded = bool(loser_side_obj.conceded)
+    if loser_conceded:
+        summary["pursuit"] = {"pursuer": winner_side_obj.side,
+                              "conceder": loser_side_obj.side}
+
     loc = state.locales[battle_locale]
     has_stronghold = loc.base_type != "region"
     if has_stronghold:
@@ -1493,6 +1555,8 @@ def apply_retreat_aftermath(
             already_inside += 1
             entry["fate"] = "withdraw"
             entry["into_stronghold"] = battle_locale
+            entry["spoils_lost"] = _transfer_retreat_spoils(
+                state, lord, "withdraw", loser_conceded, winner_lord_ids)
             summary["losers"].append(entry)
             continue
 
@@ -1570,6 +1634,8 @@ def apply_retreat_aftermath(
                 entry["service_roll"] = d
                 entry["service_shift_boxes"] = shift
                 entry["new_service_box"] = new_box
+            entry["spoils_lost"] = _transfer_retreat_spoils(
+                state, lord, "retreat", loser_conceded, winner_lord_ids)
             summary["losers"].append(entry)
             continue
 
@@ -1580,6 +1646,10 @@ def apply_retreat_aftermath(
         # Withdraw capacity, friendly-Lord scans. Set cylinder.kind
         # explicitly to "removed" so the rest of the engine sees the
         # removal.
+        # Transfer Spoils BEFORE clearing the Lord's Assets (4.4.3):
+        # a permanently-removed Lord hands all Assets to the winner.
+        entry["spoils_lost"] = _transfer_retreat_spoils(
+            state, lord, "removed", loser_conceded, winner_lord_ids)
         for field_name in lord.cleanup_on_removal_fields:
             try:
                 setattr(lord, field_name,

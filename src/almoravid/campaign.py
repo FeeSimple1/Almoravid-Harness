@@ -2369,6 +2369,21 @@ def _h_respond_stand_battle(state, action):
         and l.cylinder.locale_id == locale_id
         and not l.in_stronghold
     ]
+    # Relief Sally (4.4.1, Phase 7f): if the Approaching side also has
+    # its own Besieged Lords inside a Stronghold at this Locale, they
+    # Sally out to join the Approach as relief attackers.
+    from almoravid.effective import is_besieged as _isb
+    relief_sally_ids = [
+        l.id for l in state.lords.values()
+        if l.side == active_side
+        and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id
+        and l.in_stronghold and _isb(state, l.id)
+    ]
+    for rid in relief_sally_ids:
+        if rid not in attacker_lord_ids:
+            attacker_lord_ids.append(rid)
+            state.lords[rid].in_stronghold = False  # Sallied out
     defender_lord_ids = list(payload["defender_lord_ids"])
     _require(attacker_lord_ids, "no attacker Lords at Battle locale",
              code="no_attacker")
