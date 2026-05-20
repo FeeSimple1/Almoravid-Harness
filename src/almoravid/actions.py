@@ -149,6 +149,11 @@ def _advance_step_if_both_done(state: GameState) -> None:
                 state.decks.discard.extend(cards)
             state.decks.pending_draw = {}
         state.meta.levy_step = LEVY_STEPS[idx + 1]
+        # FIX-A (3.5): reset Call-to-Arms per-Levy bookkeeping on entry.
+        if state.meta.levy_step == "call_to_arms":
+            state.meta.cta_option_used_christian = False
+            state.meta.cta_option_used_muslim = False
+            state.meta.cta_crusade_jihad_pending = False
         state.meta.active_player = ACTOR_ORDER[0]
     else:
         # End of Levy -> enter Campaign / plan directly. Auto-initializing
@@ -198,6 +203,9 @@ def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.meta.levy_step = "arts_of_war"
     state.meta.levy_step_completed_christian = False
     state.meta.levy_step_completed_muslim = False
+    state.meta.cta_option_used_christian = False
+    state.meta.cta_option_used_muslim = False
+    state.meta.cta_crusade_jihad_pending = False
     state.meta.active_player = ACTOR_ORDER[0]
     _record(state, action, "Begin Levy phase (3.1 arts_of_war)")
     return {"phase": "levy", "levy_step": "arts_of_war"}
@@ -371,6 +379,520 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "roll": roll, "seat": seat,
             "service_box": svc_box, "taifa_adjust": taifa_adjust,
             "fealty": lord.fealty}
+
+
+# ---------------------------------------------------------------------------
+# 3.5 Call to Arms (FIX-A / finding L2)
+#
+# After Lords already in the field Muster, each side may call MORE Lords
+# to war (3.5). The Christians act first (3.5.1), then the Muslims
+# (3.5.2). Each side may "do nothing OR ONE of the following" options;
+# `cta_option_used_{side}` enforces the one-option-per-side limit. The
+# only way to put Yusuf, Sir, Eudes, or either Rodrigo into play is via
+# this step (Rules p.14 "Important"). Per the absolute-faithfulness
+# rule, every player choice (which Stronghold to Seat at, which Lords
+# pay Coin, which Lord to Invite, Muster-vs-shift, Jihad target) is an
+# explicit action parameter — no greedy defaults.
+# ---------------------------------------------------------------------------
+
+_STRONGHOLD_TYPES = ("city", "fortress", "town", "castle")
+
+
+def _cta_is_ready(state: GameState, lord) -> bool:
+    """3.4.1 Ready: cylinder on the Calendar at or LEFT of the Levy
+    marker (box <= current_box). Off-left (box None) also counts."""
+    return (lord.cylinder.kind == "calendar"
+            and (lord.cylinder.box is None
+                 or lord.cylinder.box <= state.calendar.current_box))
+
+
+def _cta_require_turn(state: GameState, side: Side) -> None:
+    _require_levy_step(state, "call_to_arms")
+    _require_active(state, side)
+    used = (state.meta.cta_option_used_christian if side == "christian"
+            else state.meta.cta_option_used_muslim)
+    _require(not used,
+             f"{side} already took a Call to Arms option this Levy (3.5)",
+             code="cta_used")
+
+
+def _cta_finish_option(state: GameState, side: Side) -> None:
+    """Record that `side` used its single 3.5 option, ratify the step
+    for that side, and advance the baton. A side that takes ANY option
+    is then done with Call to Arms (it may not take a second)."""
+    if side == "christian":
+        state.meta.cta_option_used_christian = True
+    else:
+        state.meta.cta_option_used_muslim = True
+    _set_step_completed(state, side)
+    _advance_step_if_both_done(state)
+
+
+def _cta_locale_free_of_siege(state: GameState, locale_id: str) -> bool:
+    loc = state.locales[locale_id]
+    return loc.siege_yellow == 0 and loc.siege_green == 0
+
+
+def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any]:
+    """Automatically Muster `lord_id` at `seat` (no Fealty roll) per the
+    3.5 Call-to-Arms option that triggered it. Mirrors the success
+    branch of _h_muster_lord: place forces/assets from static data,
+    place the Service marker service_rating boxes ahead (cap 17), set
+    just_arrived. Taifa Lords adjust their Taifa to Independent (3.4.1).
+    """
+    from almoravid.state import Cylinder, ServiceMarker
+    lord = state.lords[lord_id]
+    lord.cylinder = Cylinder(kind="locale", locale_id=seat)
+    static = load_lords()["lords"][lord_id]
+    lord.forces = dict(static["forces"])
+    lord.assets = dict(static["assets"])
+    state.calendar.service_markers = [
+        s for s in state.calendar.service_markers
+        if not (s.lord_id == lord_id and s.vassal_id is None)
+    ]
+    svc_box = min(17, state.calendar.current_box + lord.service_rating)
+    state.calendar.service_markers.append(
+        ServiceMarker(lord_id=lord_id, box=svc_box))
+    lord.just_arrived_this_levy = True
+    taifa_adjust = None
+    if lord.is_taifa and lord.home_taifa:
+        from almoravid.campaign import adjust_taifa_status
+        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "independent")
+    return {"mustered_at": seat, "service_box": svc_box,
+            "taifa_adjust": taifa_adjust}
+
+
+def _cta_move_seat_marker(state: GameState, lord_id: str, seat: str) -> None:
+    """Move a movable Seat marker (Rodrigo's, or Yusuf/Sir's single
+    Seat) to `seat`, removing it from wherever it currently sits.
+    A Stronghold with that Seat becomes Friendly to the Lord's side
+    (1.8)."""
+    for loc in state.locales.values():
+        if lord_id in loc.seat_marker_lord_ids:
+            loc.seat_marker_lord_ids.remove(lord_id)
+    if lord_id not in state.locales[seat].seat_marker_lord_ids:
+        state.locales[seat].seat_marker_lord_ids.append(lord_id)
+
+
+def _cta_collect_payment(state: GameState, side: Side, payments: list,
+                         required: int, *, allow_taifa_box: bool) -> None:
+    """Validate and remove a total of `required` Coin per a list of
+    explicit payment entries (no greedy auto-pick).
+
+    Each entry is {"lord_id": <id>, "coin": <n>} (Coin from an
+    Unbesieged Lord of `side`) or, when allow_taifa_box, {"taifa_box":
+    <n>} (Coin from the Taifas box). Raises on any shortfall or
+    ineligible payer; mutates nothing until all checks pass.
+    """
+    from almoravid.effective import is_besieged
+    _require(isinstance(payments, list) and payments,
+             "payments list required (explicit Coin sources, 3.5)",
+             code="bad_arg")
+    total = 0
+    plan: list[tuple] = []  # (kind, lord_id_or_None, amount)
+    taifa_amt = 0
+    for entry in payments:
+        _require(isinstance(entry, dict), "payment entry must be a dict",
+                 code="bad_arg")
+        if "taifa_box" in entry:
+            _require(allow_taifa_box,
+                     "Taifas-box Coin not allowed for this option",
+                     code="bad_arg")
+            amt = int(entry["taifa_box"])
+            _require(amt >= 1, "taifa_box coin must be >= 1", code="bad_arg")
+            taifa_amt += amt
+            total += amt
+            plan.append(("taifa", None, amt))
+        else:
+            plid = entry.get("lord_id")
+            _require(plid in state.lords, "payment lord_id required (str)",
+                     code="bad_arg")
+            amt = int(entry.get("coin", 0))
+            _require(amt >= 1, "coin amount must be >= 1", code="bad_arg")
+            payer = state.lords[plid]
+            _require(payer.side == side,
+                     f"{plid} is not on {side}'s side (3.5 payment)",
+                     code="wrong_side")
+            _require(not is_besieged(state, plid),
+                     f"{plid} is Besieged — cannot contribute Coin (3.5)",
+                     code="besieged")
+            have = payer.assets.get("coin", 0)
+            _require(have >= amt,
+                     f"{plid} has {have} Coin, payment claims {amt}",
+                     code="no_coin")
+            total += amt
+            plan.append(("lord", plid, amt))
+    _require(total == required,
+             f"payments total {total} Coin, need exactly {required} (3.5)",
+             code="bad_payment_total")
+    _require(taifa_amt <= state.taifas_box_coin,
+             f"Taifas box has {state.taifas_box_coin} Coin, "
+             f"payment claims {taifa_amt}", code="no_coin")
+    # All validated — apply.
+    for kind, plid, amt in plan:
+        if kind == "taifa":
+            state.taifas_box_coin -= amt
+        else:
+            payer = state.lords[plid]
+            payer.assets["coin"] = payer.assets.get("coin", 0) - amt
+            if payer.assets["coin"] == 0:
+                payer.assets.pop("coin", None)
+
+
+# ----- 3.5.1 Christian options ---------------------------------------------
+
+
+def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.1 Reconcile with Rodrigo. Available if Rodrigo al-Sayyid
+    (green) is on the map OR Disband/combat has permanently removed any
+    Christian Lord (3.3.1, 4.4.4, 4.5.2).
+
+    Effect: add to the Taifas box (Muslim VP) one green 1VP Conquered
+    marker PLUS 1VP per Calendar box that al-Sayyid's Service marker is
+    ahead of the current Levy. Disband al-Sayyid (if on map) and set his
+    green cylinder + Seat aside; place Rodrigo Campeador's yellow
+    cylinder onto the Calendar two boxes ahead of the current Levy.
+    """
+    side = _require_side(action)
+    _require(side == "christian", "Reconcile is a Christian option (3.5.1)",
+             code="wrong_side")
+    _cta_require_turn(state, side)
+    from almoravid.state import Cylinder
+    sayyid = state.lords["rodrigo_al_sayyid"]
+    campeador = state.lords["rodrigo_campeador"]
+    sayyid_on_map = sayyid.cylinder.kind == "locale"
+    christian_removed = any(
+        l.side == "christian" and l.cylinder.kind == "removed"
+        for l in state.lords.values())
+    _require(sayyid_on_map or christian_removed,
+             "Reconcile needs al-Sayyid on the map OR a permanently "
+             "removed Christian Lord (3.5.1)", code="cta_unavailable")
+    # VP: 1 (Conquered marker) + boxes al-Sayyid's Service is ahead.
+    sm = next((s for s in state.calendar.service_markers
+               if s.lord_id == "rodrigo_al_sayyid" and s.vassal_id is None),
+              None)
+    ahead = max(0, sm.box - state.calendar.current_box) if sm is not None else 0
+    vp = 1.0 + float(ahead)
+    state.taifas_box_vp += vp
+    state.score.muslim += vp
+    # Disband al-Sayyid if on the map: clear his pieces, set cylinder
+    # aside, remove his Service marker and Seat marker.
+    if sayyid_on_map:
+        for field_name in sayyid.cleanup_on_removal_fields:
+            try:
+                setattr(sayyid, field_name,
+                        type(getattr(sayyid, field_name))())
+            except Exception:
+                pass
+    sayyid.cylinder = Cylinder(kind="set_aside")
+    state.calendar.service_markers = [
+        s for s in state.calendar.service_markers
+        if s.lord_id != "rodrigo_al_sayyid"]
+    if "rodrigo_al_sayyid" in state.calendar.off_left_service:
+        state.calendar.off_left_service.remove("rodrigo_al_sayyid")
+    for loc in state.locales.values():
+        if "rodrigo_al_sayyid" in loc.seat_marker_lord_ids:
+            loc.seat_marker_lord_ids.remove("rodrigo_al_sayyid")
+    # Place Campeador's yellow cylinder on the Calendar two boxes ahead.
+    box = min(16, state.calendar.current_box + 2)
+    campeador.cylinder = Cylinder(kind="calendar", box=box)
+    _record(state, action,
+            f"Christian Reconciles Rodrigo: +{vp:g} VP to Taifas box; "
+            f"al-Sayyid set aside; Campeador onto Calendar box {box}")
+    result = {"vp_to_taifas_box": vp, "campeador_calendar_box": box,
+              "sayyid_was_on_map": sayyid_on_map}
+    _cta_finish_option(state, side)
+    return result
+
+
+def _h_cta_employ_rodrigo(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.1 / 3.5.2 Employ Rodrigo. Christian employs Campeador (yellow,
+    pay 2 Coin from Unbesieged Christian Lords); Muslim employs al-Sayyid
+    (green, pay 3 Coin from the Taifas box and/or Unbesieged Muslim
+    Lords). The relevant Rodrigo must be Ready (3.4.1). Move his Seat
+    marker to a Friendly Stronghold free of Siege and auto-Muster him
+    there.
+
+    Args:
+      side, seat (locale_id), payments (list of Coin sources, 3.5).
+    """
+    side = _require_side(action)
+    _cta_require_turn(state, side)
+    if side == "christian":
+        rod_id, required, allow_taifa = "rodrigo_campeador", 2, False
+    else:
+        rod_id, required, allow_taifa = "rodrigo_al_sayyid", 3, True
+    rod = state.lords[rod_id]
+    _require(_cta_is_ready(state, rod),
+             f"{rod_id} is not Ready (3.4.1) — cannot Employ", code="not_ready")
+    from almoravid.effective import is_friendly_locale
+    seat = action.get("seat")
+    _require(seat in state.locales, "seat (locale_id) required", code="bad_arg")
+    loc = state.locales[seat]
+    _require(loc.base_type in _STRONGHOLD_TYPES,
+             f"{seat} is not a Stronghold (3.5)", code="not_stronghold")
+    _require(is_friendly_locale(state, seat, side),
+             f"{seat} is not Friendly to {side} (3.5)", code="not_friendly")
+    _require(_cta_locale_free_of_siege(state, seat),
+             f"{seat} is not free of Siege (3.5)", code="under_siege")
+    # Pay first (validates fully before any mutation), then place Seat
+    # and auto-Muster.
+    _cta_collect_payment(state, side, action.get("payments", []),
+                         required, allow_taifa_box=allow_taifa)
+    _cta_move_seat_marker(state, rod_id, seat)
+    muster = _cta_auto_muster(state, rod_id, seat)
+    _record(state, action,
+            f"{side} Employs {rod_id}: paid {required} Coin; Seat -> "
+            f"{seat}; auto-Mustered (Service box {muster['service_box']})")
+    result = {"lord_id": rod_id, "seat": seat, "coin_paid": required, **muster}
+    _cta_finish_option(state, side)
+    return result
+
+
+def _h_cta_call_crusade(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.1 Call for Crusade. If Eudes is Ready and Pamplona is
+    Christian-Friendly and free of Siege, automatically Muster Eudes at
+    Pamplona. The Muslim player MAY then add one Jihad marker (resolved
+    as a separate optional action during the Muslim 3.5.2 sub-turn —
+    flagged here via cta_crusade_jihad_pending).
+    """
+    side = _require_side(action)
+    _require(side == "christian", "Call for Crusade is Christian (3.5.1)",
+             code="wrong_side")
+    _cta_require_turn(state, side)
+    eudes = state.lords["eudes"]
+    _require(_cta_is_ready(state, eudes),
+             "Eudes is not Ready (3.4.1) — cannot Call for Crusade",
+             code="not_ready")
+    from almoravid.effective import is_friendly_locale
+    _require(is_friendly_locale(state, "pamplona", "christian"),
+             "Pamplona is not Christian-Friendly (3.5.1)", code="not_friendly")
+    _require(_cta_locale_free_of_siege(state, "pamplona"),
+             "Pamplona is not free of Siege (3.5.1)", code="under_siege")
+    muster = _cta_auto_muster(state, "eudes", "pamplona")
+    # Muslim MAY add one Jihad marker (1.4.4) — resolved on their turn.
+    state.meta.cta_crusade_jihad_pending = True
+    _record(state, action,
+            f"Christian Calls for Crusade: Eudes auto-Mustered at "
+            f"Pamplona (Service box {muster['service_box']}); Muslim may "
+            f"add one Jihad marker")
+    result = {"lord_id": "eudes", **muster, "muslim_jihad_pending": True}
+    _cta_finish_option(state, side)
+    return result
+
+
+# ----- 3.5.2 Muslim options ------------------------------------------------
+
+
+def _h_cta_invite_almoravids(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.2 Invite the Almoravids. If Yusuf or Sir is Ready, place the
+    single Seat marker for the chosen one at Algeciras and auto-Muster
+    him there. If Algeciras is not Muslim-Friendly or is Besieged, use
+    the nearest Port that is Friendly and free of Siege. Then, if Eudes
+    is not already on the Calendar or Mustered, place his cylinder onto
+    the Calendar two boxes ahead.
+
+    Args:
+      side ('muslim'), lord_id ('yusuf' | 'sir').
+    """
+    side = _require_side(action)
+    _require(side == "muslim", "Invite the Almoravids is Muslim (3.5.2)",
+             code="wrong_side")
+    _cta_require_turn(state, side)
+    lord_id = action.get("lord_id")
+    _require(lord_id in ("yusuf", "sir"),
+             "lord_id must be 'yusuf' or 'sir' (3.5.2)", code="bad_arg")
+    lord = state.lords[lord_id]
+    _require(_cta_is_ready(state, lord),
+             f"{lord_id} is not Ready (3.4.1) — cannot Invite", code="not_ready")
+    from almoravid.effective import is_friendly_locale
+    from almoravid.map import nearest_ports
+    # Algeciras unless not Friendly / Besieged, then nearest qualifying Port.
+    seat = None
+    if (is_friendly_locale(state, "algeciras", "muslim")
+            and _cta_locale_free_of_siege(state, "algeciras")):
+        seat = "algeciras"
+    else:
+        for port, _dist in nearest_ports("algeciras"):
+            if port == "algeciras":
+                continue
+            if (is_friendly_locale(state, port, "muslim")
+                    and _cta_locale_free_of_siege(state, port)):
+                seat = port
+                break
+    _require(seat is not None,
+             "no Muslim-Friendly Port free of Siege to Invite at (3.5.2)",
+             code="no_port")
+    _cta_move_seat_marker(state, lord_id, seat)
+    muster = _cta_auto_muster(state, lord_id, seat)
+    # Place Eudes onto the Calendar two boxes ahead if not already on
+    # the Calendar or Mustered.
+    eudes = state.lords["eudes"]
+    eudes_placed = None
+    if eudes.cylinder.kind not in ("calendar", "locale"):
+        from almoravid.state import Cylinder
+        box = min(16, state.calendar.current_box + 2)
+        eudes.cylinder = Cylinder(kind="calendar", box=box)
+        eudes_placed = box
+    _record(state, action,
+            f"Muslim Invites {lord_id} at {seat} (auto-Mustered, Service "
+            f"box {muster['service_box']})"
+            + (f"; Eudes onto Calendar box {eudes_placed}"
+               if eudes_placed is not None else ""))
+    result = {"lord_id": lord_id, "seat": seat,
+              "eudes_calendar_box": eudes_placed, **muster}
+    _cta_finish_option(state, side)
+    return result
+
+
+def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.2 Uphold the Dynasties. If both Yusuf and Sir are Ready
+    (cylinders on the Calendar at or left of current Levy), shift both
+    cylinders into the 40-Days box just right of the current Levy box,
+    to add one green 1VP Conquered marker to the Taifas box and one
+    Jihad marker to the map (if able, 1.4.4).
+
+    Args:
+      side ('muslim'), jihad_locale (locale_id; required if a Jihad-
+        eligible Locale exists).
+    """
+    side = _require_side(action)
+    _require(side == "muslim", "Uphold the Dynasties is Muslim (3.5.2)",
+             code="wrong_side")
+    _cta_require_turn(state, side)
+    yusuf = state.lords["yusuf"]
+    sir = state.lords["sir"]
+    for lid, l in (("yusuf", yusuf), ("sir", sir)):
+        _require(l.cylinder.kind == "calendar"
+                 and l.cylinder.box is not None
+                 and l.cylinder.box <= state.calendar.current_box,
+                 f"{lid} is not Ready on the Calendar (3.5.2)",
+                 code="not_ready")
+    from almoravid.events import _jihad_eligible_locales
+    from almoravid.state import Cylinder
+    box = min(16, state.calendar.current_box + 1)
+    yusuf.cylinder = Cylinder(kind="calendar", box=box)
+    sir.cylinder = Cylinder(kind="calendar", box=box)
+    state.taifas_box_vp += 1.0
+    state.score.muslim += 1.0
+    # One Jihad marker, if able.
+    eligible = _jihad_eligible_locales(state)
+    jihad_locale = action.get("jihad_locale")
+    placed = None
+    if eligible:
+        _require(jihad_locale in eligible,
+                 f"jihad_locale must be a Jihad-eligible Locale "
+                 f"{eligible} (3.5.2/1.4.4)", code="bad_jihad_target")
+        state.locales[jihad_locale].jihad_markers += 1
+        placed = jihad_locale
+    _record(state, action,
+            f"Muslim Upholds the Dynasties: Yusuf+Sir -> Calendar box "
+            f"{box}; +1 VP to Taifas box"
+            + (f"; +1 Jihad at {placed}" if placed else "; no Jihad (none able)"))
+    result = {"calendar_box": box, "vp_to_taifas_box": 1.0,
+              "jihad_locale": placed}
+    _cta_finish_option(state, side)
+    return result
+
+
+def _h_cta_call_emir(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.2 Call upon an Emir. If Yusuf is at a Taifa Lord's Seat
+    (1.5.1) that is neither Enemy nor Besieged, either Muster that Taifa
+    Lord from any box on the Calendar automatically (no Fealty roll) OR
+    shift that Taifa Lord's Service rightward by two boxes.
+
+    Args:
+      side ('muslim'), taifa_lord_id, mode ('muster' | 'shift'),
+      seat (locale_id; required for mode='muster').
+    """
+    side = _require_side(action)
+    _require(side == "muslim", "Call upon an Emir is Muslim (3.5.2)",
+             code="wrong_side")
+    _cta_require_turn(state, side)
+    from almoravid.effective import is_friendly_locale, is_besieged
+    yusuf = state.lords["yusuf"]
+    _require(yusuf.cylinder.kind == "locale",
+             "Yusuf is not on the map (3.5.2)", code="not_on_map")
+    here = yusuf.cylinder.locale_id
+    # Yusuf must be at a Taifa Lord's (printed) Seat.
+    taifa_lord_id = action.get("taifa_lord_id")
+    _require(taifa_lord_id in state.lords, "taifa_lord_id required",
+             code="bad_arg")
+    tlord = state.lords[taifa_lord_id]
+    _require(tlord.is_taifa, f"{taifa_lord_id} is not a Taifa Lord (3.5.2)",
+             code="not_taifa_lord")
+    _require(here in tlord.seats,
+             f"Yusuf ({here}) is not at {taifa_lord_id}'s Seat (3.5.2)",
+             code="not_at_seat")
+    # The Seat Locale must be neither Enemy nor Besieged.
+    _require(is_friendly_locale(state, here, "muslim"),
+             f"{here} is Enemy to the Muslims (3.5.2)", code="enemy_locale")
+    _require(loc_unbesieged := _cta_locale_free_of_siege(state, here),
+             f"{here} is Besieged (3.5.2)", code="under_siege")
+    mode = action.get("mode")
+    _require(mode in ("muster", "shift"),
+             "mode must be 'muster' or 'shift' (3.5.2)", code="bad_arg")
+    if mode == "muster":
+        _require(tlord.cylinder.kind == "calendar",
+                 f"{taifa_lord_id} is not on the Calendar to Muster (3.5.2)",
+                 code="not_on_calendar")
+        seat = action.get("seat")
+        free = _free_seats_for(state, taifa_lord_id)
+        _require(seat in free,
+                 f"seat must be a free Seat of {taifa_lord_id}: {free}",
+                 code="bad_seat")
+        muster = _cta_auto_muster(state, taifa_lord_id, seat)
+        _record(state, action,
+                f"Muslim Calls upon Emir {taifa_lord_id}: auto-Mustered at "
+                f"{seat} (Service box {muster['service_box']})")
+        result = {"taifa_lord_id": taifa_lord_id, "mode": "muster", **muster}
+    else:
+        # Shift only applies to a Taifa Lord already in play (has a
+        # Service marker); a not-yet-Mustered Lord uses 'muster'.
+        has_marker = any(sm.lord_id == taifa_lord_id and sm.vassal_id is None
+                         for sm in state.calendar.service_markers)
+        _require(has_marker,
+                 f"{taifa_lord_id} has no Service marker to shift — "
+                 f"use mode='muster' (3.5.2)", code="no_service_marker")
+        new_box = _shift_service_right(state, taifa_lord_id, boxes=2)
+        _record(state, action,
+                f"Muslim Calls upon Emir {taifa_lord_id}: Service shifted "
+                f"+2 -> box {new_box}")
+        result = {"taifa_lord_id": taifa_lord_id, "mode": "shift",
+                  "service_box": new_box}
+    _cta_finish_option(state, side)
+    return result
+
+
+def _h_cta_add_crusade_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """3.5.1 follow-up: after the Christians Call for Crusade, the
+    Muslim player MAY add one Jihad marker (1.4.4). This is a SEPARATE
+    optional action that does NOT consume the Muslim's own 3.5.2 option.
+
+    Args:
+      side ('muslim'), jihad_locale (locale_id, must be eligible).
+    """
+    side = _require_side(action)
+    _require(side == "muslim", "Crusade-Jihad add is Muslim", code="wrong_side")
+    _require_levy_step(state, "call_to_arms")
+    _require_active(state, side)
+    _require(state.meta.cta_crusade_jihad_pending,
+             "no pending Crusade Jihad to add (3.5.1)", code="no_pending")
+    from almoravid.events import _jihad_eligible_locales
+    eligible = _jihad_eligible_locales(state)
+    _require(bool(eligible), "no Jihad-eligible Locale (1.4.4)",
+             code="no_jihad_target")
+    jihad_locale = action.get("jihad_locale")
+    _require(jihad_locale in eligible,
+             f"jihad_locale must be eligible {eligible} (1.4.4)",
+             code="bad_jihad_target")
+    state.locales[jihad_locale].jihad_markers += 1
+    state.meta.cta_crusade_jihad_pending = False
+    _record(state, action,
+            f"Muslim adds one Crusade Jihad marker at {jihad_locale} (3.5.1)")
+    return {"jihad_locale": jihad_locale,
+            "new_jihad_total": state.locales[jihad_locale].jihad_markers}
+
 
 
 # ---------------------------------------------------------------------------
@@ -747,6 +1269,14 @@ _HANDLERS = {
     "disband_lord": _h_disband_lord,
     "levy_take_vassal": _h_levy_take_vassal,
     "levy_take_capability": _h_levy_take_capability,
+    # 3.5 Call to Arms (FIX-A / L2)
+    "cta_reconcile_rodrigo": _h_cta_reconcile_rodrigo,
+    "cta_employ_rodrigo": _h_cta_employ_rodrigo,
+    "cta_call_crusade": _h_cta_call_crusade,
+    "cta_invite_almoravids": _h_cta_invite_almoravids,
+    "cta_uphold_dynasties": _h_cta_uphold_dynasties,
+    "cta_call_emir": _h_cta_call_emir,
+    "cta_add_crusade_jihad": _h_cta_add_crusade_jihad,
 }
 
 # Campaign handlers registered in campaign.py. Imported lazily to avoid

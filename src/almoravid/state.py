@@ -125,6 +125,17 @@ class Meta(StrictModel):
     # Mustered Vassals get their own Calendar Service markers and Lord
     # Service shifts cascade to them.
     advanced_vassal_service: bool = False
+    # FIX-A (Call to Arms, 3.5): per-Levy bookkeeping for the
+    # call_to_arms step. Each side may take at most ONE Call-to-Arms
+    # option ("do nothing OR one of the following", 3.5.1-.2); these
+    # flags enforce that. cta_crusade_jihad_pending is set when the
+    # Christians play Call for Crusade (3.5.1) — the Muslim player MAY
+    # then add one Jihad marker (resolved as a separate optional action
+    # during the Muslim 3.5.2 sub-turn). All three reset when the Levy
+    # advances into the call_to_arms step (and at begin_levy).
+    cta_option_used_christian: bool = False
+    cta_option_used_muslim: bool = False
+    cta_crusade_jihad_pending: bool = False
     # Hit-absorption policy per side (rule 4.4.2 ASSIGN HITS — the
     # owner chooses which unit absorbs each Hit). Per-combat strategic
     # choice supplied by the controlling LLM: "weakest_first" (sacrifice

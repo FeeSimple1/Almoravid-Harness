@@ -483,6 +483,9 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.meta.levy_step = "arts_of_war"
     state.meta.levy_step_completed_christian = False
     state.meta.levy_step_completed_muslim = False
+    state.meta.cta_option_used_christian = False
+    state.meta.cta_option_used_muslim = False
+    state.meta.cta_crusade_jihad_pending = False
     state.meta.active_player = ACTOR_ORDER[0]
     state.meta.turn_index += 1
 

@@ -170,8 +170,139 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.5 Call to Arms. Phase 4 will populate (Yusuf/Sir/Eudes/Rodrigo)."""
-    return []
+    """3.5 Call to Arms (FIX-A / L2). Surfaces each currently-legal
+    option for `side` with a deterministic, directly-executable
+    parameter set; richer payment splits / seat choices are reachable
+    by supplying explicit parameters. Enforces the one-option-per-side
+    limit and the Christian-first / Muslim-then sequencing implicitly
+    via active_player + cta_option_used_{side}.
+    """
+    from almoravid.effective import is_friendly_locale, is_besieged
+    out: list[dict[str, Any]] = []
+    if state.meta.phase != "levy" or state.meta.levy_step != "call_to_arms":
+        return out
+    STRONG = ("city", "fortress", "town", "castle")
+
+    def free_of_siege(lid: str) -> bool:
+        loc = state.locales[lid]
+        return loc.siege_yellow == 0 and loc.siege_green == 0
+
+    def ready(lord) -> bool:
+        return (lord.cylinder.kind == "calendar"
+                and (lord.cylinder.box is None
+                     or lord.cylinder.box <= state.calendar.current_box))
+
+    def build_payment(payer_side, required, allow_taifa):
+        remaining = required
+        plan: list[dict[str, Any]] = []
+        if allow_taifa and state.taifas_box_coin > 0:
+            take = min(state.taifas_box_coin, remaining)
+            if take > 0:
+                plan.append({"taifa_box": take})
+                remaining -= take
+        for lid, lord in state.lords.items():
+            if remaining <= 0:
+                break
+            if lord.side != payer_side or lord.cylinder.kind != "locale":
+                continue
+            try:
+                if is_besieged(state, lid):
+                    continue
+            except Exception:
+                continue
+            c = lord.assets.get("coin", 0)
+            if c <= 0:
+                continue
+            take = min(c, remaining)
+            plan.append({"lord_id": lid, "coin": take})
+            remaining -= take
+        return plan if remaining <= 0 else None
+
+    # Muslim Crusade-Jihad add (3.5.1 follow-up) — independent of the
+    # one-option limit.
+    if side == "muslim" and state.meta.cta_crusade_jihad_pending:
+        from almoravid.events import _jihad_eligible_locales
+        for lid in _jihad_eligible_locales(state):
+            out.append({"type": "cta_add_crusade_jihad", "side": "muslim",
+                        "jihad_locale": lid})
+
+    used = (state.meta.cta_option_used_christian if side == "christian"
+            else state.meta.cta_option_used_muslim)
+    if used:
+        return out
+
+    if side == "christian":
+        sayyid = state.lords["rodrigo_al_sayyid"]
+        camp = state.lords["rodrigo_campeador"]
+        eudes = state.lords["eudes"]
+        christian_removed = any(
+            l.side == "christian" and l.cylinder.kind == "removed"
+            for l in state.lords.values())
+        if sayyid.cylinder.kind == "locale" or christian_removed:
+            out.append({"type": "cta_reconcile_rodrigo", "side": "christian"})
+        if ready(camp):
+            pay = build_payment("christian", 2, False)
+            if pay is not None:
+                for lid, loc in state.locales.items():
+                    if (loc.base_type in STRONG and free_of_siege(lid)
+                            and is_friendly_locale(state, lid, "christian")):
+                        out.append({"type": "cta_employ_rodrigo",
+                                    "side": "christian", "seat": lid,
+                                    "payments": pay})
+        if (ready(eudes) and free_of_siege("pamplona")
+                and is_friendly_locale(state, "pamplona", "christian")):
+            out.append({"type": "cta_call_crusade", "side": "christian"})
+        return out
+
+    # Muslim 3.5.2 options.
+    yusuf = state.lords["yusuf"]
+    sir = state.lords["sir"]
+    sayyid = state.lords["rodrigo_al_sayyid"]
+    if ready(sayyid):
+        pay = build_payment("muslim", 3, True)
+        if pay is not None:
+            for lid, loc in state.locales.items():
+                if (loc.base_type in STRONG and free_of_siege(lid)
+                        and is_friendly_locale(state, lid, "muslim")):
+                    out.append({"type": "cta_employ_rodrigo",
+                                "side": "muslim", "seat": lid,
+                                "payments": pay})
+    for cand in ("yusuf", "sir"):
+        if ready(state.lords[cand]):
+            out.append({"type": "cta_invite_almoravids", "side": "muslim",
+                        "lord_id": cand})
+
+    def on_cal_ready(lord) -> bool:
+        return (lord.cylinder.kind == "calendar"
+                and lord.cylinder.box is not None
+                and lord.cylinder.box <= state.calendar.current_box)
+
+    if on_cal_ready(yusuf) and on_cal_ready(sir):
+        from almoravid.events import _jihad_eligible_locales
+        elig = _jihad_eligible_locales(state)
+        if elig:
+            for lid in elig:
+                out.append({"type": "cta_uphold_dynasties", "side": "muslim",
+                            "jihad_locale": lid})
+        else:
+            out.append({"type": "cta_uphold_dynasties", "side": "muslim"})
+    if yusuf.cylinder.kind == "locale":
+        here = yusuf.cylinder.locale_id
+        if is_friendly_locale(state, here, "muslim") and free_of_siege(here):
+            marker_lords = {sm.lord_id for sm in state.calendar.service_markers
+                            if sm.vassal_id is None}
+            for tlid, tl in state.lords.items():
+                if not (tl.is_taifa and here in tl.seats):
+                    continue
+                if tl.cylinder.kind == "calendar":
+                    for seat in _free_seats_for(state, tlid):
+                        out.append({"type": "cta_call_emir", "side": "muslim",
+                                    "taifa_lord_id": tlid, "mode": "muster",
+                                    "seat": seat})
+                if tlid in marker_lords:
+                    out.append({"type": "cta_call_emir", "side": "muslim",
+                                "taifa_lord_id": tlid, "mode": "shift"})
+    return out
 
 
 def _free_seats_for(state: GameState, lord_id: str) -> list[str]:

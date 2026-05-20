@@ -851,6 +851,21 @@
           "title": "Advanced Vassal Service",
           "type": "boolean"
         },
+        "cta_option_used_christian": {
+          "default": false,
+          "title": "Cta Option Used Christian",
+          "type": "boolean"
+        },
+        "cta_option_used_muslim": {
+          "default": false,
+          "title": "Cta Option Used Muslim",
+          "type": "boolean"
+        },
+        "cta_crusade_jihad_pending": {
+          "default": false,
+          "title": "Cta Crusade Jihad Pending",
+          "type": "boolean"
+        },
         "absorption_policy": {
           "additionalProperties": {
             "type": "string"

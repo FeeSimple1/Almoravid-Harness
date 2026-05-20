@@ -106,3 +106,50 @@ def is_region(locale_id: str) -> bool:
     """True if the Locale is a Region (no Stronghold)."""
     loc = load_locales()["locales"].get(locale_id)
     return bool(loc and loc.get("base_type") == "region")
+
+
+def all_neighbors(locale_id: str) -> list[str]:
+    """All Locales adjacent to `locale_id` via ANY Way type.
+
+    Used by Call to Arms (3.5.2 Invite the Almoravids) to find the
+    nearest Port when Algeciras is unavailable. Deduplicated.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for w in load_ways()["ways"]:
+        other = None
+        if w["a"] == locale_id:
+            other = w["b"]
+        elif w["b"] == locale_id:
+            other = w["a"]
+        if other is not None and other not in seen:
+            seen.add(other)
+            out.append(other)
+    return out
+
+
+def nearest_ports(origin: str) -> list[tuple[str, int]]:
+    """Breadth-first list of (port_locale_id, hop_distance) sorted by
+    increasing hop distance from `origin`, over ALL Way types.
+
+    `origin` itself is included at distance 0 if it is a Port. Used by
+    3.5.2 Invite the Almoravids ("nearest Port that is Friendly and
+    free of Siege") — the caller filters by Friendly/Siege and picks
+    the first survivor. Ties at equal distance preserve insertion
+    (BFS) order; the caller resolves any remaining ambiguity.
+    """
+    from collections import deque
+    locales = load_locales()["locales"]
+    result: list[tuple[str, int]] = []
+    seen = {origin}
+    dq: deque[tuple[str, int]] = deque([(origin, 0)])
+    while dq:
+        node, dist = dq.popleft()
+        loc = locales.get(node)
+        if loc and loc.get("port"):
+            result.append((node, dist))
+        for nb in all_neighbors(node):
+            if nb not in seen:
+                seen.add(nb)
+                dq.append((nb, dist + 1))
+    return result

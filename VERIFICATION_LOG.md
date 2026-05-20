@@ -34,7 +34,7 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 
 ### Levy (§3)
 - L1 Muster never places/advances Service marker (3.4.1) — FIX (critical).
-- L2 Call to Arms (3.5) entirely unimplemented; Fealty-less Lords can't enter — FIX (critical).
+- L2 Call to Arms (3.5) entirely unimplemented; Fealty-less Lords can't enter — FIXED 2026-05-20. Implemented all 3.5.1/3.5.2 options as explicit actions (no greedy defaults): cta_reconcile_rodrigo, cta_employ_rodrigo (Campeador 2 Coin / al-Sayyid 3 Coin), cta_call_crusade (+ Muslim follow-up cta_add_crusade_jihad), cta_invite_almoravids, cta_uphold_dynasties, cta_call_emir (muster|shift). One-option-per-side enforced via Meta.cta_option_used_{side}; Christian-first/Muslim-then via active_player. Enumerator _call_to_arms_moves populated. Tests: tests/test_fix_call_to_arms.py (14). SUB-ITEM REMAINING: 3.5.3 Discard 'This Levy' events — deferred, NOT a silent simplification. Reason: this_levy_events currently mixes Hold-persistence cards (kept into Campaign by design) with deliberately-retained immediate events (e.g. C6 Surprise, consumed by a Campaign March trigger). A blanket discard would break those mechanics; a scope-aware discard needs a per-card 'This Levy'-only flag that the card data does not yet expose. Tracked as L2b.
 - L3 Pay shifts Service LEFT; rules shift RIGHT (3.2.1) — FIX (critical, inverted).
 - L4 Pay-with-Coin missing same-Locale/Taifa-Coin/multi-Coin targeting (3.2.1) — FIX.
 - L5 Pay-with-Loot (3.2.2) missing — FIX.
