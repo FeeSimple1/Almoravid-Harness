@@ -177,10 +177,15 @@ def _advance_step_if_both_done(state: GameState) -> None:
         # Rule 5.2: entering the Campaign, a side with no Mustered Lords
         # on the map loses immediately (it also could not legally build a
         # Plan, 4.1.1/1.9.2). Check at this Levy->Campaign boundary.
-        from almoravid.campaign import check_campaign_victory, compute_victory
+        from almoravid.campaign import (check_campaign_victory,
+                                          compute_victory,
+                                          _apply_capability_discard)
         if check_campaign_victory(state) is not None:
             compute_victory(state)
             state.meta.phase = "ended"
+        else:
+            # 4.0 CAPABILITY DISCARD (Christian first, then Muslim).
+            _apply_capability_discard(state)
 
 
 def _record(state: GameState, action: dict[str, Any], summary: str) -> None:
@@ -1285,6 +1290,24 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.raiders_used_this_card = False
     lord.routed_units = {}
     lord.crusader_markers = 0
+    # C8 (4.1.3): if a Lieutenant or his Lower Lord Disbands while the
+    # other does not, the remaining Lord becomes a normal Lord.
+    if lord.is_lieutenant:
+        # Disbanding Lord was the Lieutenant -> free its Lower Lord(s).
+        for other_l in state.lords.values():
+            if other_l.id != lord_id and other_l.lieutenant_of == lord_id:
+                other_l.lieutenant_of = None
+    if lord.lieutenant_of is not None:
+        # Disbanding Lord was a Lower Lord -> its Lieutenant, if it has
+        # no other Lower Lord, reverts to a normal Lord.
+        upper_id = lord.lieutenant_of
+        upper = state.lords.get(upper_id)
+        if upper is not None:
+            still_has_lower = any(
+                x.id != lord_id and x.lieutenant_of == upper_id
+                for x in state.lords.values())
+            if not still_has_lower:
+                upper.is_lieutenant = False
     lord.is_lieutenant = False
     lord.lieutenant_of = None
 

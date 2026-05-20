@@ -71,6 +71,30 @@ def _require_campaign_step(state: GameState, step: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _apply_capability_discard(state) -> dict:
+    """Rule 4.0 CAPABILITY DISCARD: at the start of each Campaign the
+    players (Christian first, then Muslim) must discard side-wide
+    Capability cards (those tucked under the map edge, state.decks.
+    board_edge) in excess of their number of Mustered (on-map) Lords.
+    'This Lord' Capabilities (on Lord mats) are NOT counted or
+    discarded. Excess is discarded deterministically from the end of
+    the board_edge list (a minor player choice that does not affect
+    totals).
+    """
+    out: dict = {}
+    for side in ("christian", "muslim"):
+        edge = state.decks.board_edge.get(side, [])
+        n_lords = sum(1 for l in state.lords.values()
+                      if l.side == side and l.cylinder.kind == "locale")
+        if len(edge) > n_lords:
+            excess = len(edge) - n_lords
+            discarded = edge[n_lords:]
+            state.decks.board_edge[side] = edge[:n_lords]
+            state.decks.discard.extend(discarded)
+            out[side] = {"discarded": discarded, "kept": n_lords}
+    return out
+
+
 def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Move from levy/done into campaign/plan (rule 4.1 entry).
 
@@ -95,6 +119,8 @@ def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any
                 f"Begin Campaign: rule 5.2 — {cw} wins (opponent has no "
                 f"Mustered Lords on the map)")
         return {"phase": "ended", "victory": verdict}
+    # 4.0 CAPABILITY DISCARD (Christian first, then Muslim).
+    _apply_capability_discard(state)
     state.meta.campaign_step = "plan"
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
@@ -2716,6 +2742,27 @@ def _h_respond_withdraw(state, action):
         and l.in_stronghold
     )
     incoming = len(payload["defender_lord_ids"])
+    # C9 (4.1.3): a Lieutenant and his Lower Lord always move together,
+    # so both must Withdraw together — and since they are two Lords they
+    # can never Withdraw into a Castle (Capacity 1; enforced by the
+    # capacity check below). Reject a Withdraw that would separate a
+    # Lt/Lower pair (one withdraws, the partner stays outside).
+    wset = set(payload["defender_lord_ids"])
+    for lid in payload["defender_lord_ids"]:
+        l = state.lords.get(lid)
+        if l is None:
+            continue
+        partner = None
+        if l.lieutenant_of is not None:
+            partner = l.lieutenant_of
+        elif l.is_lieutenant:
+            partner = next((x.id for x in state.lords.values()
+                            if x.lieutenant_of == lid), None)
+        if partner is not None and partner not in wset:
+            _require(False,
+                     f"{lid} and partner {partner} are a Lieutenant/Lower "
+                     f"pair and must Withdraw together (4.1.3)",
+                     code="lt_pair_split")
     _require(already_inside + incoming <= capacity,
              f"Siege Capacity {capacity} at {locale_id} would be "
              f"exceeded ({already_inside} inside + {incoming} withdrawing)",
