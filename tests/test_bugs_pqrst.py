@@ -133,7 +133,10 @@ def test_bug_p_c7_survives_cancel_until_engagement_end() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_bug_q_laden_defender_cannot_avoid() -> None:
+def test_bug_q_laden_defender_avoids_by_discarding_C5() -> None:
+    """C5 (4.3.4): a Laden defender Avoids by DISCARDING Loot and excess
+    Provender (to Unladen); the discarded Assets go to the Approaching
+    attacker as Spoils."""
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     s.pending = PendingDecision(
         kind="march_arrival_response", waiting_on="muslim",
@@ -145,20 +148,28 @@ def test_bug_q_laden_defender_cannot_avoid() -> None:
         },
     )
     s.meta.active_player = "muslim"
-    # Make Al-Mutamid heavily Laden (lots of Provender, no carts).
+    # Al-Mutamid heavily Laden (10 Provender, no Transport).
     s.lords["al_mutamid"].cylinder = Cylinder(kind="locale",
                                               locale_id="sevilla")
     s.lords["al_mutamid"].in_stronghold = False
-    s.lords["al_mutamid"].assets = {"prov": 10}  # way over transport
+    s.lords["al_mutamid"].assets = {"prov": 10}
     s.lords["al_mutamid"].forces = {"sergeants": 1}
-    with pytest.raises(IllegalAction) as ei:
-        # Use a road neighbor of sevilla that isn't cordoba.
-        from almoravid.map import neighbors_via
-        target = [n for n in neighbors_via("sevilla", "road")
-                  if n != "cordoba"][0]
-        apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
+    # The Approaching attacker is present at the Locale to receive Spoils.
+    s.lords["alfonso"].cylinder = Cylinder(kind="locale",
+                                           locale_id="sevilla")
+    s.lords["alfonso"].in_stronghold = False
+    s.lords["alfonso"].assets = {}
+    from almoravid.map import neighbors_via
+    target = [n for n in neighbors_via("sevilla", "road")
+              if n != "cordoba"][0]
+    r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": target, "way_type": "road"})
-    assert ei.value.code == "laden_blocks_avoid"
+    # Avoid succeeded; all 10 Provender discarded (no Transport -> max 0).
+    assert s.lords["al_mutamid"].cylinder.locale_id == target
+    assert s.lords["al_mutamid"].assets.get("prov", 0) == 0
+    assert r["discarded_as_spoils"].get("prov") == 10
+    # Attacker received the discarded Provender as Spoils.
+    assert s.lords["alfonso"].assets.get("prov", 0) == 10
 
 
 # ---------------------------------------------------------------------------

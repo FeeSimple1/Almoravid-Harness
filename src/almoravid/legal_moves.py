@@ -688,14 +688,10 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
     try:
         from almoravid.effective import is_besieged, is_bypassed
         from almoravid.map import neighbors_via
-        from almoravid.campaign import _is_laden
-        # Pre-check Laden across the whole defender group.
-        any_laden = any(
-            _is_laden(state.lords[lid])
-            for lid in payload.get("defender_lord_ids", [])
-            if lid in state.lords
-        )
-        if not any_laden:
+        # C5 (4.3.4): a Laden defender may DISCARD to become Unladen and
+        # still Avoid, so Avoid options are always offered (the handler
+        # performs the discard + Spoils transfer).
+        if True:
             for way_type in ("road", "pass"):
                 for nbr in neighbors_via(locale_id, way_type):
                     if nbr == from_locale:

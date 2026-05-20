@@ -2698,19 +2698,44 @@ def _h_respond_avoid_battle(state, action):
                 f"{active_side} Lord {l.id} present",
                 code="destination_has_enemy",
             )
-    # Bug Q fix (Pattern 9) — SoP requires Unladen for Avoid Battle.
-    # Any Laden defender Lord blocks the Avoid.
+    # C5 (4.3.4): Avoid Battle must be Unladen, but a Laden Lord may
+    # DISCARD Loot and excess Provender to become Unladen and thereby
+    # Avoid. Avoiding Lords take NO Loot, and only Provender up to their
+    # Transport (one per Cart/Mule) — and across a Pass no Cart may carry
+    # Provender, so only Mules (one each) may. All discarded Loot and
+    # Provender go to the Approaching Enemy Lords as Spoils (4.4.3),
+    # divided among them.
+    discarded = {"loot": 0, "prov": 0}
     for lid in payload["defender_lord_ids"]:
-        if lid in state.lords:
-            if _is_laden(state.lords[lid]):
-                raise IllegalAction(
-                    f"Cannot Avoid — {lid} is Laden (SoP 4.3.4 "
-                    f"avoid_battle requires Unladen)",
-                    code="laden_blocks_avoid",
-                )
-    # Move all defender Lords. Avoid Battle does NOT mark
-    # moved_fought (SoP withdraw_definition / 4.3.4 — defender
-    # avoidance is reactive, not an action).
+        if lid not in state.lords:
+            continue
+        l = state.lords[lid]
+        loot = l.assets.get("loot", 0)
+        if loot > 0:
+            discarded["loot"] += loot
+            l.assets.pop("loot", None)
+        cart = l.assets.get("cart", 0)
+        mule = l.assets.get("mule", 0)
+        max_prov = mule if way_type == "pass" else cart + mule
+        prov = l.assets.get("prov", 0)
+        if prov > max_prov:
+            discarded["prov"] += prov - max_prov
+            if max_prov > 0:
+                l.assets["prov"] = max_prov
+            else:
+                l.assets.pop("prov", None)
+    # Distribute discarded Assets to the Approaching attackers as Spoils.
+    spoils = {k: v for k, v in discarded.items() if v > 0}
+    attackers = [
+        l.id for l in state.lords.values()
+        if l.side == active_side and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == locale_id and not l.in_stronghold]
+    spoils_dist = {}
+    if spoils and attackers:
+        from almoravid.battle import distribute_spoils_round_robin
+        spoils_dist = distribute_spoils_round_robin(state, attackers, spoils)
+    # Move all defender Lords. Avoid Battle does NOT mark moved_fought
+    # (SoP withdraw_definition / 4.3.4 — avoidance is reactive).
     for lid in payload["defender_lord_ids"]:
         if lid in state.lords:
             l = state.lords[lid]
@@ -2718,9 +2743,12 @@ def _h_respond_avoid_battle(state, action):
             l.in_stronghold = False
     _record(state, action,
             f"{side} avoids Battle: {payload['defender_lord_ids']} "
-            f"move {locale_id} -> {target} via {way_type}")
+            f"move {locale_id} -> {target} via {way_type}"
+            + (f"; discarded {spoils} to {active_side} as Spoils"
+               if spoils else ""))
     _clear_approach_pending(state, active_side)
-    return {"avoided_to": target, "lord_ids": payload["defender_lord_ids"]}
+    return {"avoided_to": target, "lord_ids": payload["defender_lord_ids"],
+            "discarded_as_spoils": spoils, "spoils_distribution": spoils_dist}
 
 
 def _h_respond_withdraw(state, action):
