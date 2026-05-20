@@ -742,6 +742,7 @@ def resolve_battle(
     defender: BattleSide,
     *,
     max_rounds: int = 6,
+    defender_walls_range: tuple[int, int] | None = None,
 ) -> BattleResult:
     """Full Battle resolution per rule 4.4 (Phase 5e: single-Lord case).
 
@@ -792,7 +793,8 @@ def resolve_battle(
         for step_id, actor_role, step_type, unit_class in steps_this_round:
             step_res = _resolve_step(state, step_id, actor_role, step_type,
                                       unit_class, attacker, defender,
-                                      round_index=round_idx)
+                                      round_index=round_idx,
+                                      walls_range=defender_walls_range)
             rnd.steps.append(step_res)
             if _battle_over(attacker, defender):
                 break
@@ -1396,7 +1398,26 @@ def resolve_sally(
     Sallying Lords Withdraw back into the Stronghold and Siege markers
     there reduce to 1 (per rule 4.5.3 / SoP on_attacker_loss).
     """
-    result = resolve_battle(state, attacker, defender)
+    # 4.5.3 (S9): the Sallying Lords get NO Walls or Garrison, but the
+    # DEFENDERS (besiegers) receive Siegeworks as if Storming — Walls
+    # equal to the besieger's Siege-marker count at the Locale. Locate
+    # the Locale via a Sallying (besieged) Lord, then read the besieger
+    # side's Siege markers there.
+    locale_id = None
+    for lid in attacker.lord_ids:
+        l = state.lords.get(lid)
+        if l and l.cylinder.kind == "locale":
+            locale_id = l.cylinder.locale_id
+            break
+    defender_walls = None
+    if locale_id is not None:
+        loc = state.locales[locale_id]
+        siege = (loc.siege_yellow if defender.side == "christian"
+                 else loc.siege_green)
+        if siege > 0:
+            defender_walls = (1, siege)
+    result = resolve_battle(state, attacker, defender,
+                            defender_walls_range=defender_walls)
     result.engagement = "sally"
     # Sally-specific aftermath flag — actual Withdraw-back and Siege
     # marker reduction happen in apply_sally_aftermath called from the
