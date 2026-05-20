@@ -472,5 +472,11 @@ class GameState(StrictModel):
     ways: list[Way] = Field(default_factory=list)
     decks: Decks = Field(default_factory=Decks)
     pending: PendingDecision | None = None
+    # Phase 7g: the Muslim Taifas box (rule 4.1.4 Dinars, 1.4.2). Holds
+    # Coin deposited by Taifa Lords and any VP banked there (e.g. C25
+    # De Vivar Reconciliation). taifas_box_coin counts toward C10
+    # Devaluation totals; taifas_box_vp is added to Muslim VP at end.
+    taifas_box_coin: int = 0
+    taifas_box_vp: float = 0.0
     history: list[HistoryEntry] = Field(default_factory=list)
     score: Score = Field(default_factory=Score)

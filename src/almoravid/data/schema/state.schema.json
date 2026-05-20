@@ -1219,6 +1219,16 @@
       ],
       "default": null
     },
+    "taifas_box_coin": {
+      "default": 0,
+      "title": "Taifas Box Coin",
+      "type": "integer"
+    },
+    "taifas_box_vp": {
+      "default": 0.0,
+      "title": "Taifas Box Vp",
+      "type": "number"
+    },
     "history": {
       "items": {
         "$ref": "#/$defs/HistoryEntry"

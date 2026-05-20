@@ -99,6 +99,8 @@ def test_schema_has_expected_top_keys() -> None:
         "ways",
         "decks",
         "pending",
+        "taifas_box_coin",
+        "taifas_box_vp",
         "history",
         "score",
     }

@@ -443,6 +443,11 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.decks.plan = {"christian": [], "muslim": []}
     # Phase 7c: unstack all Lieutenants / Lower Lords (4.1.3).
     _unstack_all_lieutenants(state)
+    # Phase 7g: Wastage (4.9.4) — each Mustered Lord with more than one
+    # of any Asset type, or more than one This-Lord Capability card,
+    # discards one excess (greedy: drop one Asset of the largest stack,
+    # else one This-Lord Capability).
+    _apply_wastage(state)
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -2570,6 +2575,7 @@ def _h_play_de_vivar_reconcile(state, action):
     from almoravid.actions import _shift_service_left as _ssl
     _ssl(state, "rodrigo_al_sayyid", boxes=20)
     state.score.muslim += 1.0
+    state.taifas_box_vp += 1.0  # Phase 7g: 1 VP banked in the Taifas box
     state.decks.this_levy_events["christian"].remove("C25")
     state.decks.discard.append("C25")
     _record(state, action, "Christian Reconciles Rodrigo via C25 "
@@ -2683,11 +2689,13 @@ def compute_final_vp(state) -> tuple[float, float]:
             christian += 0.5
         elif loc.ravaged == "green":
             muslim += 0.5
-    for t in state.taifas.values():
-        if t.status == "reconquista":
+    for tf in state.taifas.values():
+        if tf.status == "reconquista":
             christian += 3.0
-        elif t.status == "parias":
+        elif tf.status == "parias":
             christian += 1.0
+    # Taifas-box VP (rule 1.4.2) counts for the Muslims.
+    muslim += state.taifas_box_vp
     return christian, muslim
 
 
@@ -2844,6 +2852,111 @@ def _unstack_all_lieutenants(state) -> None:
         l.lieutenant_of = None
 
 
+
+# ---------------------------------------------------------------------------
+# Phase 7g: Wastage (4.9.4), Encamp (4.3.6), Dinars deposit (4.1.4).
+# ---------------------------------------------------------------------------
+
+
+def _apply_wastage(state) -> list[dict]:
+    """Rule 4.9.4: each Mustered Lord (on the map) with MORE THAN ONE
+    of any Asset type, or more than one This-Lord Capability card,
+    discards one excess. Greedy/deterministic: drop one unit of the
+    largest Asset stack > 1; if none, drop one This-Lord Capability."""
+    from almoravid.capabilities import capabilities_for_lord
+    out: list[dict] = []
+    for lid in sorted(state.lords):
+        lord = state.lords[lid]
+        if lord.cylinder.kind != "locale":
+            continue
+        # Largest Asset stack with count > 1.
+        over = [(n, a) for a, n in lord.assets.items() if n > 1]
+        if over:
+            over.sort(reverse=True)
+            _, atype = over[0]
+            lord.assets[atype] -= 1
+            if lord.assets[atype] == 0:
+                lord.assets.pop(atype, None)
+            out.append({"lord_id": lid, "discarded_asset": atype})
+            continue
+        caps = capabilities_for_lord(state, lid)
+        if len(caps) > 1:
+            drop = sorted(caps)[-1]
+            lord.capabilities.remove(drop)
+            state.decks.capabilities_in_play = [
+                c for c in state.decks.capabilities_in_play
+                if not (c.card_id == drop and c.owner_lord_id == lid)
+            ]
+            state.decks.discard.append(drop)
+            out.append({"lord_id": lid, "discarded_capability": drop})
+    if out:
+        state.history.append  # no-op marker; recorded by caller log
+    return out
+
+
+def _h_cmd_encamp(state, action):
+    """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
+    Laden) to replace all his Bypass markers at the Locale with 1
+    Siege marker; this ends his actions on the current card."""
+    from almoravid.effective import is_bypassed
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    lord_id = state.meta.active_lord_id
+    _require(lord_id is not None, "no active Lord", code="no_active_lord")
+    lord = state.lords[lord_id]
+    _require(lord.cylinder.kind == "locale", f"{lord_id} not at a Locale",
+             code="not_on_map")
+    _require(state.meta.actions_remaining >= 1,
+             "Encamp costs 1 March action", code="not_enough_actions")
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    color_bypass = "bypass_yellow" if side == "christian" else "bypass_green"
+    _require(getattr(loc, color_bypass),
+             f"{lord_id} is not Bypassing {here} (4.3.6)",
+             code="not_bypassing")
+    # Replace Bypass with 1 Siege marker (our color).
+    setattr(loc, color_bypass, False)
+    if side == "christian":
+        loc.siege_yellow = max(loc.siege_yellow, 1)
+    else:
+        loc.siege_green = max(loc.siege_green, 1)
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0  # ends actions on this card
+    _record(state, action,
+            f"{side} {lord_id} Encamps at {here}: Bypass -> 1 Siege "
+            f"(card ends, {consumed} actions spent)")
+    return {"locale": here, "encamped": True, "actions_consumed": consumed}
+
+
+def _h_dinars_deposit(state, action):
+    """4.1.4 Dinars: an Unbesieged Taifa Lord (not Yusuf/Sir/Rodrigo)
+    deposits any Coin from his mat into the Taifas box (Plan step)."""
+    from almoravid.effective import is_besieged
+    side = _require_side(action)
+    _require(side == "muslim", "Dinars is a Muslim Plan-step option",
+             code="wrong_side")
+    lord_id = action.get("lord_id")
+    _require(lord_id in state.lords, "lord_id required", code="bad_arg")
+    lord = state.lords[lord_id]
+    _require(lord.is_taifa and lord_id not in
+             ("yusuf", "sir", "rodrigo_campeador", "rodrigo_al_sayyid"),
+             f"{lord_id} cannot deposit Dinars (4.1.4)",
+             code="not_taifa_lord")
+    _require(not is_besieged(state, lord_id),
+             f"{lord_id} is Besieged — cannot deposit", code="besieged")
+    coin = lord.assets.get("coin", 0)
+    _require(coin > 0, f"{lord_id} has no Coin to deposit",
+             code="no_coin")
+    lord.assets.pop("coin", None)
+    state.taifas_box_coin += coin
+    _record(state, action,
+            f"{lord_id} deposits {coin} Coin into Taifas box "
+            f"(total {state.taifas_box_coin})")
+    return {"lord_id": lord_id, "deposited": coin,
+            "taifas_box_coin": state.taifas_box_coin}
+
+
 CAMPAIGN_HANDLERS = {
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
@@ -2870,4 +2983,6 @@ CAMPAIGN_HANDLERS = {
     "cmd_march_port_to_port": _h_cmd_march_port_to_port,
     "designate_lieutenant": _h_designate_lieutenant,
     "toggle_lieutenant": _h_toggle_lieutenant,
+    "cmd_encamp": _h_cmd_encamp,
+    "dinars_deposit": _h_dinars_deposit,
 }

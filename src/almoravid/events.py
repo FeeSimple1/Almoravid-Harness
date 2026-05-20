@@ -314,13 +314,18 @@ def _c10_devaluation_christian(state, side, card_id, payload):
     only Lord-held Coin is affected. Pattern 10: no Coin -> no-op.
     """
     muslim_lords = [l for l in state.lords.values() if l.side == "muslim"]
-    total_before = sum(l.assets.get("coin", 0) for l in muslim_lords)
+    box = state.taifas_box_coin
+    total_before = sum(l.assets.get("coin", 0) for l in muslim_lords) + box
     if total_before == 0:
         return _no_op_with_note(state, card_id, side,
                                 "no Muslim Coin to devalue")
     target = _math.ceil(total_before * 2 / 3)
     to_remove = total_before - target
     removed = 0
+    # Drain the Taifas box first, then Lord mats (deterministic).
+    box_take = min(box, to_remove)
+    state.taifas_box_coin -= box_take
+    removed += box_take
     for l in sorted(muslim_lords, key=lambda x: x.id):
         if removed >= to_remove:
             break
