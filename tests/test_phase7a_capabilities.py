@@ -167,7 +167,7 @@ def test_camels_negates_arid_terrain() -> None:
                             "sevilla", seed=11)
     s2.decks.this_levy_events["christian"] = ["C4"]
     _give_side_cap(s2, "muslim", "M16")  # Camels
-    s2.lords["al_mutamid"].assets = {"prov": 3}
+    s2.lords["al_mutamid"].assets = {"prov": 3, "mule": 2}  # transport so 1.7.2 keeps prov
     s2.lords["al_mutamid"].forces = {"sergeants": 2, "men_at_arms": 2}
     from almoravid.map import neighbors_via
     target = neighbors_via("sevilla", "road")[0]

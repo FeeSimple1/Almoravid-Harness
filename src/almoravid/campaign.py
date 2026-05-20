@@ -1421,8 +1421,25 @@ def _h_cmd_march(state, action):
                     and l.cylinder.locale_id == from_loc):
                 moving.add(l.id)
     moving_lords = sorted(moving)
-    # Shared Transport (4.3.2): Laden status uses the COMBINED assets.
-    laden = _group_laden(state, moving_lords, way_type=way_type)
+    # 1.7.2 Provender capacity: each Cart/Mule carries up to TWO
+    # Provender, so the (shared) Transport caps carriable Provender at
+    # 2 x (Carts + Mules); any excess must be discarded to March. (The
+    # Pass affects only Laden status for a March, not capacity — a Cart
+    # may carry Provender over a Pass, it just makes the Lord Laden.)
+    g_prov = sum(state.lords[m].assets.get("prov", 0) for m in moving_lords)
+    g_loot = sum(state.lords[m].assets.get("loot", 0) for m in moving_lords)
+    g_cart = sum(state.lords[m].assets.get("cart", 0) for m in moving_lords)
+    g_mule = sum(state.lords[m].assets.get("mule", 0) for m in moving_lords)
+    g_transport = g_cart + g_mule
+    capacity = 2 * g_transport
+    prov_excess = max(0, g_prov - capacity)
+    prov_eff = g_prov - prov_excess
+    # Shared Transport (4.3.2): Laden uses the COMBINED post-discard
+    # assets (a unit carries two, or a Cart carries Provender over a
+    # Pass, or any Loot moves).
+    laden = (g_loot >= 1
+             or prov_eff > g_transport
+             or (way_type == "pass" and g_cart > 0 and prov_eff > 2 * g_mule))
     cost = 2 if laden else 1
     _require(state.meta.actions_remaining >= cost,
              f"March costs {cost} actions ({'Laden' if laden else 'Unladen'}), "
@@ -1523,6 +1540,19 @@ def _h_cmd_march(state, action):
                     f"christian Surprise (C6) at {target}: placed 2 Siege, "
                     f"forced Storm with Walls -1 pending")
 
+    # 1.7.2: discard Provender the group cannot carry (beyond capacity).
+    to_discard = prov_excess
+    for mid in moving_lords:
+        if to_discard <= 0:
+            break
+        m = state.lords[mid]
+        have = m.assets.get("prov", 0)
+        drop = min(have, to_discard)
+        if drop > 0:
+            m.assets["prov"] = have - drop
+            if m.assets["prov"] == 0:
+                m.assets.pop("prov", None)
+            to_discard -= drop
     # Execute March: move the whole group (Marshal + chosen Lords +
     # Lieutenant Lower Lords) together (4.3.1). On arrival at a
     # Stronghold each Lord is outside walls by default.
