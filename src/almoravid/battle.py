@@ -2347,16 +2347,30 @@ def _resolve_step_per_pair(
         if that target is empty, route as Flanking to the largest
         Front Lord on defender.
       - Hits are computed from THAT Lord's units only (not pooled).
-      - Absorption drains from the paired/Flanked target Lord's
-        forces only.
-    Reserve Lords do NOT Strike and do NOT absorb Hits.
+
+    B2 (rule 4.4.2 TOTAL HITS / Flanking): all Hits landing on a given
+    target Lord this step -- from the directly-opposed actor Lord PLUS
+    any Flanking actor Lords -- are SUMMED in halves and rounded UP
+    ONCE (with mixed-missile Crossbow priority applied to the combined
+    total), NOT rounded per striking Lord. So we gather every actor
+    Front Lord's raw contribution against its chosen target, accumulate
+    per target, then round and apply once per target.
+
+    Absorption drains from the paired/Flanked target Lord's forces
+    only. Reserve Lords do NOT Strike and do NOT absorb Hits.
     """
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
     assert actor.array is not None and target.array is not None
 
     step_res = StepResolution(step=step_id, actor=actor_role)
-    aggregate_raw = 0.0
+
+    # ---- Phase 1: gather each Front actor Lord's raw contribution and
+    # route it to a target Lord (same position, else Flanking). Sum the
+    # half-Hits per target so rounding happens ONCE per target (B2).
+    # Keyed by id(target_lp) to combine opposed + Flanking strikers.
+    contributions: dict[int, dict] = {}
+    target_order: list[int] = []
 
     for actor_pos in ("front_center", "front_left", "front_right"):
         actor_lp = next((lp for lp in actor.array
@@ -2364,7 +2378,8 @@ def _resolve_step_per_pair(
                          and lp.has_unrouted()), None)
         if actor_lp is None:
             continue
-        # Find target: same position first, else Flanking.
+        # Find target: same position first, else Flanking to closest
+        # (here: largest) Front enemy Lord.
         target_lp = next((lp for lp in target.array
                           if lp.position == actor_pos
                           and lp.has_unrouted()), None)
@@ -2402,7 +2417,7 @@ def _resolve_step_per_pair(
         # Phase 6a C8 Cantador (Round 1, Christian, melee, up to 4 K+S).
         # In per-pair mode each actor Lord gets up to its own contribution,
         # but the SIDE-WIDE cap of 4 still applies. We approximate by
-        # giving each Lord up to min(4, its own K+S count) — slightly
+        # giving each Lord up to min(4, its own K+S count) -- slightly
         # over-counts when multiple Lords each have 4+ K+S, but defensible.
         if (step_type == "melee" and round_index == 1
                 and actor.side == "christian"
@@ -2418,27 +2433,50 @@ def _resolve_step_per_pair(
                 raw += float(eligible)
                 by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
-        # Phase 6e Concede halving.
+        # Phase 6e Concede halving (applied to this Lord's contribution
+        # before it is summed into the target's total -- rule 4.4.2
+        # "halve first, then round up by step").
         if actor.conceded:
             raw = raw / 2.0
             by_kind = {k: v / 2.0 for k, v in by_kind.items()}
 
-        rounded = math.ceil(raw)
+        if raw <= 0 and not by_kind:
+            continue
+        key = id(target_lp)
+        if key not in contributions:
+            contributions[key] = {"lp": target_lp, "raw": 0.0,
+                                  "by_kind": {}}
+            target_order.append(key)
+        contributions[key]["raw"] += raw
+        for k, v in by_kind.items():
+            contributions[key]["by_kind"][k] = (
+                contributions[key]["by_kind"].get(k, 0.0) + v)
+
+    # ---- Phase 2: per target, round the combined half-Hits ONCE, then
+    # resolve Protection and Rout (Walls n/a in Battle).
+    aggregate_raw = 0.0
+    for key in target_order:
+        entry = contributions[key]
+        target_lp = entry["lp"]
+        raw = entry["raw"]
+        by_kind = entry["by_kind"]
         aggregate_raw += raw
+        rounded = math.ceil(raw) if raw > 0 else 0
 
         if step_type == "missile":
             per_kind_hits = _allocate_rounded_hits(raw, by_kind)
         else:
             per_kind_hits = {"melee": rounded}
 
-        # 4.4.2 ASSIGN HITS — absorbing owner's per-combat policy.
+        # 4.4.2 ASSIGN HITS -- absorbing owner's per-combat policy.
         absorb_policy = state.meta.absorption_policy.get(
             target.side, "weakest_first")
         for kind, count in per_kind_hits.items():
             if count <= 0:
                 continue
             striker_selects_target = (kind == "crossbows")
-            protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
+            protroll_kind: StrikeKind = ("melee" if kind == "melee"
+                                         else "missiles")
             for _ in range(count):
                 if not target_lp.has_unrouted():
                     break
@@ -2450,9 +2488,11 @@ def _resolve_step_per_pair(
                     absorb_policy=absorb_policy,
                 )
                 if routed is not None:
-                    step_res.losses[routed] = step_res.losses.get(routed, 0) + 1
+                    step_res.losses[routed] = (
+                        step_res.losses.get(routed, 0) + 1)
                     step_res.rounded_hits += 1
-        step_res.raw_hits = aggregate_raw
+
+    step_res.raw_hits = aggregate_raw
 
     # Reposition the sliced per-Lord forces back into the pooled
     # side.forces so legacy queries (commit_forces_after_battle,

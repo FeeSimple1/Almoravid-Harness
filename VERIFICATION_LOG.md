@@ -60,7 +60,7 @@ ADJ = needs user adjudication (logged in RULES_QUESTIONS.md). OK = verified corr
 
 ### Battle (§4.4)
 - B1 4.4.4 Losses rolls entirely missing (per-Routed-unit survival); winner restores ALL routed automatically — FIX (critical).
-- B2 Flanking: rounds per-position instead of summing Flanking+opposed then rounding once (4.4.2) — FIX.
+- B2 Flanking: rounds per-position instead of summing Flanking+opposed then rounding once (4.4.2) — FIXED 2026-05-20. _resolve_step_per_pair reworked into two phases: (1) gather each Front actor Lord's raw half-Hits and route to a target Lord (same position, else Flanking to the largest Front enemy), accumulating per target keyed by target identity so opposed + Flanking strikers COMBINE; (2) round each target's combined half-Hit total UP ONCE (mixed-missile Crossbow priority applied to the combined total via _allocate_rounded_hits), then resolve Protection/Rout. Previously each striking Lord rounded separately (two 0.5-Hit Lords on one target gave 2 Hits instead of 1). Per-Lord Hills/C8/Concede adjustments apply before summing. Tests: tests/test_fix_b2_flanking_rounding.py (3).
 - B3 Pursuit marker mechanics / Concede-as-per-Round-action not run inside resolve_battle (4.4.2) — FIX/ADJ.
 - B4 _battle_over uses all-units vs all-Lords; per-pair Reserve-only side spins to max_rounds — FIX.
 - B5 Hit-assignment target selection greedy (4.4.2 ASSIGN HITS = owner choice) — ADJ (architecture).
