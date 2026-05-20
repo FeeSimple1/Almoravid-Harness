@@ -1263,15 +1263,13 @@ def _h_cmd_supply(state, action):
     one or more of his own Seats. For each Seat used as Source:
     +1 Provender on the Lord's mat.
 
-    Phase 5b implements two cases:
-      (a) Lord at his own Seat: trivial +1 Prov, no Transport needed
-          (rule 4.6.1 'Lord at his Seat needs no Transport for that Seat').
-      (b) Lord adjacent to a free own Seat via Road: 1 Cart or Mule
-          consumed for the intervening Way; +1 Prov.
-
-    Multi-hop routes (2+ Ways) are deferred — they require a graph-
-    search planner. Q-001 candidate if/when the agent needs them
-    before they're implemented.
+    Full rule 4.6.1: a Lord may use one OR MORE of his own Seats as
+    Sources in a single Supply action, gaining +1 Provender per Seat.
+    Each non-here Seat needs a multi-hop unblocked Supply Route (BFS
+    via _find_supply_routes), dedicating 1 Cart/Mule per intervening
+    Way; the at-here Seat needs no Transport. Routes may not pass
+    through an Enemy Stronghold/Lord unless Besieged or Bypassed.
+    Provender caps at 8 (1.7.3). Dawud ibn Aisha (M8) adds +1 once.
     """
     from almoravid.effective import is_besieged
     from almoravid.map import neighbors_via
@@ -1306,12 +1304,18 @@ def _h_cmd_supply(state, action):
     # via BFS. Lord at his Seat needs no Transport for that Seat.
     routes = _find_supply_routes(state, here, seats, side, lord)
 
-    used_seat = action.get("source_seat")
-    if used_seat is None:
-        # Default: prefer at-here Seat (no Transport needed), else
-        # the shortest reachable route.
+    # Multiple Seats may be used as Sources in one Supply action
+    # (rule 4.6.1: "+1 Provender per Seat used"). Accept either
+    # source_seats (list) or source_seat (single). Default: the
+    # at-here Seat if present, else the single nearest reachable Seat.
+    requested = action.get("source_seats")
+    if requested is None:
+        single = action.get("source_seat")
+        if single is not None:
+            requested = [single]
+    if requested is None:
         if here in seats:
-            used_seat = here
+            requested = [here]
         else:
             reachable = [(s, r) for s, r in routes.items() if r is not None]
             if not reachable:
@@ -1321,61 +1325,67 @@ def _h_cmd_supply(state, action):
                     code="no_supply_route",
                 )
             reachable.sort(key=lambda kv: len(kv[1]))
-            used_seat = reachable[0][0]
-    _require(used_seat in seats,
-             f"{used_seat} is not an own Seat for {lord_id}",
-             code="bad_seat")
+            requested = [reachable[0][0]]
 
-    transport_consumed = None
-    if used_seat == here:
-        # At own Seat — no Transport (rule 4.6.1 'at own Seat needs no Transport').
-        pass
-    else:
-        route = routes.get(used_seat)
+    for s in requested:
+        _require(s in seats, f"{s} is not an own Seat for {lord_id}",
+                 code="bad_seat")
+    _require(len(set(requested)) == len(requested),
+             "duplicate Seat in source_seats", code="bad_arg")
+
+    # Total dedicated Transport = sum of intervening Ways over all
+    # non-here Seats. At-here Seat needs none.
+    total_hops = 0
+    per_seat_hops: dict[str, int] = {}
+    for s in requested:
+        if s == here:
+            per_seat_hops[s] = 0
+            continue
+        route = routes.get(s)
         if route is None:
             raise IllegalAction(
-                f"Supply route to {used_seat} is blocked by Enemy "
-                f"Stronghold or Lord (4.6.1)",
+                f"Supply route to {s} is blocked by Enemy Stronghold "
+                f"or Lord (4.6.1)",
                 code="no_supply_route",
             )
-        # Need 1 Cart or Mule per intervening Way.
-        # Route excludes `here` (start) and includes used_seat (end).
-        hops = len(route)
-        has_cart = lord.assets.get("cart", 0)
-        has_mule = lord.assets.get("mule", 0)
-        # Phase 5+ baseline: prefer Mule, then Cart. Total transport
-        # required = hops. Transport is DEDICATED (not consumed
-        # permanently) per 4.6.1; we record what was used.
-        total_avail = has_cart + has_mule
-        if total_avail < hops:
-            raise IllegalAction(
-                f"Supply route to {used_seat} needs {hops} Cart/Mule(s); "
-                f"have {has_cart} Cart + {has_mule} Mule (4.6.1)",
-                code="no_transport",
-            )
-        # Choose the kind to log (preference: mule)
-        if has_mule >= hops:
-            transport_consumed = f"{hops} mule"
-        elif has_cart >= hops:
-            transport_consumed = f"{hops} cart"
-        else:
-            transport_consumed = f"{has_mule} mule + {hops - has_mule} cart"
+        per_seat_hops[s] = len(route)
+        total_hops += len(route)
 
-    # Apply: +1 Provender (cap at 8 per Pattern 12 / rule 1.7.3).
-    # Dawud ibn Aisha (M8, this_lord, Phase 7a): this Lord's Supply
-    # adds 1 extra Prov.
+    has_cart = lord.assets.get("cart", 0)
+    has_mule = lord.assets.get("mule", 0)
+    if has_cart + has_mule < total_hops:
+        raise IllegalAction(
+            f"Supply needs {total_hops} Cart/Mule(s) for "
+            f"{requested}; have {has_cart} Cart + {has_mule} Mule (4.6.1)",
+            code="no_transport",
+        )
+    if total_hops > 0:
+        if has_mule >= total_hops:
+            transport_consumed = f"{total_hops} mule"
+        elif has_cart >= total_hops:
+            transport_consumed = f"{total_hops} cart"
+        else:
+            transport_consumed = (
+                f"{has_mule} mule + {total_hops - has_mule} cart")
+    else:
+        transport_consumed = None
+
+    # Apply: +1 Provender per Seat (cap 8). Dawud ibn Aisha (M8,
+    # Phase 7a) adds 1 extra Prov per Supply action (once).
     from almoravid.capabilities import lord_has_capability
-    supply_amount = 1
+    gain = len(requested)
     if lord_has_capability(state, lord_id, "M8"):
-        supply_amount = 2
-    new_prov = min(8, lord.assets.get("prov", 0) + supply_amount)
+        gain += 1
+    new_prov = min(8, lord.assets.get("prov", 0) + gain)
     lord.assets["prov"] = new_prov
     state.meta.actions_remaining -= 1
     _record(state, action,
-            f"{side} {lord_id} Supplies from {used_seat} (+1 Prov -> {new_prov})"
-            + (f" via {transport_consumed}" if transport_consumed else " (at-Seat)"))
-    return {"source_seat": used_seat, "transport": transport_consumed,
-            "prov_after": new_prov,
+            f"{side} {lord_id} Supplies from {requested} "
+            f"(+{gain} Prov -> {new_prov})"
+            + (f" via {transport_consumed}" if transport_consumed
+               else " (at-Seat)"))
+    return {"source_seats": requested, "transport": transport_consumed,
+            "prov_after": new_prov, "prov_gained": gain,
             "actions_remaining": state.meta.actions_remaining}
 
 
