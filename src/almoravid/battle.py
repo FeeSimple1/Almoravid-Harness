@@ -558,6 +558,7 @@ def _resolve_step(
     walls_range: tuple[int, int] | None = None,
     siege_markers: int = 0,
     round_index: int = 0,
+    melee_hits_override: int | None = None,
 ) -> StepResolution:
     # Phase 6f: per-pair Strike when both sides have multi-Lord arrays
     # AND context is Battle. Storm and single-Lord cases keep the legacy
@@ -572,6 +573,19 @@ def _resolve_step(
 
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
+
+    # S8 (4.5.2): for Storm Melee the caller supplies a per-Lord-capped,
+    # horse+foot-combined Hit total (each Lord <= 6). Skip the pooled
+    # strike computation, cap, and C8 folding (already accounted for).
+    if melee_hits_override is not None:
+        rounded = max(0, int(melee_hits_override))
+        per_kind_hits = {"melee": rounded}
+        result = StepResolution(step=step_id, actor=actor_role,
+                                raw_hits=float(rounded), rounded_hits=rounded)
+        _apply_step_cancellation_and_hits(
+            state, actor_role, target, per_kind_hits, rounded,
+            walls_range, siege_markers, context, unit_class, result)
+        return result
 
     rows = build_strike_rows(state, actor, context=context)
     raw, by_kind = _step_hits(rows, step_type, unit_class)
@@ -658,7 +672,27 @@ def _resolve_step(
 
     result = StepResolution(step=step_id, actor=actor_role,
                             raw_hits=raw, rounded_hits=rounded)
+    _apply_step_cancellation_and_hits(
+        state, actor_role, target, per_kind_hits, rounded,
+        walls_range, siege_markers, context, unit_class, result)
+    return result
 
+
+def _apply_step_cancellation_and_hits(
+    state: GameState,
+    actor_role: Role,
+    target: BattleSide,
+    per_kind_hits: dict[str, int],
+    rounded: int,
+    walls_range: tuple[int, int] | None,
+    siege_markers: int,
+    context: Literal["battle", "storm"],
+    unit_class: UnitClass | None,
+    result: StepResolution,
+) -> None:
+    """Walls/Siegeworks cancellation then Protection-roll Hit
+    application (shared by the normal and Storm-melee-override paths
+    of _resolve_step)."""
     # Bug D (Pattern 9) — Walls / Siegeworks roll cancels Hits.
     # We apply cancellation proportionally across kinds (drain
     # Crossbow Hits last since they got priority in rounding).
@@ -705,9 +739,6 @@ def _resolve_step(
         if count <= 0:
             continue
         striker_selects_target = (kind == "crossbows")
-        # Map our internal kind to the StrikeKind alias used by
-        # _resolve_protection_roll's signature (it doesn't branch on
-        # this currently except for the auto_remove path).
         protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
         for _ in range(count):
             if not target.has_unrouted():
@@ -721,7 +752,6 @@ def _resolve_step(
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1242,6 +1272,29 @@ def _garrison_for_locale(state: GameState, locale_id: str) -> dict:
     return out
 
 
+def _combined_melee_raw(
+    state: GameState,
+    forces: dict,
+    caps: list[str],
+    *,
+    garrison: dict | None = None,
+) -> float:
+    """Raw Melee Hits (in halves, horse + foot combined) for a Storm
+    striker built from `forces` (+ optional garrison)."""
+    side = BattleSide(side="christian", role="attacker", lord_ids=[],
+                      forces=dict(forces), capabilities_in_play=list(caps),
+                      garrison_forces=dict(garrison or {}))
+    rows = build_strike_rows(state, side, context="storm")
+    raw_h, _ = _step_hits(rows, "melee", "horse")
+    raw_f, _ = _step_hits(rows, "melee", "foot")
+    return raw_h + raw_f
+
+
+def _c8_bonus_for_forces(forces: dict) -> int:
+    """C8 Cantador eligible units (Knights + Sergeants) in a force dict."""
+    return forces.get("knights", 0) + forces.get("sergeants", 0)
+
+
 def resolve_storm(
     state: GameState,
     attacker: BattleSide,
@@ -1249,142 +1302,245 @@ def resolve_storm(
     *,
     max_rounds: int | None = None,
     walls_range_override: tuple[int, int] | None = None,
+    reposition_defender: bool = True,
+    concede_after_round: int | None = None,
 ) -> BattleResult:
-    """4.5.2 Storm. Attacker assaults the Stronghold's Garrison + any
-    defending Lord units inside.
+    """4.5.2 Storm with per-Lord Array (S8/S10/S11).
 
-    Phase 5f baseline: defender's forces include Garrison (auto-loaded
-    from strongholds.json) ADDED to whatever besieged Lord forces are
-    inside the Stronghold. Walls roll cancels Hits (Pattern 5/6: roll
-    within stronghold's walls_range cancels). Evade does NOT apply in
-    Storm. Javelins/Slingers Strike x1/2 in Storm (forces.json already
-    encodes this distinction in strikes_storm rows).
+    Front begins with at most one Lord per side (the Attacker's Active
+    Lord); other Lords start in Reserve. Front never exceeds the
+    Stronghold's Capacity. Only Front Lords (plus the Garrison, for the
+    Defender) Strike and absorb Hits each Round; Reserve Lords sit out
+    until Repositioned. Each Lord adds at most six Melee Hits per Round
+    (combined horse + foot). After Round 1 the Defender may bring one
+    Reserve Lord to the Front (Reposition); if all Front Lords Rout, a
+    Reserve must advance. The Attacker may Concede at the start of any
+    Round after the first (concede_after_round); the Storm also ends
+    when Rounds completed equals the Siege-marker count.
 
-    max_rounds defaults to the number of Siege markers our side has
-    at the Locale (rule 4.5.2 'Rounds completed >= Siege markers ->
-    Attacker loses'). For Phase 5f baseline we use the count of our
-    color's siege markers as the cap.
+    NOTE (documented scope): the Attacker is the single Active Lord
+    (cmd_storm launches one-Lord Storms); multi-besieger Attacker Storms
+    with Attacker Reserves are not modeled here.
     """
-    # Load walls range
     from almoravid.static_data import load_strongholds
+    from almoravid.capabilities import any_lord_with_capability
+
+    # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
-    # Find the locale the defender is at
     for lid in defender.lord_ids:
         l = state.lords.get(lid)
         if l and l.cylinder.kind == "locale":
             locale_id = l.cylinder.locale_id
             break
     if locale_id is None:
-        # Fallback: use attacker's location (besieger outside the walls)
         for lid in attacker.lord_ids:
             l = state.lords.get(lid)
             if l and l.cylinder.kind == "locale":
                 locale_id = l.cylinder.locale_id
                 break
     walls_range = (1, 4)
+    capacity = 1
     if locale_id is not None:
         loc = state.locales[locale_id]
         if loc.base_type != "region":
-            walls_range = tuple(
-                load_strongholds()["strongholds"][loc.base_type]["walls_range"]
-            )
-        # 4.5.2 ENDING THE STORM: "A Storm ends once the number of
-        # Rounds completed equals the number of Siege markers there."
-        # The cap is the BESIEGER's Siege-marker count at the Locale
-        # (used regardless of any Walls override). Per 4.5.2 the
-        # Besieger's Siegeworks Walls also equal that marker count.
+            sh = load_strongholds()["strongholds"][loc.base_type]
+            walls_range = tuple(sh["walls_range"])
+            capacity = int(sh.get("capacity", 1))
         if max_rounds is None:
             siege = (loc.siege_yellow if attacker.side == "christian"
                      else loc.siege_green)
             max_rounds = max(1, siege)
-    # C6 Surprise / C6 Siege Towers override (Walls -1).
     if walls_range_override is not None:
         walls_range = walls_range_override
-
     if max_rounds is None:
         max_rounds = 1
 
-    # Bug M (Pattern 7 audit fix): Garrison units kept in their own
-    # bucket so the Protection roll drains them before Lord units.
-    # Rule 4.5.2: 'Garrison absorbs Hits BEFORE any Defending Lord
-    # units'.
-    garrison = _garrison_for_locale(state, locale_id) if locale_id else {}
-    defender.garrison_forces = dict(garrison)
-
-    # Storm strike order: defender (all stronghold defenders) -> attacker (all).
-    # In Storm there are only 2 melee substeps after missiles (per SoP).
-    result = BattleResult(
-        engagement="storm",
-        attacker=attacker,
-        defender=defender,
-    )
-    storm_steps: list[tuple[str, Role, str, UnitClass | None]] = [
-        ("1.a", "defender", "missile", None),
-        ("1.b", "attacker", "missile", None),
-        ("2.a", "defender", "melee", "horse"),   # combined with foot via 'all'
-        ("2.a", "defender", "melee", "foot"),
-        ("2.b", "attacker", "melee", "horse"),
-        ("2.b", "attacker", "melee", "foot"),
-    ]
-    # Siegeworks count for attacker's protection (the besieger's Siege
-    # markers serve as Walls for the attacker during Storm — rule
-    # 4.5.2 'attacker_siegeworks_placement: place Siegeworks as Walls').
     siegeworks_count = 0
     if locale_id is not None:
         loc = state.locales[locale_id]
         siegeworks_count = (loc.siege_yellow if attacker.side == "christian"
                             else loc.siege_green)
-    # Siege Towers (C6 Christian / M13 Muslim, this_lord, Phase 7a):
-    # an Attacking Lord with the capability weakens the Stronghold to
-    # Walls -1 from Round 2 onward (no effect Round 1).
-    from almoravid.capabilities import any_lord_with_capability
     st_card = "C6" if attacker.side == "christian" else "M13"
     siege_towers = bool(
         set(any_lord_with_capability(state, attacker.side, st_card))
-        & set(attacker.lord_ids)
-    )
+        & set(attacker.lord_ids))
+
+    # ---- Garrison + per-Lord force tracking ---------------------------
+    garrison = _garrison_for_locale(state, locale_id) if locale_id else {}
+    defender.garrison_forces = dict(garrison)
+
+    # Per-Lord Defender forces (source of truth for cap + reserve). The
+    # Attacker is the single Active Lord (Front), no Reserves.
+    d_lord_forces = {lid: dict(state.lords[lid].forces)
+                     for lid in defender.lord_ids}
+    d_front = [defender.lord_ids[0]] if defender.lord_ids else []
+    d_reserve = list(defender.lord_ids[1:])
+    d_caps = list(defender.capabilities_in_play)
+    a_caps = list(attacker.capabilities_in_play)
+
+    def _d_front_agg() -> dict:
+        agg: dict = {}
+        for lid in d_front:
+            for ut, n in d_lord_forces[lid].items():
+                if n > 0:
+                    agg[ut] = agg.get(ut, 0) + n
+        return agg
+
+    def _push_defender_losses(before: dict) -> None:
+        """Distribute Front-Defender losses (before - now) back to the
+        per-Lord force dicts (greedy across Front Lords)."""
+        now = defender.forces
+        for ut, b in before.items():
+            lost = b - now.get(ut, 0)
+            for lid in d_front:
+                if lost <= 0:
+                    break
+                have = d_lord_forces[lid].get(ut, 0)
+                take = min(have, lost)
+                if take:
+                    d_lord_forces[lid][ut] = have - take
+                    if d_lord_forces[lid][ut] <= 0:
+                        d_lord_forces[lid].pop(ut, None)
+                    lost -= take
+
+    def _defender_front_alive() -> bool:
+        return any(d_lord_forces[lid] for lid in d_front)
+
+    def _defender_alive() -> bool:
+        return (_defender_front_alive()
+                or any(d_lord_forces[lid] for lid in d_reserve)
+                or any(v > 0 for v in defender.garrison_forces.values()))
+
+    def _melee_hits(front_forces_list, caps, *, side_is_christian,
+                    round_idx, garrison=None) -> int:
+        """Per-Lord-capped (<=6 each) combined Melee Hits, + Garrison
+        Melee (uncapped), folding C8 Cantador (Round 1) into per-Lord
+        raw before the cap."""
+        c8_budget = 0
+        if (side_is_christian and round_idx == 1
+                and "C8" in state.decks.this_levy_events.get("christian", [])):
+            c8_budget = 4
+        total = 0
+        for f in front_forces_list:
+            raw = _combined_melee_raw(state, f, caps)
+            if c8_budget > 0:
+                add = min(c8_budget, _c8_bonus_for_forces(f))
+                raw += float(add)
+                c8_budget -= add
+            total += min(6, math.ceil(raw))
+        if garrison:
+            total += math.ceil(_combined_melee_raw(state, {}, [],
+                                                   garrison=garrison))
+        return total
+
+    result = BattleResult(engagement="storm", attacker=attacker,
+                          defender=defender)
+    conceded = False
+
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
+        # S10 Concede — Attacker only, start of Round 2+.
+        if (round_idx >= 2 and concede_after_round is not None
+                and round_idx >= concede_after_round):
+            conceded = True
+            result.notes.append(
+                f"Attacker Concedes at start of Round {round_idx}")
+            break
+        # S11 Reposition (Round 2+): Defender forced advance if all Front
+        # Routed, else optional up to Capacity.
+        if round_idx >= 2:
+            if (not _defender_front_alive()) and d_reserve:
+                d_front.append(d_reserve.pop(0))
+            elif (reposition_defender and len(d_front) < capacity
+                  and d_reserve):
+                d_front.append(d_reserve.pop(0))
+
         round_walls = walls_range
         if siege_towers and round_idx >= 2 and walls_range is not None:
             round_walls = (walls_range[0], max(0, walls_range[1] - 1))
-        for step_id, actor_role, step_type, unit_class in storm_steps:
-            step_res = _resolve_step(
-                state, step_id, actor_role, step_type, unit_class,
-                attacker, defender, context="storm",
-                walls_range=round_walls,
-                siege_markers=siegeworks_count,
-                round_index=round_idx,
-            )
-            rnd.steps.append(step_res)
-            if _battle_over(attacker, defender):
-                break
+
+        # Engaged Defender = Front aggregate (+ Garrison bucket).
+        defender.forces = _d_front_agg()
+
+        # ---- Storm step order: Defender all Strikes, then Attacker ----
+        # 1.a Defender Missile (Front + Garrison) -> Attacker.
+        before = dict(attacker.forces)
+        step = _resolve_step(state, "1.a", "defender", "missile", None,
+                             attacker, defender, context="storm",
+                             walls_range=round_walls,
+                             siege_markers=siegeworks_count,
+                             round_index=round_idx)
+        rnd.steps.append(step)
+        # 1.b Attacker Missile -> Defender (Front aggregate + Garrison).
+        if attacker.has_unrouted():
+            before_d = dict(defender.forces)
+            step = _resolve_step(state, "1.b", "attacker", "missile", None,
+                                 attacker, defender, context="storm",
+                                 walls_range=round_walls,
+                                 siege_markers=siegeworks_count,
+                                 round_index=round_idx)
+            rnd.steps.append(step)
+            _push_defender_losses(before_d)
+            defender.forces = _d_front_agg()
+        # 2.a Defender Melee (per-Lord cap + Garrison) -> Attacker.
+        if _defender_front_alive() or defender.garrison_forces:
+            dmelee = _melee_hits(
+                [d_lord_forces[lid] for lid in d_front], d_caps,
+                side_is_christian=(defender.side == "christian"),
+                round_idx=round_idx, garrison=defender.garrison_forces)
+            step = _resolve_step(state, "2.a", "defender", "melee", None,
+                                 attacker, defender, context="storm",
+                                 walls_range=round_walls,
+                                 siege_markers=siegeworks_count,
+                                 round_index=round_idx,
+                                 melee_hits_override=dmelee)
+            rnd.steps.append(step)
+        # 2.b Attacker Melee (single Active Lord, cap 6) -> Defender.
+        if attacker.has_unrouted() and _defender_alive():
+            amelee = _melee_hits(
+                [attacker.forces], a_caps,
+                side_is_christian=(attacker.side == "christian"),
+                round_idx=round_idx)
+            before_d = dict(defender.forces)
+            step = _resolve_step(state, "2.b", "attacker", "melee", None,
+                                 attacker, defender, context="storm",
+                                 walls_range=round_walls,
+                                 siege_markers=siegeworks_count,
+                                 round_index=round_idx,
+                                 melee_hits_override=amelee)
+            rnd.steps.append(step)
+            _push_defender_losses(before_d)
+
         result.rounds.append(rnd)
-        # C8 Cantador also works in Storm per card text — discard after
-        # Round 1. M7 / Hills do NOT apply in Storm.
         if round_idx == 1:
             _discard_round1_events(state, ["C8"])
-        if _battle_over(attacker, defender):
+        if not attacker.has_unrouted() or not _defender_alive():
             break
-    # Rule 4.5.2: 'Rounds completed >= Siege markers there (Attacker loses)'
-    if attacker.has_unrouted() and not defender.has_unrouted():
-        result.winner = attacker.side
-    elif defender.has_unrouted() and not attacker.has_unrouted():
+
+    # Final Defender forces = surviving Front + untouched Reserve units
+    # (so downstream Losses/commit see the full picture).
+    final_forces: dict = {}
+    for lid in d_front + d_reserve:
+        for ut, n in d_lord_forces[lid].items():
+            if n > 0:
+                final_forces[ut] = final_forces.get(ut, 0) + n
+    defender.forces = final_forces
+    defender.garrison_forces = {}  # Garrison returns to pool at Storm end.
+
+    # ---- Winner (4.5.2 Ending the Storm) ------------------------------
+    if conceded:
         result.winner = defender.side
-    elif len(result.rounds) >= max_rounds:
-        # Attacker loses if rounds run out
+        result.notes.append("Attacker Conceded; attacker loses")
+    elif not attacker.has_unrouted():
+        result.winner = defender.side
+    elif not _defender_alive():
+        result.winner = attacker.side
+    else:
+        # Rounds ran out with Defenders surviving — Attacker loses.
         result.winner = defender.side
         result.notes.append(
-            f"Storm round-cap reached ({max_rounds}); attacker loses"
-        )
+            f"Storm round-cap reached ({max_rounds}); attacker loses")
     return result
-
-
-# ---------------------------------------------------------------------------
-# Sally (4.5.3) — besieged Lord attacks besieger
-# ---------------------------------------------------------------------------
-
-
 def resolve_sally(
     state: GameState,
     attacker: BattleSide,    # the BESIEGED Lord(s) — sallying out

@@ -2089,10 +2089,22 @@ def _h_cmd_storm(state, action):
         from almoravid.static_data import load_strongholds
         base_walls = load_strongholds()["strongholds"][loc.base_type]["walls_range"]
         modified_walls = (base_walls[0], max(0, base_walls[1] - 1))
-        result = resolve_storm(state, atk, dfd, walls_range_override=modified_walls)
+    # Per-combat Storm policies (Option A): the controlling player
+    # pre-declares an optional Attacker concede round (S10, >=2) and
+    # whether the Defender brings Reserves to the Front (S11 Reposition;
+    # forced advance still applies when all Front Lords Rout).
+    concede_after_round = action.get("concede_after_round")
+    reposition_defender = bool(action.get("reposition_defender", True))
+    if surprise_loc == here:
+        result = resolve_storm(state, atk, dfd,
+                               walls_range_override=modified_walls,
+                               concede_after_round=concede_after_round,
+                               reposition_defender=reposition_defender)
         state.meta.surprise_storm_pending_locale_id = None
     else:
-        result = resolve_storm(state, atk, dfd)
+        result = resolve_storm(state, atk, dfd,
+                               concede_after_round=concede_after_round,
+                               reposition_defender=reposition_defender)
     commit_forces_after_battle(state, atk)
     # Defender: only commit back if single-Lord (Phase 5f limit)
     if len(dfd.lord_ids) == 1:
