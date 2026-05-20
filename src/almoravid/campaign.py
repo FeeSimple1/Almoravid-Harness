@@ -2069,20 +2069,59 @@ def _h_cmd_storm(state, action):
         commit_forces_after_battle(state, dfd)
     apply_aftermath(state, result)
 
-    # If attacker won the Storm, Conquer the Stronghold (4.5.2).
+    # 4.5.2 SACK: if the Besieged Defenders lose the Storm, the
+    # Stronghold is Sacked.
     conq_result = None
+    sack = None
     if result.winner == side:
+        from almoravid.battle import distribute_spoils_round_robin
+        from almoravid.state import Cylinder
+        from almoravid.actions import _shift_service_left as _ssl
+        from almoravid.static_data import load_strongholds as _ls
+        # Besieging Lords present (Spoils recipients).
+        besiegers_here = [
+            l.id for l in state.lords.values()
+            if l.side == side and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id == here
+        ]
+        sack_spoils: dict[str, int] = {}
+        removed_lords: list[str] = []
+        # (a) Permanently remove all losing Lords (3.3.1); award all
+        #     their Assets as Spoils (4.4.3) — capture BEFORE cleanup.
+        for eid in enemy_inside:
+            elord = state.lords[eid]
+            for atype, n in list(elord.assets.items()):
+                if n > 0:
+                    sack_spoils[atype] = sack_spoils.get(atype, 0) + n
+            for fld in elord.cleanup_on_removal_fields:
+                try:
+                    setattr(elord, fld, type(getattr(elord, fld))())
+                except Exception:
+                    pass
+            elord.cylinder = Cylinder(kind="removed")
+            _ssl(state, eid, boxes=20)
+            removed_lords.append(eid)
+        # (b) Conquer the Stronghold as per Surrender (4.5.1).
         conq_result = _conquer_stronghold(state, here, side)
+        # (c) In addition, award Stronghold Spoils (table) to besiegers.
+        sh_spoils = _ls()["strongholds"][loc.base_type].get("spoils", {})
+        for k in ("coin", "loot", "prov"):
+            if sh_spoils.get(k):
+                sack_spoils[k] = sack_spoils.get(k, 0) + sh_spoils[k]
+        if besiegers_here and sack_spoils:
+            distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
+        sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
+                "recipients": besiegers_here}
 
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     _record(state, action,
             f"{side} {lord_id} Storms {here}: winner={result.winner}, "
             f"rounds={len(result.rounds)}"
-            + (f", Conquest: {conq_result}" if conq_result else "")
+            + (f", Sack: {sack}" if sack else "")
             + f"; card spent ({consumed} actions)")
     return {"winner": result.winner, "rounds": len(result.rounds),
-            "conquest": conq_result,
+            "conquest": conq_result, "sack": sack,
             "actions_consumed": consumed}
 
 
