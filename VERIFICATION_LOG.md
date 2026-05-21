@@ -109,3 +109,24 @@ Three former "accepted limitations" were re-examined and FIXED (they did not nee
 - Relief Sally (B6) per-Lord lane Losses FIXED 2026-05-20: resolve_relief_sally tracks per-Lord Forces + Routed units in each lane (via _init_lane/_push_lane/_lane_step, mirroring the Storm) and writes each Lord's post-battle state EXACTLY, so a multi-Lord lane no longer distributes Losses proportionally; _h_respond_stand_battle drops the proportional commit. Tests: tests/test_fix_relief_sally_perlord.py (2). M6 Feigned Retreat round-2 melee reorder is now applied within a Relief Sally (both lanes; discarded after Round 2), and excess Reserve Defenders now ADVANCE via Reposition (Round 2+): _advance_reserve brings them into emptied Front (Marcher lane) then Reserve-as-Front (Sallyer lane) slots up to capacity, so they are engaged instead of sidelined. Tests: tests/test_fix_relief_sally_rare.py (2).
 - Storm 4.4.4 Losses are now per-Lord: resolve_storm tracks routed units per besieging/defending Lord (attacker_lord_routed/defender_lord_routed) and _h_cmd_storm commits each Lord's routed pile so apply_battle_losses(storm=True) rolls 4.4.4 per-Lord (storm attacker keeps each on a 1; survivors return to that Lord's Forces). This also FIXED a regression where S11b's per-Lord force commit had dropped the routed_units write, skipping storm 4.4.4 entirely. Tests: tests/test_fix_storm_losses_perlord.py.
 - AoW draw is now MANDATORY and fixed at two (3.1.2/3.1.3) — NOT accepted/deferred. Previously drawing was optional and self-play skipped it entirely, leaving the whole Capability/Event subsystem dormant. Now Meta.aow_draw_done (reset each Levy) gates the Arts-of-War step: a side must draw exactly two cards (aow_draw draws min(2,deck), auto-rebuilding the deck via 3.1.1 if empty; drawing twice is rejected) and deploy/implement them (L13) before pass_step is legal (enforced in both the enumerator and _h_pass_step). Self-play now actively acquires Capabilities/Events. Immediate Events recycle to the deck via the 3.1.1 rebuild. Tests: tests/test_fix_aow_mandatory_draw.py + updated legal_moves/actions/campaign/cli helpers (shared tests/_plan_helpers.step_levy).
+
+
+## Fresh exhaustive clause-by-clause audit (2026-05-20) — fixes
+A second full read of the rulebook (5 independent read-only audit passes) surfaced
+a punch list of residual base-game gaps. Fixes by group:
+
+### Conquest / Ravage VP (1.3.1, 4.5, 4.9.2)
+- Conquest now flips a Ravage marker (1.3.1 / 4.5 summary "Conquest flips Ravage to
+  Enemy color" / 4.5.1 Surrender "Ravaged Land" bullet). Reading adopted: the marker
+  ends up the NON-conquering (Enemy) side's color — i.e. only the conqueror's OWN-color
+  marker flips (to Enemy); a marker already in the Enemy's color is unchanged. This is
+  the reading that reconciles all three citations (the 4.5.1 bullet conditions the flip
+  on "if the Conquering side has a Ravaged marker there"). Implemented in
+  _conquer_stronghold; the ½VP moves between sides in the running tally. NOTE: the
+  prior implementation had no flip at all. Tests: tests/test_ravage_flip_and_grow_vp.py,
+  updated tests/test_surrender_conquest.py.
+- Running-score sync for Ravage ½VP: state.score.{christian,muslim} is an incremental
+  display tally (the Victory verdict uses count-based compute_final_vp, which was always
+  correct). The tally was being credited at Ravage placement (4.7.2) but NOT debited at
+  Grow removal (4.9.2 "adjust VP") nor moved at the adjust_taifa_status Allegiance flip
+  (1.4.3). Both now keep the tally honest. Tests: tests/test_ravage_flip_and_grow_vp.py.

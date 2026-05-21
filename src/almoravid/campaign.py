@@ -644,6 +644,15 @@ def _apply_grow_harvest_repairs(state, prev_box: int) -> dict:
             removed = sorted(ravaged)[:remove]
             for lid in removed:
                 state.locales[lid].ravaged = "none"
+                # 4.9.2 "adjust VP": removing a Ravage marker drops its
+                # ½VP from the running tally (yellow=Christian, green=
+                # Muslim, 5.1). compute_final_vp is count-based so the
+                # board verdict stays correct either way; this keeps the
+                # displayed running score honest.
+                if color == "yellow":
+                    state.score.christian -= 0.5
+                else:
+                    state.score.muslim -= 0.5
             return removed
         # Christian reduces ENEMY (green) markers; Muslim reduces yellow.
         green_removed = _reduce("green")
@@ -1095,12 +1104,20 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
         ("parias", "independent"), ("reconquista", "independent")
     ):
         flip_color_from, flip_color_to = "green", "yellow"
-    # Flip Ravaged markers in this Taifa
+    # Flip Ravaged markers in this Taifa (1.4.3). Each flip moves the
+    # ½VP between sides in the running tally (yellow scores Christian,
+    # green scores Muslim, 5.1 / Ravage handler 4.7.2).
     if flip_color_from:
         for lid in taifa.locale_ids:
             if state.locales[lid].ravaged == flip_color_from:
                 state.locales[lid].ravaged = flip_color_to  # type: ignore[assignment]
                 results["ravaged_flips"].append((lid, flip_color_from, flip_color_to))
+                if flip_color_from == "yellow":
+                    state.score.christian -= 0.5
+                    state.score.muslim += 0.5
+                else:
+                    state.score.muslim -= 0.5
+                    state.score.christian += 0.5
 
     # Force-Siege / force-Conquest at each Stronghold in the Taifa based
     # on Lord presence (1.4.3).
@@ -2174,6 +2191,27 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
         loc.conquered_markers = sh_value
         vp_delta = 1.0 * sh_value
         marker = "conquered"
+    # 1.3.1: Conquest of a Stronghold flips a Ravage marker there to the
+    # NON-conquering (Enemy) side's color. The summary (4.5) phrases it
+    # "Conquest flips Ravage to Enemy color"; the 4.5.1 Surrender bullet
+    # conditions on "if the Conquering side has a Ravaged marker there,
+    # flip it" — i.e. only the conqueror's own-color marker flips (to the
+    # Enemy). A marker already in the Enemy's color is unchanged. Design:
+    # ravaged land you just took now scores its ½VP penalty against you.
+    # The running state.score tracks Ravage ½VP incrementally (placed in
+    # the Ravage handler, 4.7.2), so the flip moves 0.5 between sides.
+    ravaged_flip = None
+    enemy_color = "green" if conquering_side == "christian" else "yellow"
+    own_color = "yellow" if conquering_side == "christian" else "green"
+    if loc.ravaged == own_color:
+        loc.ravaged = enemy_color  # type: ignore[assignment]
+        ravaged_flip = (own_color, enemy_color)
+        if conquering_side == "christian":
+            state.score.christian -= 0.5
+            state.score.muslim += 0.5
+        else:
+            state.score.muslim -= 0.5
+            state.score.christian += 0.5
     # Remove the Conquering side's Siege markers (Conquest ends Siege).
     if conquering_side == "christian":
         loc.siege_yellow = 0
@@ -2183,7 +2221,8 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
         state.score.muslim += vp_delta
     return {"locale": locale_id, "marker": marker, "value": sh_value,
             "vp_delta": vp_delta, "conquered_total": loc.conquered_markers,
-            "jihad_total": loc.jihad_markers, "removed": removed}
+            "jihad_total": loc.jihad_markers, "removed": removed,
+            "ravaged_flip": ravaged_flip}
 
 
 

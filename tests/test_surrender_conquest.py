@@ -47,13 +47,21 @@ def test_muslim_reconquers_reconquista_taifa_places_jihad() -> None:
     assert s.taifas["toledo"].status == "reconquista"
     assert s.locales["toledo"].conquered_markers == 3
     s.locales["toledo"].siege_green = 4
-    vp_before = s.score.muslim
+    # Scenario B seeds Toledo with a green (Muslim-placed) Ravage marker.
+    assert s.locales["toledo"].ravaged == "green"
+    vp_before_m = s.score.muslim
+    vp_before_c = s.score.christian
     r = _conquer_stronghold(s, "toledo", "muslim")
     assert r["marker"] == "jihad"
     assert r["vp_delta"] == 0.5 * 3  # Jihad = 0.5 VP * City value 3
     assert s.locales["toledo"].jihad_markers >= 3
     assert s.locales["toledo"].siege_green == 0
-    assert s.score.muslim == vp_before + 1.5
+    # 1.3.1: Muslim conquest flips its own green Ravage marker to the
+    # Enemy (yellow) color; the ½VP moves from Muslim to Christian.
+    assert s.locales["toledo"].ravaged == "yellow"
+    assert r["ravaged_flip"] == ("green", "yellow")
+    assert s.score.muslim == vp_before_m + 1.5 - 0.5
+    assert s.score.christian == vp_before_c + 0.5
 
 
 def test_cmd_siege_with_no_defender_attempts_surrender() -> None:
