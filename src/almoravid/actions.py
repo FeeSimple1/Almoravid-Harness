@@ -269,12 +269,30 @@ def _h_aow_shuffle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
-    # Build a deck-by-side from cards.json if empty (first Levy bootstrap).
+    # 3.1.1: collect and shuffle ALL unused cards of this side into the
+    # Event draw deck — EXCLUDING Held Events (this_levy_events /
+    # this_campaign_events / held), Capability cards in play (board_edge,
+    # capabilities_in_play side_wide, and this_lord caps on mats), and
+    # cards currently pending implementation. Immediate Events that were
+    # used in a prior Levy (sitting in discard) are thereby recycled.
     cards = load_cards()["cards"]
-    if not state.decks.draw:
-        state.decks.draw = [cid for cid, c in cards.items() if c["side"] == side]
+    excluded: set[str] = set()
+    for bucket in (state.decks.this_levy_events, state.decks.this_campaign_events,
+                   state.decks.held):
+        excluded.update(bucket.get(side, []))
+    excluded.update(state.decks.board_edge.get(side, []))
+    excluded.update(c.card_id for c in state.decks.capabilities_in_play
+                    if c.owner_side == side)
+    for l in state.lords.values():
+        if l.side == side:
+            excluded.update(l.capabilities)
+    excluded.update(state.decks.pending_draw.get(side, []))
+    state.decks.draw = [cid for cid, c in cards.items()
+                        if c["side"] == side and cid not in excluded]
     state.decks.draw = shuffle(state, state.decks.draw)
-    _record(state, action, f"{side} shuffles AoW deck ({len(state.decks.draw)} cards)")
+    _record(state, action,
+            f"{side} shuffles AoW deck ({len(state.decks.draw)} cards; "
+            f"{len(excluded)} excluded as held/in-play)")
     return {"deck_size": len(state.decks.draw)}
 
 
