@@ -112,7 +112,8 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     pend = state.decks.pending_draw.get(side, [])
     if pend:
         # L13: drawn cards MUST be processed before anything else.
-        if not state.meta.first_levy_done:
+        from almoravid.actions import aow_capability_phase
+        if aow_capability_phase(state):
             cards = load_cards()["cards"]
             for cid in pend:
                 rec = cards.get(cid, {})

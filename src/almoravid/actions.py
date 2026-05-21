@@ -272,6 +272,22 @@ def _h_pass_step(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def aow_capability_phase(state: GameState) -> bool:
+    """Whether the current Levy's Arts of War step draws/deploys
+    Capabilities (3.1.2) rather than implementing Events (3.1.3).
+
+    True on the very first Levy of the game, AND — per 6.3.5 — on the
+    first Spring Levy after Winter (Calendar box 9) in Scenario F, when
+    players draw Capabilities instead of Events to rebuild the loadout
+    discarded during Winter Disband (6.3.1)."""
+    if not state.meta.first_levy_done:
+        return True
+    if (state.meta.scenario_letter == "F"
+            and state.calendar.current_box == 9):
+        return True
+    return False
+
+
 def _h_aow_shuffle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Shuffle the Arts of War deck for the acting side (SoP §3.1)."""
     side = _require_side(action)
@@ -346,9 +362,11 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
-    _require(not state.meta.first_levy_done,
-             "Capability deployment (3.1.2) is only for the first Levy; "
-             "later Levies implement Events (3.1.3)", code="not_first_levy")
+    _require(aow_capability_phase(state),
+             "Capability deployment (3.1.2) is only for the first Levy "
+             "(or the first Spring Levy after Winter, box 9, Scenario F, "
+             "6.3.5); other Levies implement Events (3.1.3)",
+             code="not_capability_phase")
     card_id = action.get("card_id")
     pend = state.decks.pending_draw.get(side, [])
     _require(card_id in pend, f"{card_id} not in {side} pending draw",
@@ -394,10 +412,11 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
-    _require(state.meta.first_levy_done,
-             "Event implementation (3.1.3) applies from the second Levy; "
-             "the first Levy deploys Capabilities (3.1.2)",
-             code="first_levy_caps_only")
+    _require(not aow_capability_phase(state),
+             "Event implementation (3.1.3) applies on Levies that are not "
+             "a Capability-draw phase (first Levy, or box-9 Spring after "
+             "Winter in Scenario F, 6.3.5)",
+             code="capability_phase_caps_only")
     pend = state.decks.pending_draw.get(side, [])
     _require(pend, f"no pending drawn cards for {side}", code="not_pending")
     card_id = action.get("card_id", pend[0])

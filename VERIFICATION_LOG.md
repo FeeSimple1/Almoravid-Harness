@@ -155,3 +155,32 @@ a punch list of residual base-game gaps. Fixes by group:
   Locale now removes that side's Siege/Bypass markers there (new
   _remove_orphaned_siege_bypass; "becomes free of Enemy Lords ... remove markers").
   Tests: tests/test_depart_marker_cleanup.py.
+
+### Winter sequence (6.3.1, 6.3.4, 6.3.5) — Scenario F
+- 6.3.1 Winter Disband now (a) deposits Disbanding Taifa Lords' mat Coin into the Taifas
+  box (state.taifas_box_coin) without adjusting Taifa status or awarding Parias Coin, and
+  (b) handles Beyond-Service (3.3.1) FIRST: a Lord whose Service marker is left of
+  (lower box than) the marker box is permanently removed (Forces/Assets to pools, This-Lord
+  Capabilities to the deck, cylinder->removed, Seat markers stripped) — EXCEPTION Rodrigo,
+  who goes to Calendar box 9. Remaining Mustered non-Siege Lords Disband to their mats
+  (the 6.3.1 modification of 3.3.2) to auto-Muster at Spring Muster. Previously every
+  non-Siege Lord went to the mat (Beyond-Service Lords wrongly survived to re-Muster) and
+  Taifa Coin was silently dropped. Tests: tests/test_winter_sequence_63.py.
+- 6.3.4 Plowing implemented (winter_plowing): at the end of box 8 each Lord at a Siege
+  reduces Carts and Mules each to half (rounded up), mirroring Harvest but Siege-only.
+  Wired before Spring Muster at the box-9 transition. Tests: tests/test_winter_sequence_63.py.
+- 6.3.5 Arts of War box 9: the first Spring Levy after Winter (Calendar box 9, Scenario F)
+  now draws/deploys Capabilities instead of Events. New aow_capability_phase(state) helper
+  (first Levy OR Scenario-F box 9) replaces the bare first_levy_done gate in both the
+  handlers (aow_deploy_capability / aow_implement_event) and the legal_moves enumerator.
+  Tests: tests/test_winter_sequence_63.py + updated test_fix_l13_aow_draw.py error code.
+- 6.3.2 Winter Siege — DEFERRED (documented limitation, not silently skipped). The Winter
+  boxes (7-8) are processed as deterministic auto-steps (Winter Disband, Plowing, Spring
+  Muster), NOT as interactive turns. Winter Siege requires per-besieger OPTIONAL Supply or
+  Ravage and OPTIONAL Pay choices that materially affect the mandatory at-Siege Feed and
+  at-limit Disband outcomes. Auto-running the mandatory Feed/Disband WITHOUT first offering
+  the optional Supply/Ravage would be a harmful greedy default (it could force an Unfed
+  penalty the player could legally have avoided), which violates the no-greedy-defaults
+  rule. Faithfully implementing 6.3.2 needs an interactive Winter turn-flow (a larger
+  change to the turn model); until then it is intentionally not auto-run. Lords at Sieges
+  are correctly KEPT (not Disbanded) by Winter Disband so the state is consistent.

@@ -80,4 +80,4 @@ def test_first_levy_rejects_event_implementation() -> None:
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "aow_implement_event", "side": "christian",
                          "card_id": "C9"})
-    assert ei.value.code == "first_levy_caps_only"
+    assert ei.value.code == "capability_phase_caps_only"

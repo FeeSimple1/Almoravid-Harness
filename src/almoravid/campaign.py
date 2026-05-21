@@ -780,6 +780,11 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             wd = winter_disband(state)
             auto_actions.append({"winter_disband": wd})
         if new_box == 9:
+            # End of box 8: Plowing (6.3.4) first, then Spring Muster
+            # (6.3.3) re-places Disbanded Lords for the box-9 Levy.
+            pl = winter_plowing(state)
+            if pl["plowed"]:
+                auto_actions.append({"winter_plowing": pl})
             sm = spring_muster(state)
             auto_actions.append({"spring_muster": sm})
 
@@ -917,27 +922,68 @@ def winter_disband(state) -> dict:
     """
     from almoravid.state import Cylinder
     results = {"disbanded_to_mat": [], "rodrigo_to_box_9": [],
-               "lords_at_sieges_kept": [], "board_edge_discarded": []}
+               "lords_at_sieges_kept": [], "board_edge_discarded": [],
+               "beyond_service_removed": [], "taifas_box_coin_added": 0}
+
+    cur_box = state.calendar.current_box
+    svc = {sm.lord_id: sm.box for sm in state.calendar.service_markers
+           if sm.vassal_id is None}
+
+    def _strip_seats(lord_id: str) -> None:
+        for loc2 in state.locales.values():
+            if lord_id in loc2.seat_marker_lord_ids:
+                loc2.seat_marker_lord_ids.remove(lord_id)
 
     for lid, l in state.lords.items():
         if l.cylinder.kind != "locale":
             continue
         loc = state.locales[l.cylinder.locale_id]
-        # Lord at an active Siege keeps for Winter Siege step
+        # Lord at an active Siege keeps for the Winter Siege step (6.3.2).
         at_siege = (loc.siege_yellow > 0 or loc.siege_green > 0)
         if at_siege:
             results["lords_at_sieges_kept"].append(lid)
             continue
-        if lid in ("rodrigo_campeador", "rodrigo_al_sayyid"):
+        is_rodrigo = lid in ("rodrigo_campeador", "rodrigo_al_sayyid")
+        # 3.3.1 Beyond Service: a Service marker LEFT of the marker box
+        # (lower-numbered) is permanently removed FIRST — EXCEPTION:
+        # Rodrigo (placed at box 9 even if Beyond Service, 6.3.1).
+        beyond_service = (lid in svc and svc[lid] < cur_box)
+        if is_rodrigo:
             l.cylinder = Cylinder(kind="calendar", box=9)
             results["rodrigo_to_box_9"].append(lid)
-        else:
-            l.cylinder = Cylinder(kind="mat")
-            results["disbanded_to_mat"].append(lid)
-        # Clear cleanup_on_removal_fields except: cylinder already set,
-        # we DO keep capabilities on mat (3.4.1 - they re-Muster with the
-        # Lord). Actually per 6.3.1 we 'clear each mat' — so capabilities
-        # too go. But the cards aren't lost — board-edge holds them.
+            l.forces = {}
+            l.assets = {}
+            l.capabilities = []
+            l.in_stronghold = False
+            l.moved_fought = False
+            l.routed_units = {}
+            continue
+        if beyond_service:
+            # Permanently removed from the game (3.3.1): Forces/Assets to
+            # pools (cleared), This-Lord Capabilities to their deck,
+            # cylinder/mat/Seat markers out of the game.
+            state.decks.discard.extend(l.capabilities)
+            _strip_seats(lid)
+            l.cylinder = Cylinder(kind="removed")
+            l.forces = {}
+            l.assets = {}
+            l.capabilities = []
+            l.in_stronghold = False
+            l.moved_fought = False
+            l.routed_units = {}
+            results["beyond_service_removed"].append(lid)
+            continue
+        # Otherwise Disband as if at Service limit (3.3.2) but to the mat
+        # (6.3.1 modification), to auto-Muster at Spring Muster (6.3.3).
+        # Disbanding Taifa Lords put all Coin from their mats into the
+        # Taifas box (do NOT adjust Taifa status / award Parias Coin).
+        if l.is_taifa:
+            coin = l.assets.get("coin", 0)
+            if coin:
+                state.taifas_box_coin += coin
+                results["taifas_box_coin_added"] += coin
+        l.cylinder = Cylinder(kind="mat")
+        results["disbanded_to_mat"].append(lid)
         l.forces = {}
         l.assets = {}
         l.capabilities = []
@@ -945,7 +991,7 @@ def winter_disband(state) -> dict:
         l.moved_fought = False
         l.routed_units = {}
 
-    # Discard board-edge Capabilities
+    # Discard board-edge Capabilities (3.4.4)
     for side in ("christian", "muslim"):
         edge = state.decks.board_edge.get(side, [])
         if edge:
@@ -953,7 +999,7 @@ def winter_disband(state) -> dict:
             results["board_edge_discarded"].extend(edge)
         state.decks.board_edge[side] = []
 
-    # Clear Service markers (6.3.1 Disbands)
+    # Clear Service markers (6.3.1 Disbands; Spring Muster re-places them)
     state.calendar.service_markers = []
     return results
 
@@ -1010,6 +1056,38 @@ def spring_muster(state) -> dict:
                                        box=min(new_box, 17))
                 results["no_free_seat"].append(lid)
     return results
+
+
+def winter_plowing(state) -> dict:
+    """Rule 6.3.4 Plowing: at the end of the second 40 Days of Winter
+    (box 8), each Lord at a Siege (only) reduces his Carts and Mules
+    each to half their number, rounded up. Mirrors 4.9.2 Harvest but
+    restricted to Lords at a Siege Locale."""
+    import math as _m
+    out = {"plowed": []}
+    for lid, l in state.lords.items():
+        if l.cylinder.kind != "locale":
+            continue
+        loc = state.locales[l.cylinder.locale_id]
+        if not (loc.siege_yellow > 0 or loc.siege_green > 0):
+            continue
+        cart = l.assets.get("cart", 0)
+        mule = l.assets.get("mule", 0)
+        if cart <= 1 and mule <= 1:
+            continue
+        new_cart = _m.ceil(cart / 2) if cart > 0 else 0
+        new_mule = _m.ceil(mule / 2) if mule > 0 else 0
+        if new_cart > 0:
+            l.assets["cart"] = new_cart
+        else:
+            l.assets.pop("cart", None)
+        if new_mule > 0:
+            l.assets["mule"] = new_mule
+        else:
+            l.assets.pop("mule", None)
+        out["plowed"].append({"lord_id": lid, "cart": (cart, new_cart),
+                              "mule": (mule, new_mule)})
+    return out
 
 
 
