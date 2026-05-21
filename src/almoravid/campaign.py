@@ -2548,12 +2548,19 @@ def _h_cmd_storm(state, action):
         for bid, f in result.attacker_lord_forces.items():
             if bid in state.lords:
                 state.lords[bid].forces = dict(f)
+                # S11b: write per-Lord Routed units so 4.4.4 Storm Losses
+                # (apply_battle_losses storm=True) roll per-Lord and any
+                # survivors return to that Lord's Forces.
+                state.lords[bid].routed_units = dict(
+                    result.attacker_lord_routed.get(bid, {}))
     else:
         commit_forces_after_battle(state, atk)
     if result.defender_lord_forces:
         for did, f in result.defender_lord_forces.items():
             if did in state.lords:
                 state.lords[did].forces = dict(f)
+                state.lords[did].routed_units = dict(
+                    result.defender_lord_routed.get(did, {}))
     elif len(dfd.lord_ids) == 1:
         commit_forces_after_battle(state, dfd)
 

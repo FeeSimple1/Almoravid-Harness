@@ -189,6 +189,8 @@ class BattleResult:
     # caller can commit each Lord exactly. Empty for non-Storm results.
     attacker_lord_forces: dict[str, dict] = field(default_factory=dict)
     defender_lord_forces: dict[str, dict] = field(default_factory=dict)
+    attacker_lord_routed: dict[str, dict] = field(default_factory=dict)
+    defender_lord_routed: dict[str, dict] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -1428,6 +1430,7 @@ def resolve_storm(
     # Attacker is the single Active Lord (Front), no Reserves.
     d_lord_forces = {lid: dict(state.lords[lid].forces)
                      for lid in defender.lord_ids}
+    d_lord_routed: dict = {lid: {} for lid in defender.lord_ids}
     d_front = [defender.lord_ids[0]] if defender.lord_ids else []
     d_reserve = list(defender.lord_ids[1:])
     d_caps = list(defender.capabilities_in_play)
@@ -1449,6 +1452,7 @@ def resolve_storm(
                          for lid in attacker.lord_ids}
     a_front = [attacker.lord_ids[0]] if attacker.lord_ids else []
     a_reserve = list(attacker.lord_ids[1:])
+    a_lord_routed: dict = {lid: {} for lid in attacker.lord_ids}
 
     def _a_front_agg() -> dict:
         agg: dict = {}
@@ -1473,6 +1477,8 @@ def resolve_storm(
                     a_lord_forces[lid][ut] = have - take
                     if a_lord_forces[lid][ut] <= 0:
                         a_lord_forces[lid].pop(ut, None)
+                    a_lord_routed[lid][ut] = (
+                        a_lord_routed[lid].get(ut, 0) + take)
                     lost -= take
 
     def _attacker_front_alive() -> bool:
@@ -1505,6 +1511,8 @@ def resolve_storm(
                     d_lord_forces[lid][ut] = have - take
                     if d_lord_forces[lid][ut] <= 0:
                         d_lord_forces[lid].pop(ut, None)
+                    d_lord_routed[lid][ut] = (
+                        d_lord_routed[lid].get(ut, 0) + take)
                     lost -= take
 
     def _defender_front_alive() -> bool:
@@ -1658,6 +1666,12 @@ def resolve_storm(
         for lid in attacker.lord_ids}
     result.defender_lord_forces = {
         lid: {ut: n for ut, n in d_lord_forces[lid].items() if n > 0}
+        for lid in defender.lord_ids}
+    result.attacker_lord_routed = {
+        lid: {ut: n for ut, n in a_lord_routed[lid].items() if n > 0}
+        for lid in attacker.lord_ids}
+    result.defender_lord_routed = {
+        lid: {ut: n for ut, n in d_lord_routed[lid].items() if n > 0}
         for lid in defender.lord_ids}
 
     # ---- Winner (4.5.2 Ending the Storm) ------------------------------
