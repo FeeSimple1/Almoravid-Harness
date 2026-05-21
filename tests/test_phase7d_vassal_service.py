@@ -83,10 +83,13 @@ def test_take_vassal_places_service_marker_under_advanced_rule() -> None:
     s.meta.levy_step = "muster"
     s.meta.active_player = "christian"
     from almoravid.actions import apply_action
+    svc_rating = lord.vassals[ready_idx].service_cost
+    expected = min(17, s.calendar.current_box + svc_rating)
     apply_action(s, {"type": "levy_take_vassal", "side": "christian",
                      "lord_id": "alfonso", "vassal_index": ready_idx})
-    # A Vassal Service marker now exists at the Lord's box (7).
+    # 3.4.2: the Vassal marker is placed right of the LEVY marker by the
+    # Vassal's Service Rating (not at the Lord's own box).
     vm = next((m for m in s.calendar.service_markers
                if m.vassal_id == vassal_id), None)
     assert vm is not None
-    assert vm.box == 7
+    assert vm.box == expected

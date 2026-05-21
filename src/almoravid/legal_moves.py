@@ -109,6 +109,12 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.
     if state.meta.phase == "setup":
+        # 6.1 Bidding for Sides is a one-time PRE-GAME setup agreement,
+        # not an in-game move — it is a valid callable action (handler
+        # bid_for_sides) but is intentionally NOT enumerated in the
+        # default move stream, so automated drivers don't auto-bid (which
+        # would perturb the game's RNG / seat assignment). A player who
+        # wants to bid issues the action explicitly before begin_levy.
         moves.append({"type": "begin_levy"})
         return moves
 

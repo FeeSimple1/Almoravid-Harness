@@ -548,6 +548,13 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Check every Lord that Moved/Fought (and the active Lord) since the
     # Feed Unfed penalty may have pushed a Lord to its Service limit.
     disband_result = _auto_disband_at_service_limit(state, lord_id)
+    # 3.4.2 advanced Vassal Service: at the 4.8.2 Disband step the
+    # Mustered Vassals at/beyond Service limit also Disband (Christian
+    # then Muslim), with the no-Forces Lord cascade (1.6).
+    if state.meta.advanced_vassal_service:
+        from almoravid.actions import _disband_vassals_for_side
+        for _sd in ("christian", "muslim"):
+            _disband_vassals_for_side(state, _sd)
     # Bookkeeping
     state.meta.active_lord_id = None
     state.meta.actions_remaining = 0

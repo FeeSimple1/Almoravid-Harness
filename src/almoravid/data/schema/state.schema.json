@@ -864,6 +864,16 @@
           "title": "Advanced Vassal Service",
           "type": "boolean"
         },
+        "hidden_mats": {
+          "default": false,
+          "title": "Hidden Mats",
+          "type": "boolean"
+        },
+        "bidding_done": {
+          "default": false,
+          "title": "Bidding Done",
+          "type": "boolean"
+        },
         "cta_option_used_christian": {
           "default": false,
           "title": "Cta Option Used Christian",
@@ -1168,6 +1178,11 @@
         "ready": {
           "default": true,
           "title": "Ready",
+          "type": "boolean"
+        },
+        "pennant_down": {
+          "default": false,
+          "title": "Pennant Down",
           "type": "boolean"
         }
       },

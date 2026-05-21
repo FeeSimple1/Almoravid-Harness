@@ -203,6 +203,53 @@ def _record(state: GameState, action: dict[str, Any], summary: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _h_bid_for_sides(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """6.1 Bidding for Sides (optional, setup only). Two players each bid
+    (total pips of dice they hide); the LOWER bid takes the Muslim side
+    and the number of 1VP markers in the Taifas box is reset to equal
+    that bid. Ties reset to that number and assign sides randomly. The
+    lowest allowed bid in Scenario F is 2.
+
+    In this engine the two sides (Christian/Muslim) and their pieces are
+    fixed; bidding's only mechanical effect on game state is resetting
+    the Muslim Taifas-box VP (state.taifas_box_vp). The seat assignment
+    (which player plays Muslim) is reported for the human players.
+
+    Action args: bid1 (int>=0), bid2 (int>=0).
+    """
+    from almoravid.rng import roll_d6
+    _require(state.meta.phase == "setup",
+             "Bidding for Sides is a setup-time option (6.1)",
+             code="wrong_phase")
+    _require(not state.meta.bidding_done,
+             "Bidding has already been done (6.1)", code="already_bid")
+    b1 = action.get("bid1")
+    b2 = action.get("bid2")
+    _require(isinstance(b1, int) and isinstance(b2, int)
+             and b1 >= 0 and b2 >= 0,
+             "bid1 and bid2 must be non-negative ints", code="bad_arg")
+    min_bid = 2 if state.meta.scenario_letter == "F" else 0
+    _require(b1 >= min_bid and b2 >= min_bid,
+             f"Scenario {state.meta.scenario_letter}: minimum bid is "
+             f"{min_bid} (6.1)", code="bid_too_low")
+    tie = (b1 == b2)
+    if b1 < b2:
+        muslim_player, winning = "player1", b1
+    elif b2 < b1:
+        muslim_player, winning = "player2", b2
+    else:
+        muslim_player = "player1" if roll_d6(state) <= 3 else "player2"
+        winning = b1
+    state.taifas_box_vp = float(winning)
+    state.meta.bidding_done = True
+    _record(state, action,
+            f"Bidding (6.1): bids {b1}/{b2}; {muslim_player} plays Muslim; "
+            f"Taifas-box VP reset to {winning}"
+            + (" (tie, random sides)" if tie else ""))
+    return {"muslim_player": muslim_player, "winning_bid": winning,
+            "taifas_box_vp": state.taifas_box_vp, "tie": tie}
+
+
 def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Transition from setup (or campaign) into the Levy phase (SoP §3).
 
@@ -255,6 +302,14 @@ def _h_pass_step(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                  and not state.decks.pending_draw.get(side),
                  f"{side} must draw and process Arts of War before passing "
                  f"(3.1.2/3.1.3)", code="aow_draw_pending")
+    # 3.4.2 advanced Vassal Service: the side's automatic Vassal Disband
+    # happens as it completes the Disband step (3.3); Pennant flip-up
+    # happens as it finishes its Muster segment (3.4).
+    if state.meta.advanced_vassal_service:
+        if state.meta.levy_step == "service_disband":
+            _disband_vassals_for_side(state, side)
+        elif state.meta.levy_step == "muster":
+            _flip_up_pennants(state, side)
     _set_step_completed(state, side)
     prev_step = state.meta.levy_step
     _advance_step_if_both_done(state)
@@ -1160,6 +1215,12 @@ def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
     Disband), per Pay (3.2). Box caps at 17 (the "17+" box). If the
     marker was off-left, it re-enters at box `boxes` from box 0.
     Returns the new box (1..17)."""
+    # 3.4.2: a Lord's Service shift (any direction, any reason) cascades
+    # to that Lord's Vassal Service markers by the same number of boxes.
+    if state.meta.advanced_vassal_service:
+        for vm in state.calendar.service_markers:
+            if vm.lord_id == lord_id and vm.vassal_id is not None:
+                vm.box = min(17, vm.box + boxes)
     sm = next((s for s in state.calendar.service_markers
                if s.lord_id == lord_id and s.vassal_id is None), None)
     if sm is None:
@@ -1171,6 +1232,96 @@ def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
         state.calendar.service_markers.append(sm)
     sm.box = min(17, sm.box + boxes)
     return sm.box
+
+
+def _disband_vassals_for_side(state: GameState, side: str) -> list[dict]:
+    """3.4.2 advanced Vassal Service — Disband step (3.3 / 4.8.2): for
+    every Mustered Vassal (one with a Calendar Service marker) of `side`:
+      - marker LEFT of the marker box -> permanently removed (3.3.1):
+        return its Forces to the pool, drop its marker; it cannot Muster
+        again (stays Unready with no marker).
+      - marker IN the current box -> Disband at limit (3.3.2): return its
+        Forces, drop its marker, set the Vassal Pennant-DOWN (Unready).
+    If returning a Vassal's Forces leaves its Lord with NO Forces, that
+    Lord immediately Disbands to the Calendar (1.6, 3.3.2).
+    Only runs under the advanced rule. Never applies to Bishops/Crusaders
+    (their markers are never on the Calendar; not modelled here)."""
+    if not state.meta.advanced_vassal_service:
+        return []
+    cur = state.calendar.current_box
+    out: list[dict] = []
+    no_force_lords: list[str] = []
+    for lid, lord in state.lords.items():
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        markers = [m for m in state.calendar.service_markers
+                   if m.lord_id == lid and m.vassal_id is not None]
+        for m in markers:
+            if m.box > cur:
+                continue  # not yet at Service limit
+            vassal = next((v for v in lord.vassals if v.id == m.vassal_id),
+                          None)
+            removed = m.box < cur
+            # Return the Vassal's Forces from the Lord's mat to the pool.
+            if vassal is not None:
+                for ut, n in vassal.forces.items():
+                    have = lord.forces.get(ut, 0)
+                    lord.forces[ut] = max(0, have - n)
+                    if lord.forces[ut] == 0:
+                        lord.forces.pop(ut, None)
+                if removed:
+                    vassal.pennant_down = False
+                    vassal.ready = False   # permanently gone (no re-Muster)
+                else:
+                    vassal.pennant_down = True   # Unready until flip-up
+                    vassal.ready = False
+            out.append({"lord_id": lid, "vassal_id": m.vassal_id,
+                        "fate": "removed" if removed else "pennant_down"})
+        # Drop the processed Vassal markers.
+        state.calendar.service_markers = [
+            mm for mm in state.calendar.service_markers
+            if not (mm.lord_id == lid and mm.vassal_id is not None
+                    and mm.box <= cur)]
+        # 1.6: a Lord left with no Forces Disbands to the Calendar.
+        if markers and not lord.forces and lord.cylinder.kind == "locale":
+            no_force_lords.append(lid)
+    for lid in no_force_lords:
+        # The 1.6 no-Forces Disband reuses _h_disband_lord (3.3.2). That
+        # handler is guarded for the Levy service_disband step, but this
+        # pass also runs during Campaign 4.8.2 — temporarily present a
+        # Levy/service_disband context, then restore.
+        _saved = (state.meta.phase, state.meta.levy_step,
+                  state.meta.active_player)
+        state.meta.phase = "levy"
+        state.meta.levy_step = "service_disband"
+        state.meta.active_player = side
+        try:
+            _h_disband_lord(state, {"type": "disband_lord",
+                                    "side": side, "lord_id": lid,
+                                    "bypass_limit_check": True})
+        finally:
+            (state.meta.phase, state.meta.levy_step,
+             state.meta.active_player) = _saved
+        out.append({"lord_id": lid, "fate": "lord_no_forces_disband"})
+    return out
+
+
+def _flip_up_pennants(state: GameState, side: str) -> list[str]:
+    """3.4.2: after a side finishes its Vassal Muster segment this Levy,
+    flip up all its Pennant-down (Unready) Vassal markers, making them
+    Ready for Muster in a later Levy."""
+    if not state.meta.advanced_vassal_service:
+        return []
+    flipped = []
+    for lord in state.lords.values():
+        if lord.side != side:
+            continue
+        for v in lord.vassals:
+            if v.pennant_down:
+                v.pennant_down = False
+                v.ready = True
+                flipped.append(f"{lord.id}:{v.id}")
+    return flipped
 
 
 def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
@@ -1380,15 +1531,18 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     cur = state.calendar.current_box
     sm = next((m for m in state.calendar.service_markers
                if m.lord_id == lord_id and m.vassal_id is None), None)
+    # 1.6 no-Forces auto-Disband (3.3.2) bypasses the at-limit gate.
+    bypass_limit = bool(action.get("bypass_limit_check"))
     if sm is None:
         beyond, at_limit = True, False  # off the Calendar (off-left)
     else:
-        _require(sm.box <= cur,
-                 f"{lord_id} Service marker (box {sm.box}) is right of the "
-                 f"Levy marker (box {cur}) — not subject to Disband (3.3)",
-                 code="not_at_limit")
+        if not bypass_limit:
+            _require(sm.box <= cur,
+                     f"{lord_id} Service marker (box {sm.box}) is right of the "
+                     f"Levy marker (box {cur}) — not subject to Disband (3.3)",
+                     code="not_at_limit")
         beyond = sm.box < cur
-        at_limit = sm.box == cur
+        at_limit = sm.box >= cur  # at limit OR (forced) right-of-limit
 
     # 3.3.2 Important / 1.4.3: Independent Taifa Lord -> Parias + Coin + VP.
     taifa_adjust = None
@@ -1600,6 +1754,11 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
     vassal = lord.vassals[vassal_index]
     _require(vassal.ready, f"vassal {vassal.name} not Ready",
              code="vassal_not_ready")
+    # 3.4.2 advanced rule: a Pennant-down (Unready) Vassal may not Muster.
+    if state.meta.advanced_vassal_service:
+        _require(not vassal.pennant_down,
+                 f"vassal {vassal.name} is Pennant-down (Unready) this "
+                 f"Levy (3.4.2)", code="vassal_unready")
     # Bring Vassal's Forces onto the Lord's mat
     for ut, n in vassal.forces.items():
         lord.forces[ut] = lord.forces.get(ut, 0) + n
@@ -1609,10 +1768,10 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
     # Service marker on the Calendar at the Lord's current Service box.
     if state.meta.advanced_vassal_service:
         from almoravid.state import ServiceMarker
-        lord_sm = next((s for s in state.calendar.service_markers
-                        if s.lord_id == lord_id and s.vassal_id is None),
-                       None)
-        box = lord_sm.box if lord_sm is not None else 1
+        # 3.4.2: place the Vassal's Service marker right of the Levy
+        # marker by the Vassal's Service Rating (service_cost), just as
+        # for a Lord (3.4.1) — NOT at the Lord's current box.
+        box = min(17, state.calendar.current_box + vassal.service_cost)
         already = any(s.lord_id == lord_id and s.vassal_id == vassal.id
                       for s in state.calendar.service_markers)
         if not already:
@@ -1746,6 +1905,7 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
 
 _HANDLERS = {
     "begin_levy": _h_begin_levy,
+    "bid_for_sides": _h_bid_for_sides,
     "pass_step": _h_pass_step,
     "aow_shuffle": _h_aow_shuffle,
     "aow_draw": _h_aow_draw,

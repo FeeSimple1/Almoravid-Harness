@@ -128,6 +128,14 @@ class Meta(StrictModel):
     # Mustered Vassals get their own Calendar Service markers and Lord
     # Service shifts cascade to them.
     advanced_vassal_service: bool = False
+    # Optional Hidden Mats fog-of-war (1.5.2). When True, redacted_view()
+    # hides a side's Lord Forces/Assets/This-Lord Capabilities from the
+    # opponent (except Lords engaged in Battle/Storm). Rules/legal moves
+    # are unaffected — this only governs what an opponent's view exposes.
+    hidden_mats: bool = False
+    # 6.1 Bidding for Sides is a one-time setup option; once used it is
+    # no longer offered (prevents re-bidding / setup loops).
+    bidding_done: bool = False
     # FIX-A (Call to Arms, 3.5): per-Levy bookkeeping for the
     # call_to_arms step. Each side may take at most ONE Call-to-Arms
     # option ("do nothing OR one of the following", 3.5.1-.2); these
@@ -229,8 +237,15 @@ class Vassal(StrictModel):
     id: str
     name: str
     forces: dict[UnitType, int] = Field(default_factory=dict)
-    service_cost: int  # Service marker advance when called
+    service_cost: int  # = Vassal Service Rating: 40-Days boxes ahead on
+    # the Calendar at Muster / Disband (advanced rule 3.4.2). Despite the
+    # name it is the Service Rating, not a Lordship cost (Muster always
+    # costs one Levy action).
     ready: bool = True
+    # Advanced Vassal Service (3.4.2): a Vassal Disbanded at its Service
+    # limit goes Pennant-side-DOWN (Unready) — it cannot Muster until the
+    # side flips Pennants up at the end of its Vassal Muster segment.
+    pennant_down: bool = False
 
 
 class CardInPlay(StrictModel):
