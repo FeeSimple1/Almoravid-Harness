@@ -213,6 +213,7 @@ def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="bad_phase")
     state.meta.phase = "levy"
     state.meta.levy_step = "arts_of_war"
+    state.meta.aow_draw_done = {}
     state.meta.levy_step_completed_christian = False
     state.meta.levy_step_completed_muslim = False
     state.meta.cta_option_used_christian = False
@@ -247,6 +248,13 @@ def _h_pass_step(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(not pend,
                  f"{side} must Disband {pend} before passing the "
                  f"service_disband step (3.3)", code="disband_pending")
+    # 3.1.2/3.1.3: a side may not pass the Arts-of-War step until it has
+    # drawn its two cards and processed (deployed/implemented) them.
+    if state.meta.levy_step == "arts_of_war":
+        _require(state.meta.aow_draw_done.get(side)
+                 and not state.decks.pending_draw.get(side),
+                 f"{side} must draw and process Arts of War before passing "
+                 f"(3.1.2/3.1.3)", code="aow_draw_pending")
     _set_step_completed(state, side)
     prev_step = state.meta.levy_step
     _advance_step_if_both_done(state)
@@ -269,12 +277,19 @@ def _h_aow_shuffle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
-    # 3.1.1: collect and shuffle ALL unused cards of this side into the
-    # Event draw deck — EXCLUDING Held Events (this_levy_events /
-    # this_campaign_events / held), Capability cards in play (board_edge,
-    # capabilities_in_play side_wide, and this_lord caps on mats), and
-    # cards currently pending implementation. Immediate Events that were
-    # used in a prior Levy (sitting in discard) are thereby recycled.
+    n_excl = _rebuild_aow_deck(state, side)
+    state.decks.draw = shuffle(state, state.decks.draw)
+    _record(state, action,
+            f"{side} shuffles AoW deck ({len(state.decks.draw)} cards; "
+            f"{n_excl} excluded as held/in-play)")
+    return {"deck_size": len(state.decks.draw)}
+
+
+def _rebuild_aow_deck(state: GameState, side: str) -> int:
+    """3.1.1: rebuild this side's draw deck = all of its cards EXCEPT
+    Held Events, in-play Capabilities (board edge / mats), and cards
+    pending implementation. Returns the excluded count. Recycles used
+    immediate Events (in discard)."""
     cards = load_cards()["cards"]
     excluded: set[str] = set()
     for bucket in (state.decks.this_levy_events, state.decks.this_campaign_events,
@@ -289,11 +304,7 @@ def _h_aow_shuffle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     excluded.update(state.decks.pending_draw.get(side, []))
     state.decks.draw = [cid for cid, c in cards.items()
                         if c["side"] == side and cid not in excluded]
-    state.decks.draw = shuffle(state, state.decks.draw)
-    _record(state, action,
-            f"{side} shuffles AoW deck ({len(state.decks.draw)} cards; "
-            f"{len(excluded)} excluded as held/in-play)")
-    return {"deck_size": len(state.decks.draw)}
+    return len(excluded)
 
 
 def _h_aow_draw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -306,14 +317,20 @@ def _h_aow_draw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
-    n = int(action.get("n", 1))
-    _require(n >= 0, f"draw count must be >= 0, got {n}", code="bad_arg")
-    _require(len(state.decks.draw) >= n,
-             f"deck has {len(state.decks.draw)}, cannot draw {n}",
-             code="deck_underflow")
+    _require(not state.meta.aow_draw_done.get(side),
+             f"{side} has already drawn Arts of War this Levy (3.1.2/3.1.3)",
+             code="already_drawn")
+    # 3.1.1 then 3.1.2/3.1.3: if the deck is empty, collect+shuffle first.
+    if not state.decks.draw:
+        _rebuild_aow_deck(state, side)
+        state.decks.draw = shuffle(state, state.decks.draw)
+    # Each side draws exactly TWO cards (or fewer only if the deck is
+    # short). The count is fixed by rule, not chosen.
+    n = min(2, len(state.decks.draw))
     drawn = state.decks.draw[:n]
     state.decks.draw = state.decks.draw[n:]
     state.decks.pending_draw.setdefault(side, []).extend(drawn)
+    state.meta.aow_draw_done[side] = True
     _record(state, action, f"{side} draws {n}: {drawn}")
     return {"drawn": drawn, "deck_remaining": len(state.decks.draw)}
 

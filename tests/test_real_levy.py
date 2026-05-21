@@ -8,6 +8,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import ServiceMarker
+from tests._plan_helpers import step_levy
 
 
 def _drive_to_levy_step(s, step: str) -> None:
@@ -17,7 +18,7 @@ def _drive_to_levy_step(s, step: str) -> None:
             return
         if s.meta.levy_step == step:
             return
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
 
 
 # ---- 3.2 Pay -------------------------------------------------------
@@ -30,7 +31,7 @@ def test_pay_lord_consumes_coin_and_shifts_service() -> None:
     _drive_to_levy_step(s, "pay")
     # Drive to Muslim's turn
     while s.meta.active_player != "muslim":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     coin_before = s.lords["al_mutamid"].assets["coin"]
     apply_action(s, {"type": "pay_lord", "side": "muslim",
                      "payer_lord_id": "al_mutamid",
@@ -75,7 +76,7 @@ def test_disband_at_limit_goes_to_calendar_and_clears_state() -> None:
     s.calendar.service_markers.append(
         ServiceMarker(lord_id="alfonso", box=cur))
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     r = apply_action(s, {"type": "disband_lord", "side": "christian",
                          "lord_id": "alfonso"})
     assert r["permanent"] is False
@@ -106,7 +107,7 @@ def test_disband_beyond_limit_permanently_removes() -> None:
     s.calendar.service_markers.append(
         ServiceMarker(lord_id="alfonso", box=cur))
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     r = apply_action(s, {"type": "disband_lord", "side": "christian",
                          "lord_id": "alfonso"})
     assert r["permanent"] is True
@@ -125,7 +126,7 @@ def test_disband_rejects_lord_right_of_marker() -> None:
     s.calendar.service_markers.append(
         ServiceMarker(lord_id="alfonso", box=cur + 2))
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "disband_lord", "side": "christian",
                          "lord_id": "alfonso"})
@@ -178,7 +179,7 @@ def test_levy_take_capability_from_board_edge() -> None:
         s.decks.board_edge["muslim"].append(target_card)
     _drive_to_levy_step(s, "muster")
     while s.meta.active_player != "muslim":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     # Yusuf is mustered at Algeciras in Scenario D; ensure he can spend
     # Lordship (reset the per-card counter for a clean assertion).
     assert s.lords["yusuf"].cylinder.kind == "locale"
@@ -217,7 +218,7 @@ def test_legal_moves_offers_disband_only_for_at_or_beyond_limit() -> None:
     s = load_scenario("scenario_a_toledo_beset")
     _drive_to_levy_step(s, "service_disband")
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     assert not [m for m in legal_moves(s) if m["type"] == "disband_lord"]
     cur = s.calendar.current_box
     s.calendar.service_markers = [m for m in s.calendar.service_markers

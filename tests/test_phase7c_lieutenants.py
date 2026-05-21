@@ -7,7 +7,7 @@ import pytest
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _two_christian_lords_same_locale(s, loc="leon"):
@@ -123,7 +123,7 @@ def test_lower_lord_command_card_auto_passes() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     # Build a Christian plan with two command cards; the second Lord
     # will be a Lower Lord.
     sub, cmd = _two_christian_lords_same_locale(s, loc="leon")

@@ -78,8 +78,11 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     if step in ("arts_of_war", "pay", "service_disband", "muster", "call_to_arms"):
         if step == "service_disband" and pending_mandatory_disbands(state, active):
             pass
-        elif step == "arts_of_war" and state.decks.pending_draw.get(active):
-            # L13: must deploy/implement drawn cards before passing.
+        elif step == "arts_of_war" and (
+                state.decks.pending_draw.get(active)
+                or not state.meta.aow_draw_done.get(active)):
+            # 3.1.2/3.1.3 + L13: must draw two AoW cards and deploy/
+            # implement them before passing the Arts-of-War step.
             pass
         else:
             moves.append({"type": "pass_step", "side": active})
@@ -120,12 +123,16 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             out.append({"type": "aow_implement_event", "side": side,
                         "card_id": pend[0]})
         return out
-    # No pending cards: shuffle is always available, and the side may draw.
-    out.append({"type": "aow_shuffle", "side": side})
-    if state.decks.draw:
-        max_n = min(3, len(state.decks.draw))
-        for n in range(1, max_n + 1):
-            out.append({"type": "aow_draw", "side": side, "n": n})
+    # No pending cards. 3.1.2/3.1.3: each side MUST draw two AoW cards
+    # this Levy before proceeding. Until that mandatory draw is done,
+    # offer Shuffle and the (fixed, count-2) Draw; afterwards the step is
+    # complete (pass_step advances — gated in the caller).
+    if not state.meta.aow_draw_done.get(side):
+        # Offer the (mandatory, count-2) Draw first so a greedy agent
+        # completes the draw; Shuffle remains available (Draw also
+        # auto-rebuilds the deck if empty).
+        out.append({"type": "aow_draw", "side": side})
+        out.append({"type": "aow_shuffle", "side": side})
     return out
 
 

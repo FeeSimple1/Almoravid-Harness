@@ -6,6 +6,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.effective import is_friendly_locale, is_besieged
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests._plan_helpers import step_levy
 
 
 def _to_muster(s):
@@ -53,7 +54,7 @@ def test_muster_places_service_marker_ahead():
     svc_rating = s.lords[lid].service_rating
     _to_muster(s)
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     levier = _pick_levier(s, "christian")
     assert levier is not None
     r = _muster_until_success(s, "christian", lid, levier)
@@ -74,7 +75,7 @@ def test_muster_rejects_unready_lord():
                                      box=s.calendar.current_box + 3)
     _to_muster(s)
     while s.meta.active_player != "christian":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     levier = _pick_levier(s, "christian")
     assert levier is not None
     with pytest.raises(IllegalAction) as ei:
@@ -99,7 +100,7 @@ def test_muster_taifa_lord_sets_independent():
     s.taifas[home].status = "parias"
     _to_muster(s)
     while s.meta.active_player != "muslim":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     levier = _pick_levier(s, "muslim")
     if levier is None:
         pytest.skip("no eligible Muslim Levying Lord")

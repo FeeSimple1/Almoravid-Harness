@@ -10,7 +10,7 @@ from almoravid.actions import apply_action
 from almoravid.campaign import _feed_lord
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def test_feed_lord_no_op_when_not_moved_fought() -> None:
@@ -74,7 +74,7 @@ def test_end_card_clears_moved_fought_after_feed() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
     legal_pad(s, "christian")

@@ -12,7 +12,7 @@ from almoravid.battle import (
 )
 from almoravid.scenarios import load_scenario
 from almoravid.state import CardInPlay, Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _give_this_lord_cap(s, lord_id, card_id):
@@ -68,7 +68,7 @@ def test_command_reveal_uses_effective_command() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     s.lords["alfonso"].forces = {"knights": 2}
     _give_this_lord_cap(s, "alfonso", "C11")
     base = s.lords["alfonso"].command_rating

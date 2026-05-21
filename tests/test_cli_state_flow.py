@@ -141,11 +141,22 @@ def test_multi_step_playthrough_via_cli(tmp_path) -> None:
     # begin_levy
     action.write_text(json.dumps({"type": "begin_levy"}))
     _run("do", str(state), str(action))
-    # pass_step christian, then muslim
-    action.write_text(json.dumps({"type": "pass_step", "side": "christian"}))
-    _run("do", str(state), str(action))
-    action.write_text(json.dumps({"type": "pass_step", "side": "muslim"}))
-    _run("do", str(state), str(action))
+
+    def _do(act):
+        action.write_text(json.dumps(act))
+        _run("do", str(state), str(action))
+
+    def _draw_deploy_pass(side):
+        # 3.1.2 (first Levy): draw two, deploy each as a Capability, pass.
+        _do({"type": "aow_draw", "side": side})
+        data = json.loads(state.read_text())
+        for cid in list(data["decks"]["pending_draw"].get(side, [])):
+            _do({"type": "aow_deploy_capability", "side": side,
+                 "card_id": cid})
+        _do({"type": "pass_step", "side": side})
+
+    _draw_deploy_pass("christian")
+    _draw_deploy_pass("muslim")
     # Should now be at pay step
     data = json.loads(state.read_text())
     assert data["meta"]["levy_step"] == "pay"

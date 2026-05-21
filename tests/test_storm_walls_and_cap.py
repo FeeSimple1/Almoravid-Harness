@@ -213,22 +213,28 @@ def test_bug_j_this_levy_events_cleared_on_aftermath() -> None:
     assert "M7" in s.decks.discard
 
 
-def test_bug_k_pending_draw_cleared_at_arts_of_war_end() -> None:
-    """Bug K (Pattern 13): pending_draw cleared when both sides ratify
-    the arts_of_war step (transition to pay step)."""
+def test_aow_pending_draw_processed_before_advancing() -> None:
+    """3.1.2/3.1.3 (replaces old Bug-K dump): drawn cards are PROCESSED
+    (deployed as Capabilities on the first Levy), not dumped, and the
+    pending queue is empty before the AoW step advances."""
     from almoravid.actions import apply_action
     from almoravid.scenarios import load_scenario
+    from tests._plan_helpers import step_levy
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     apply_action(s, {"type": "begin_levy"})
-    apply_action(s, {"type": "aow_shuffle", "side": "christian"})
-    apply_action(s, {"type": "aow_draw", "side": "christian", "n": 3})
-    assert len(s.decks.pending_draw["christian"]) == 3
-    # Both sides pass arts_of_war
-    apply_action(s, {"type": "pass_step", "side": "christian"})
-    apply_action(s, {"type": "pass_step", "side": "muslim"})
-    # Now in pay step; pending_draw cleared
+    # Drive the AoW step: each side draws 2, deploys them, then ratifies
+    # (step_levy draws+deploys when undrawn, else passes/ratifies).
+    for _ in range(8):
+        if s.meta.levy_step != "arts_of_war":
+            break
+        step_levy(s)
+    # Both sides completed the mandatory draw; nothing left pending.
+    assert s.meta.aow_draw_done.get("christian")
+    assert s.meta.aow_draw_done.get("muslim")
+    assert not s.decks.pending_draw.get("christian")
+    assert not s.decks.pending_draw.get("muslim")
+    # The step advanced (cards processed, not dumped).
     assert s.meta.levy_step == "pay"
-    assert s.decks.pending_draw == {}
 
 
 def test_bug_l_crossbow_striker_selects_target() -> None:

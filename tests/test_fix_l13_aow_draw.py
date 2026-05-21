@@ -44,6 +44,7 @@ def test_first_levy_deploys_this_lord_capability_to_lord() -> None:
 def test_pass_step_blocked_until_pending_processed() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _arts_of_war(s, first_levy=True)
+    s.meta.aow_draw_done["christian"] = True   # drew already; now process
     s.decks.pending_draw["christian"] = ["C15"]
     types = {m["type"] for m in legal_moves(s)}
     assert "pass_step" not in types

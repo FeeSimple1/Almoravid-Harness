@@ -17,7 +17,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _setup_alfonso_active(seed: int = 1):
@@ -27,7 +27,7 @@ def _setup_alfonso_active(seed: int = 1):
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
     legal_pad(s, "christian")
@@ -47,7 +47,7 @@ def test_march_unladen_costs_one_action() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alvar_fanez"})
     legal_pad(s, "christian")

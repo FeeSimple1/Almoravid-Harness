@@ -8,7 +8,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.campaign import PLAN_SIZE_BY_SEASON, _plan_target_size
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import list_scenarios, load_scenario
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _drive_to_campaign(s) -> None:
@@ -17,7 +17,7 @@ def _drive_to_campaign(s) -> None:
     for _ in range(20):
         if s.meta.phase != "levy":
             return
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
 
 
 def test_begin_campaign_enters_plan_step() -> None:

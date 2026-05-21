@@ -96,6 +96,9 @@ class Meta(StrictModel):
     levy_step_completed_christian: bool = False
     levy_step_completed_muslim: bool = False
     first_levy_done: bool = False
+    # Per-Levy: has this side completed its mandatory 3.1.2/3.1.3 AoW
+    # draw (two cards) this Levy? Reset on entering the Levy.
+    aow_draw_done: dict[Side, bool] = Field(default_factory=dict)
 
     # Seeded RNG counter. Advanced by every roll_d6 / shuffle call.
     rng_state: int = 0

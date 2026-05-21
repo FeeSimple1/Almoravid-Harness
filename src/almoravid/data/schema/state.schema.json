@@ -766,6 +766,19 @@
           "title": "First Levy Done",
           "type": "boolean"
         },
+        "aow_draw_done": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Aow Draw Done",
+          "type": "object"
+        },
         "rng_state": {
           "default": 0,
           "title": "Rng State",

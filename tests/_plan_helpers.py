@@ -53,3 +53,28 @@ def legal_pad(s, side: str):
                 f"cannot legally fill {side} plan to {target} "
                 f"(insufficient Mustered Lords)")
     return plan
+
+
+def step_levy(s):
+    """Advance one Levy action for the active side. At the mandatory
+    Arts-of-War draw step (3.1.2/3.1.3) this shuffles (if needed), draws
+    the two cards, and processes them (deploy Capabilities on the first
+    Levy / implement Events later); otherwise it passes the step. A
+    drop-in replacement for a bare pass_step inside Levy-advance loops."""
+    from almoravid.actions import apply_action
+    side = s.meta.active_player
+    if (s.meta.levy_step == "arts_of_war"
+            and not s.meta.aow_draw_done.get(side)):
+        if not s.decks.draw and not s.decks.pending_draw.get(side):
+            apply_action(s, {"type": "aow_shuffle", "side": side})
+        apply_action(s, {"type": "aow_draw", "side": side})
+        while s.decks.pending_draw.get(side):
+            cid = s.decks.pending_draw[side][0]
+            if not s.meta.first_levy_done:
+                apply_action(s, {"type": "aow_deploy_capability",
+                                 "side": side, "card_id": cid})
+            else:
+                apply_action(s, {"type": "aow_implement_event",
+                                 "side": side, "card_id": cid})
+    else:
+        apply_action(s, {"type": "pass_step", "side": side})

@@ -13,6 +13,7 @@ import pytest
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import list_scenarios, load_scenario
+from tests._plan_helpers import step_levy
 
 
 def test_initial_state_offers_begin_levy() -> None:
@@ -22,13 +23,15 @@ def test_initial_state_offers_begin_levy() -> None:
     assert {"type": "begin_levy"} in moves
 
 
-def test_arts_of_war_step_offers_shuffle_and_pass() -> None:
+def test_arts_of_war_step_offers_mandatory_draw_not_pass() -> None:
+    """3.1.2/3.1.3: a side must draw before passing the AoW step."""
     s = load_scenario("scenario_a_toledo_beset")
     apply_action(s, {"type": "begin_levy"})
     moves = legal_moves(s)
     types = {m["type"] for m in moves}
+    assert "aow_draw" in types
     assert "aow_shuffle" in types
-    assert "pass_step" in types
+    assert "pass_step" not in types          # mandatory draw first
 
 
 def test_after_shuffle_draw_is_offered() -> None:
@@ -38,9 +41,8 @@ def test_after_shuffle_draw_is_offered() -> None:
     moves = legal_moves(s)
     draw_moves = [m for m in moves if m["type"] == "aow_draw"]
     assert draw_moves, "draw should be offered after shuffle"
-    # Each draw move has a positive n bounded by deck size.
-    for m in draw_moves:
-        assert m["n"] >= 1
+    # The draw is the fixed count-2 Levy draw (no chosen n).
+    assert all("n" not in m for m in draw_moves)
 
 
 def test_muster_step_enumerates_calendar_lords() -> None:
@@ -51,7 +53,7 @@ def test_muster_step_enumerates_calendar_lords() -> None:
     for _ in range(8):
         if s.meta.levy_step == "muster":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     moves = legal_moves(s)
     muster_moves = [m for m in moves if m["type"] == "muster_lord"]
     # At least Christian Calendar Lords with free Seats should be offered.

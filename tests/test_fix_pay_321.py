@@ -5,6 +5,7 @@ import pytest
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
+from tests._plan_helpers import step_levy
 
 
 def _to_pay(s):
@@ -104,7 +105,7 @@ def test_taifa_box_coin_shifts_unbesieged_muslim():
     _set_marker(s, "al_mutamid", 6)
     _to_pay(s)
     while s.meta.active_player != "muslim":
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     r = apply_action(s, {"type": "pay_lord", "side": "muslim",
                          "target_lord_id": "al_mutamid",
                          "resource": "taifa_coin", "amount": 2})

@@ -7,7 +7,7 @@ import pytest
 from almoravid.actions import _shift_service_left, apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _replace_service(s, lord_id: str, box: int) -> None:
@@ -55,7 +55,7 @@ def test_enforcing_parias_shifts_taifa_lord_service() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alvar_fanez"})
     legal_pad(s, "christian")
@@ -121,7 +121,7 @@ def test_fpd_auto_disband_at_service_limit() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alfonso"})
     legal_pad(s, "christian")

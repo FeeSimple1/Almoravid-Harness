@@ -21,6 +21,7 @@ from almoravid.actions import (
     apply_action,
 )
 from almoravid.scenarios import load_scenario
+from tests._plan_helpers import step_levy
 
 
 def fresh_state(scenario: str = "scenario_a_toledo_beset", seed: int = 1):
@@ -54,6 +55,7 @@ def test_pass_step_baton_passes_to_other_side() -> None:
     s = fresh_state()
     apply_action(s, {"type": "begin_levy"})
     assert s.meta.active_player == "christian"
+    step_levy(s)   # christian completes the mandatory AoW draw (3.1.2)
     apply_action(s, {"type": "pass_step", "side": "christian"})
     assert s.meta.active_player == "muslim"
     assert s.meta.levy_step == "arts_of_war"  # step has not yet advanced
@@ -62,7 +64,9 @@ def test_pass_step_baton_passes_to_other_side() -> None:
 def test_pass_step_advances_step_when_both_done() -> None:
     s = fresh_state()
     apply_action(s, {"type": "begin_levy"})
+    step_levy(s)   # christian AoW draw+deploy
     apply_action(s, {"type": "pass_step", "side": "christian"})
+    step_levy(s)   # muslim AoW draw+deploy
     apply_action(s, {"type": "pass_step", "side": "muslim"})
     assert s.meta.levy_step == "pay"
     # After step advance, baton resets to default actor order.
@@ -79,7 +83,7 @@ def test_full_levy_walkthrough_reaches_campaign() -> None:
     for _ in range(20):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     assert s.meta.phase == "campaign"
     assert s.meta.first_levy_done is True
 
@@ -113,30 +117,44 @@ def test_aow_shuffle_initializes_deck() -> None:
 
 
 def test_aow_draw_consumes_deck() -> None:
+    """3.1.2/3.1.3: the draw is exactly two cards (count fixed by rule)."""
     s = fresh_state()
     apply_action(s, {"type": "begin_levy"})
     apply_action(s, {"type": "aow_shuffle", "side": "christian"})
     before = len(s.decks.draw)
-    apply_action(s, {"type": "aow_draw", "side": "christian", "n": 3})
-    assert len(s.decks.draw) == before - 3
-    assert len(s.decks.pending_draw["christian"]) == 3
+    apply_action(s, {"type": "aow_draw", "side": "christian"})
+    assert len(s.decks.draw) == before - 2
+    assert len(s.decks.pending_draw["christian"]) == 2
+    # Drawing again the same Levy is rejected.
+    import pytest
+    from almoravid.actions import IllegalAction
+    with pytest.raises(IllegalAction) as ei:
+        apply_action(s, {"type": "aow_draw", "side": "christian"})
+    assert ei.value.code == "already_drawn"
 
 
-def test_aow_draw_deck_underflow_raises() -> None:
+def test_aow_draw_auto_rebuilds_empty_deck() -> None:
+    """If the deck is empty, drawing collects+shuffles (3.1.1) first, so
+    a side always draws its two cards."""
     s = fresh_state()
     apply_action(s, {"type": "begin_levy"})
-    apply_action(s, {"type": "aow_shuffle", "side": "christian"})
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "aow_draw", "side": "christian", "n": 999})
-    assert ei.value.code == "deck_underflow"
+    s.decks.draw = []
+    apply_action(s, {"type": "aow_draw", "side": "christian"})
+    assert len(s.decks.pending_draw["christian"]) == 2
 
 
 def test_aow_shuffle_wrong_step_raises() -> None:
     s = fresh_state()
     apply_action(s, {"type": "begin_levy"})
-    # Advance past arts_of_war
-    apply_action(s, {"type": "pass_step", "side": "christian"})
-    apply_action(s, {"type": "pass_step", "side": "muslim"})
+    # Advance past arts_of_war (both sides draw+deploy then ratify).
+    for _ in range(8):
+        if s.meta.levy_step != "arts_of_war":
+            break
+        step_levy(s)
+        if (s.meta.aow_draw_done.get(s.meta.active_player)
+                and not s.decks.pending_draw.get(s.meta.active_player)):
+            apply_action(s, {"type": "pass_step",
+                             "side": s.meta.active_player})
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "aow_shuffle", "side": "christian"})
     assert ei.value.code == "bad_levy_step"
@@ -151,7 +169,7 @@ def _drive_to_muster_step(s) -> None:
     for _ in range(6):
         if s.meta.levy_step == "muster":
             return
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
 
 
 def test_muster_lord_call_to_arms_only_lord_rejected() -> None:
@@ -160,7 +178,7 @@ def test_muster_lord_call_to_arms_only_lord_rejected() -> None:
     _drive_to_muster_step(s)
     # During Christian's turn we can't Muster a Muslim Lord anyway,
     # so flip to Muslim's turn first.
-    apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+    step_levy(s)
     # Now Muslim is active.
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "muster_lord",

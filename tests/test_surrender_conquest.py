@@ -8,7 +8,7 @@ from almoravid.actions import apply_action
 from almoravid.campaign import _conquer_stronghold
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def test_conquer_stronghold_christian_places_conquered_markers() -> None:
@@ -63,7 +63,7 @@ def test_cmd_siege_with_no_defender_attempts_surrender() -> None:
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": "christian",
                      "plan_kind": "command", "lord_id": "alvar_fanez"})
     legal_pad(s, "christian")

@@ -16,7 +16,7 @@ from almoravid.battle import (
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
-from tests._plan_helpers import legal_pad
+from tests._plan_helpers import legal_pad, step_levy
 
 
 def _activate_lord(scenario, lord_id, seed=1):
@@ -26,7 +26,7 @@ def _activate_lord(scenario, lord_id, seed=1):
     for _ in range(15):
         if s.meta.phase != "levy":
             break
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     apply_action(s, {"type": "plan_add_card", "side": side,
                      "plan_kind": "command", "lord_id": lord_id})
     legal_pad(s, side)

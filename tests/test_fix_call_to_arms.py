@@ -16,6 +16,7 @@ from almoravid.effective import is_friendly_locale
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
+from tests._plan_helpers import step_levy
 
 STRONG = ("city", "fortress", "town", "castle")
 
@@ -25,7 +26,7 @@ def _to_cta(s, side="christian"):
     _drive_to_levy_step(s, "call_to_arms")
     assert s.meta.levy_step == "call_to_arms"
     while s.meta.active_player != side:
-        apply_action(s, {"type": "pass_step", "side": s.meta.active_player})
+        step_levy(s)
     return s
 
 
