@@ -1179,6 +1179,11 @@
           "default": true,
           "title": "Ready",
           "type": "boolean"
+        },
+        "pennant_down": {
+          "default": false,
+          "title": "Pennant Down",
+          "type": "boolean"
         }
       },
       "required": [

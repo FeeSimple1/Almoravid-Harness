@@ -237,8 +237,15 @@ class Vassal(StrictModel):
     id: str
     name: str
     forces: dict[UnitType, int] = Field(default_factory=dict)
-    service_cost: int  # Service marker advance when called
+    service_cost: int  # = Vassal Service Rating: 40-Days boxes ahead on
+    # the Calendar at Muster / Disband (advanced rule 3.4.2). Despite the
+    # name it is the Service Rating, not a Lordship cost (Muster always
+    # costs one Levy action).
     ready: bool = True
+    # Advanced Vassal Service (3.4.2): a Vassal Disbanded at its Service
+    # limit goes Pennant-side-DOWN (Unready) — it cannot Muster until the
+    # side flips Pennants up at the end of its Vassal Muster segment.
+    pennant_down: bool = False
 
 
 class CardInPlay(StrictModel):
