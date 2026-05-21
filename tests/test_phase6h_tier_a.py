@@ -52,20 +52,25 @@ def _setup_active_lord(scenario, lord_id, locale_id, seed=11):
 def test_swollen_river_blocks_first_march() -> None:
     s = _setup_active_lord("scenario_a_toledo_beset", "alfonso", "leon")
     s.decks.this_levy_events["muslim"] = ["M3"]
-    # leon road neighbors include sahagun.
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_march", "side": "christian",
-                         "target_locale_id": "sahagun",
-                         "way_type": "road"})
-    assert ei.value.code == "swollen_river_blocked"
+    # Declaring the March is legal; the enemy's reactive Swollen River
+    # interrupts it (a legal "blocked" outcome, not an IllegalAction).
+    r = apply_action(s, {"type": "cmd_march", "side": "christian",
+                         "target_locale_id": "sahagun", "way_type": "road"})
+    assert r["swollen_river_blocked"] is True and r["moved"] is False
+    assert s.meta.swollen_river_blocked_card_lord_id == "alfonso"
     # Card moved to discard.
     assert "M3" in s.decks.discard
     assert "M3" not in s.decks.this_levy_events.get("muslim", [])
-    # Subsequent attempts on the same card still blocked (flag persists).
+    # Alfonso did NOT move.
+    assert s.lords["alfonso"].cylinder.locale_id == "leon"
+    # legal_moves no longer offers a March for the blocked Lord.
+    from almoravid.legal_moves import legal_moves
+    assert not any(m.get("type") == "cmd_march"
+                   for m in legal_moves(s))
+    # A direct re-attempt on the same card is still rejected defensively.
     with pytest.raises(IllegalAction) as ei2:
         apply_action(s, {"type": "cmd_march", "side": "christian",
-                         "target_locale_id": "sahagun",
-                         "way_type": "road"})
+                         "target_locale_id": "sahagun", "way_type": "road"})
     assert ei2.value.code == "swollen_river_blocked"
 
 

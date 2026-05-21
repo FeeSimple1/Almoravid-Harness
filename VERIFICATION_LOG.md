@@ -276,3 +276,24 @@ game is unaffected when they are off (all default off).
   Vassals may not Muster. New Vassal.pennant_down field (schema regenerated). Bishops/
   Crusaders (Capability-added) are not Calendar-vassals and are unaffected. Tests:
   tests/test_advanced_vassal_service_342.py + updated tests/test_phase7d_vassal_service.py.
+
+## Deep invariant sweep (2026-05-21) — 3 bugs found & fixed
+A 260-session deep test (greedy + random drivers, optional rules on/off, asserting state
+invariants after EVERY action) surfaced three issues, now fixed:
+- Scenario D data bug: jativa held both Conquered(1) AND Jihad(2) at setup (1.3.1: a Locale
+  never holds both). The Scenario Reference (Scenario D) lists "one yellow Conquered ... at
+  Játiva" and "two Jihad at Uclés"; the 2 Jihad were mis-placed onto jativa. Removed the
+  stray jihad_markers from jativa in scenario_d_arrival.json (Uclés already correct).
+- M15 Parias Revolt stacked Jihad on a Christian-Conquered Locale (1.4.4 eligibility
+  violated -> both-markers state). Fixed to use _jihad_eligible_locales (no Conquered/Seat),
+  mirroring M20. Tests: tests/test_m15_jihad_eligibility.py.
+- C3/M3 Swollen River: legal_moves offered a cmd_march the handler then rejected with
+  IllegalAction (Pattern 9 / harness-contract violation). Reading: declaring a March IS
+  legal; the enemy's reactive Hold event INTERRUPTS it. cmd_march now returns a legal
+  "blocked" outcome (no move, flag set, event discarded) instead of raising, and legal_moves
+  suppresses further marches for an already-blocked Lord. Tests: updated test_phase6h_tier_a.py.
+- New permanent gate tests/test_deep_invariants.py: greedy+random self-play across all
+  scenarios x seeds 1-3, plus optional-rules-on runs, asserting invariants every step
+  (no negative counters, siege<=4, never both Conquered+Jihad, service box 0..17, pending/
+  active sync, legal_moves->apply_action total). After fixes the full 260-session deep run
+  reports NO PROBLEMS.

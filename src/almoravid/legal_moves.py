@@ -622,7 +622,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.map import neighbors_via
                     from almoravid.campaign import _is_laden
                     if (not is_besieged(state, lord_id)
-                            and lord.cylinder.kind == "locale"):
+                            and lord.cylinder.kind == "locale"
+                            # C3/M3 Swollen River: a Lord already blocked
+                            # this card may not March again (handler mirror).
+                            and state.meta.swollen_river_blocked_card_lord_id
+                            != lord_id):
                         cost = 2 if _is_laden(lord) else 1
                         if state.meta.actions_remaining >= cost:
                             from_loc = lord.cylinder.locale_id

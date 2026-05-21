@@ -639,24 +639,18 @@ def _m15_parias_revolt(state, side, card_id, payload):
     Jihad there, +1 if Yusuf or Sir is at that locale. Pattern 10:
     no Parias Taifa -> no-op.
     """
-    parias_taifas = [t for t in state.taifas.values()
-                     if t.status == "parias"]
-    if not parias_taifas:
+    # 1.4.4 Jihad eligibility: a Parias-Taifa Stronghold with NO Christian
+    # Conquered / Seat marker (a Locale never holds both Conquered and
+    # Jihad, 1.3.1). Mirrors M20; prevents stacking Jihad on a Conquered
+    # Locale.
+    eligible = _jihad_eligible_locales(state, statuses=("parias",))
+    if not eligible:
         return _no_op_with_note(state, card_id, side,
-                                "no Parias Taifa available")
+                                "no eligible Parias-Taifa Jihad Locale")
     locale_id = payload.get("locale_id")
-    if locale_id is None:
-        # Pick first Parias Taifa's first locale deterministically.
-        locale_id = parias_taifas[0].locale_ids[0]
-    loc = state.locales.get(locale_id)
-    if loc is None:
-        return _no_op_with_note(state, card_id, side,
-                                f"unknown locale {locale_id!r}")
-    # Validate the locale's territory is a Parias Taifa.
-    in_parias = any(locale_id in t.locale_ids for t in parias_taifas)
-    if not in_parias:
-        return _no_op_with_note(state, card_id, side,
-                                f"{locale_id} not in a Parias Taifa")
+    if locale_id not in eligible:
+        locale_id = eligible[0]
+    loc = state.locales[locale_id]
     add = 1
     if loc.jihad_markers > 0:
         add = 2

@@ -1863,12 +1863,19 @@ def _h_cmd_march(state, action):
                     f"Adalides cancels {enemy} Swollen River ({swollen_id}) "
                     f"at {lord_id}'s Locale — no effect")
         else:
+            # Declaring a March is legal; the enemy's reactive Swollen
+            # River Hold event INTERRUPTS it (the Lord does not move and
+            # may not March again on this card, but other actions remain).
+            # Modelled as a legal "blocked" outcome — not an IllegalAction
+            # — so legal_moves -> apply_action stays total (Pattern 9).
             state.meta.swollen_river_blocked_card_lord_id = lord_id
-            raise IllegalAction(
-                f"Swollen River ({swollen_id}) played by {enemy} blocks "
-                f"{lord_id}'s March on this card (4.3.4)",
-                code="swollen_river_blocked",
-            )
+            _record(state, action,
+                    f"Swollen River ({swollen_id}) played by {enemy} blocks "
+                    f"{lord_id}'s March on this card (4.3.4); Lord does not "
+                    f"move, other actions on the card remain")
+            return {"from": from_loc, "to": None, "moved": False,
+                    "swollen_river_blocked": True, "by": swollen_id,
+                    "actions_remaining": state.meta.actions_remaining}
     # C4/M4 Arid Terrain: forces an immediate Feed on the Marching Lord
     # BEFORE the March (per Tips). Discards regardless of Feed outcome.
     arid_id = "C4" if enemy == "christian" else "M4"
