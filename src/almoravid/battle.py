@@ -1912,6 +1912,54 @@ def resolve_relief_sally(
     def _over() -> bool:
         return (not _atk_alive()) or (not _def_alive())
 
+    # Per-Lord force/rout tracking per lane (so multi-Lord lanes commit
+    # Losses exactly, not proportionally). Keyed by id(side_obj).
+    _lf: dict[int, dict] = {}
+    _lr: dict[int, dict] = {}
+
+    def _init_lane(side_obj) -> None:
+        if side_obj is None or id(side_obj) in _lf:
+            return
+        if len(side_obj.lord_ids) == 1:
+            _lf[id(side_obj)] = {side_obj.lord_ids[0]: dict(side_obj.forces)}
+        else:
+            _lf[id(side_obj)] = {lid: dict(state.lords[lid].forces)
+                                 for lid in side_obj.lord_ids}
+        _lr[id(side_obj)] = {lid: {} for lid in side_obj.lord_ids}
+
+    for _s in (marchers, sallyers, def_front, def_rear):
+        _init_lane(_s)
+
+    def _push_lane(side_obj, before: dict) -> None:
+        lf = _lf[id(side_obj)]
+        lr = _lr[id(side_obj)]
+        now = side_obj.forces
+        for ut, b in before.items():
+            lost = b - now.get(ut, 0)
+            for lid in side_obj.lord_ids:
+                if lost <= 0:
+                    break
+                have = lf[lid].get(ut, 0)
+                take = min(have, lost)
+                if take:
+                    lf[lid][ut] = have - take
+                    if lf[lid][ut] <= 0:
+                        lf[lid].pop(ut, None)
+                    lr[lid][ut] = lr[lid].get(ut, 0) + take
+                    lost -= take
+
+    def _lane_step(actor_role, attacker_side, defender_side, **kw):
+        """Run a pooled lane Strike step and push the target's Losses
+        back to per-Lord tracking."""
+        target = defender_side if actor_role == "attacker" else attacker_side
+        before = dict(target.forces)
+        step = _resolve_step(state, kw["step_id"], actor_role,
+                             kw["step_type"], kw["unit_class"],
+                             attacker_side, defender_side, context="battle",
+                             walls_range=kw.get("walls_range"))
+        _push_lane(target, before)
+        return step
+
     for rnd_i in range(1, max_rounds + 1):
         rnd = BattleRound(index=rnd_i)
         for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
@@ -1919,9 +1967,10 @@ def resolve_relief_sally(
             if (def_front is not None
                     and (marchers.has_unrouted()
                          or def_front.has_unrouted())):
-                rnd.steps.append(_resolve_step(
-                    state, step_id, actor_role, step_type, unit_class,
-                    marchers, def_front, context="battle"))
+                rnd.steps.append(_lane_step(
+                    actor_role, marchers, def_front,
+                    step_id=step_id, step_type=step_type,
+                    unit_class=unit_class))
             # Lane S: Sallyers <-> Reserve/Front Defenders. Siegeworks
             # cancels the Sallyers' (attacker) Hits only; when `shared`
             # the Defenders already Strike in Lane M, so skip Lane S
@@ -1931,10 +1980,10 @@ def resolve_relief_sally(
                             or (actor_role == "defender" and not shared))
                 if run_step and (sallyers.has_unrouted()
                                  or def_rear.has_unrouted()):
-                    rnd.steps.append(_resolve_step(
-                        state, step_id, actor_role, step_type, unit_class,
-                        sallyers, def_rear, context="battle",
-                        walls_range=walls))
+                    rnd.steps.append(_lane_step(
+                        actor_role, sallyers, def_rear,
+                        step_id=step_id, step_type=step_type,
+                        unit_class=unit_class, walls_range=walls))
             if _over():
                 break
         result.rounds.append(rnd)
@@ -1942,6 +1991,24 @@ def resolve_relief_sally(
             _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
         if _over():
             break
+
+    # Commit each Lord's post-battle Forces + Routed units EXACTLY from
+    # the per-Lord tracking (multi-Lord lanes no longer lose precision to
+    # proportional distribution). Each Lord belongs to exactly one lane;
+    # when `shared`, def_rear IS def_front (written once).
+    _written: set = set()
+    for _s in (marchers, sallyers, def_front, def_rear):
+        if _s is None or id(_s) in _written:
+            continue
+        _written.add(id(_s))
+        lf = _lf[id(_s)]
+        lr = _lr[id(_s)]
+        for lid in _s.lord_ids:
+            if lid in state.lords:
+                state.lords[lid].forces = {ut: n for ut, n
+                                           in lf[lid].items() if n > 0}
+                state.lords[lid].routed_units = {ut: n for ut, n
+                                                 in lr[lid].items() if n > 0}
 
     # Winner: a side is defeated when all its participants are Routed.
     if not _atk_alive() and _def_alive():

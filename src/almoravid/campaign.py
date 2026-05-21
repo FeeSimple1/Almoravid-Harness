@@ -3168,12 +3168,8 @@ def _h_respond_stand_battle(state, action):
             state, marcher_ids, sallyer_ids, defender_lord_ids,
             besieger_side=other, locale_id=locale_id)
         marchers, sallyers, def_front, def_rear, shared = lanes
-        commit_forces_after_battle(state, marchers)
-        commit_forces_after_battle(state, sallyers)
-        if def_front is not None:
-            commit_forces_after_battle(state, def_front)
-        if def_rear is not None and not shared:
-            commit_forces_after_battle(state, def_rear)
+        # resolve_relief_sally has already committed each Lord's Forces +
+        # Routed units exactly (per-Lord), so no proportional commit here.
         retreat_summary = apply_relief_sally_aftermath(
             state, result,
             locale_id=locale_id, besieger_side=other,
