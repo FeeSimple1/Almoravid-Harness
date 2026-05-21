@@ -36,11 +36,20 @@ def test_t4_add_choice_places_jihad_and_keeps_siege() -> None:
     assert ("calatayud", 1) in r["jihad_added"]
 
 
-def test_t4_default_remove_choice_lifts_siege() -> None:
+def test_t4_no_choice_defers_then_remove_lifts_siege() -> None:
+    # With NO explicit choice the OR clause is DEFERRED (interactive
+    # RECOGNITION OF NEUTRALITY), not auto-applied.
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _setup_christian_besieger_at_calatayud(s)
-    r = adjust_taifa_status(s, "zaragoza", "parias")  # default 'remove'
+    r = adjust_taifa_status(s, "zaragoza", "parias")
     loc = s.locales["calatayud"]
-    assert loc.siege_yellow == 0           # Siege removed
-    assert loc.jihad_markers == 0          # no Enemy markers added
-    assert any(entry[0] == "calatayud" for entry in r["siege_removed"])
+    assert loc.siege_yellow == 2           # not yet resolved
+    assert any(d["locale_id"] == "calatayud" and d["side"] == "christian"
+               for d in r["deferred_neutrality"])
+    # Explicit 'remove' lifts the Siege (conservative choice).
+    s2 = load_scenario("scenario_a_toledo_beset", seed=1)
+    _setup_christian_besieger_at_calatayud(s2)
+    adjust_taifa_status(s2, "zaragoza", "parias",
+                        neutrality_choices={"calatayud": "remove"})
+    assert s2.locales["calatayud"].siege_yellow == 0
+    assert s2.locales["calatayud"].jihad_markers == 0

@@ -44,6 +44,20 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "respond_bypass", "side": side})
         return moves
 
+    # T4 (1.4.3): RECOGNITION OF NEUTRALITY — the besieging side chooses
+    # remove-Siege vs add-Enemy-markers at each now-Neutral Stronghold.
+    # Offer the two canonical resolutions (all-remove / all-add); the
+    # agent may also send custom per-Stronghold choices.
+    if (state.pending is not None
+            and state.pending.kind == "neutrality_choice"):
+        side = state.pending.waiting_on
+        locs = [sh["locale_id"] for sh in state.pending.payload["strongholds"]]
+        moves.append({"type": "respond_neutrality_choice", "side": side,
+                      "choices": {lid: "remove" for lid in locs}})
+        moves.append({"type": "respond_neutrality_choice", "side": side,
+                      "choices": {lid: "add" for lid in locs}})
+        return moves
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.

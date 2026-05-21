@@ -1068,7 +1068,8 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
 
     results = {"taifa_id": taifa_id, "from": old_status, "to": new_status,
                "ravaged_flips": [], "auto_conquered": [],
-               "siege_removed": [], "jihad_added": []}
+               "siege_removed": [], "jihad_added": [],
+               "deferred_neutrality": []}
     taifa.status = new_status
 
     # T5 (rule 1.4.3 PARIAS COIN): changing from Independent to Parias,
@@ -1124,8 +1125,18 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
             and l.cylinder.kind == "locale"
             and l.cylinder.locale_id == lid
         ]
-        # Muslim Lord at Muslim Stronghold "would go Neutral or Christian"
-        if going_neutral or going_christian_friendly:
+        # HOSTAGE POPULACE (1.4.3): a Muslim Lord force-Conquers only a
+        # Stronghold that was Friendly/Neutral-to-him and turns Enemy or
+        # (for ->Parias) Friendly->Neutral. ->Reconquista (christian =
+        # enemy): old Independent (friendly) or Parias (neutral). ->Parias
+        # (neutral): only old Independent (friendly->neutral). A
+        # Reconquista (christian/enemy) Stronghold going Neutral is
+        # RECOGNITION OF NEUTRALITY (the OR clause below), NOT Hostage.
+        muslim_hostage = (
+            (going_christian_friendly and old_status in ("independent",
+                                                         "parias"))
+            or (going_neutral and old_status == "independent"))
+        if muslim_hostage:
             if present_muslim:
                 # T3 (1.4.3 HOSTAGE POPULACE / 1.4.4): the Muslim Lord
                 # forcibly Conquers, placing Jihad markers = the
@@ -1161,7 +1172,8 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
         # OR clause (1.4.3). Phase 5l conservative resolution: remove
         # Siege/Bypass rather than place Christian Conquered markers.
         if (old_status == "reconquista" and new_status == "parias"):
-            if present_muslim and (loc.siege_green > 0 or loc.bypass_green):
+            if (present_muslim and (loc.siege_green > 0 or loc.bypass_green)
+                    and loc.conquered_markers == 0 and loc.jihad_markers == 0):
                 # T4 (1.4.3 RECOGNITION OF NEUTRALITY): the besieging
                 # side CHOOSES either to remove its Siege/Bypass OR to
                 # add Enemy victory markers (= Stronghold Value): a
@@ -1169,15 +1181,24 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
                 # surfaced via neutrality_choices[locale]="remove"|"add"
                 # (no greedy default beyond the conservative "remove"
                 # when the caller does not specify).
-                choice = (neutrality_choices or {}).get(lid, "remove")
+                from almoravid.static_data import load_strongholds
+                v = load_strongholds()["strongholds"][loc.base_type]["value"]
+                if neutrality_choices is not None and lid in neutrality_choices:
+                    choice = neutrality_choices[lid]
+                elif neutrality_choices is not None:
+                    choice = "remove"      # explicit dict, default for this loc
+                else:
+                    # No explicit choices: DEFER for an interactive
+                    # RECOGNITION OF NEUTRALITY decision (T4).
+                    results["deferred_neutrality"].append(
+                        {"locale_id": lid, "side": "muslim", "value": v})
+                    choice = None
                 if choice == "add":
-                    from almoravid.static_data import load_strongholds
-                    v = load_strongholds()["strongholds"][loc.base_type]["value"]
                     loc.conquered_markers += v
                     state.score.christian += v
                     results["auto_conquered"].append(
                         (lid, "christian_recognition", v))
-                else:
+                elif choice == "remove":
                     loc.siege_green = 0
                     loc.bypass_green = False
                     results["siege_removed"].append((lid, "muslim_or_clause"))
@@ -1185,18 +1206,27 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
         # Christian Lord at Muslim Stronghold that would go Neutral:
         # OR clause (1.4.3). Conservative: remove Siege/Bypass.
         if (old_status == "independent" and new_status == "parias"):
-            if present_christian and (loc.siege_yellow > 0 or loc.bypass_yellow):
+            if (present_christian
+                    and (loc.siege_yellow > 0 or loc.bypass_yellow)
+                    and loc.conquered_markers == 0 and loc.jihad_markers == 0):
                 # T4 (1.4.3 RECOGNITION OF NEUTRALITY): a Christian
                 # besieger CHOOSES to remove its Siege/Bypass OR add
                 # Jihad markers (= Stronghold Value).
-                choice = (neutrality_choices or {}).get(lid, "remove")
+                from almoravid.static_data import load_strongholds
+                v = load_strongholds()["strongholds"][loc.base_type]["value"]
+                if neutrality_choices is not None and lid in neutrality_choices:
+                    choice = neutrality_choices[lid]
+                elif neutrality_choices is not None:
+                    choice = "remove"
+                else:
+                    results["deferred_neutrality"].append(
+                        {"locale_id": lid, "side": "christian", "value": v})
+                    choice = None
                 if choice == "add":
-                    from almoravid.static_data import load_strongholds
-                    v = load_strongholds()["strongholds"][loc.base_type]["value"]
                     loc.jihad_markers += v
                     state.score.muslim += 0.5 * v
                     results["jihad_added"].append((lid, v))
-                else:
+                elif choice == "remove":
                     loc.siege_yellow = 0
                     loc.bypass_yellow = False
                     results["siege_removed"].append((lid, "christian_or_clause"))
@@ -3863,7 +3893,76 @@ def _h_place_cathedral_seat(state, action):
             "cathedral_seats": list(state.cathedral_seat_locales)}
 
 
+def _set_neutrality_pending(state, deferred: list, resume_active) -> bool:
+    """T4 (1.4.3 RECOGNITION OF NEUTRALITY): set a pending decision for
+    the first side (Christian then Muslim) that has a Lord Besieging a
+    now-Neutral Enemy Stronghold, letting it choose remove-Siege vs
+    add-Enemy-markers per Stronghold. `resume_active` is restored once
+    all sides' choices are made."""
+    from almoravid.state import PendingDecision
+    for s in ("christian", "muslim"):
+        side_sh = [d for d in deferred if d["side"] == s]
+        if side_sh:
+            state.pending = PendingDecision(
+                kind="neutrality_choice", waiting_on=s,
+                payload={"strongholds": side_sh,
+                         "all_deferred": list(deferred),
+                         "resume_active": resume_active})
+            state.meta.active_player = s
+            return True
+    return False
+
+
+def _maybe_set_neutrality_pending(state, results: dict, resume_active) -> bool:
+    deferred = results.get("deferred_neutrality") or []
+    return _set_neutrality_pending(state, deferred, resume_active) if deferred \
+        else False
+
+
+def _h_respond_neutrality_choice(state, action):
+    """4.3.5/1.4.3: resolve one side's RECOGNITION OF NEUTRALITY choices.
+    `choices` maps locale_id -> 'remove'|'add' (default 'remove'). A
+    Muslim besieger that 'adds' places Christian Conquered markers (=
+    Value); a Christian besieger that 'adds' places Jihad markers."""
+    side = _require_side(action)
+    pd = _require_pending(state, "neutrality_choice", side)
+    choices = action.get("choices", {}) or {}
+    applied = []
+    for sh in pd.payload["strongholds"]:
+        lid = sh["locale_id"]
+        v = sh["value"]
+        loc = state.locales[lid]
+        ch = choices.get(lid, "remove")
+        if ch == "add":
+            if side == "muslim":
+                loc.conquered_markers += v
+                state.score.christian += v
+            else:
+                loc.jihad_markers += v
+                state.score.muslim += 0.5 * v
+        else:
+            if side == "muslim":
+                loc.siege_green = 0
+                loc.bypass_green = False
+            else:
+                loc.siege_yellow = 0
+                loc.bypass_yellow = False
+        applied.append((lid, ch))
+    remaining = [d for d in pd.payload["all_deferred"] if d["side"] != side]
+    resume = pd.payload["resume_active"]
+    state.pending = None
+    if remaining and _set_neutrality_pending(state, remaining, resume):
+        next_pending = True
+    else:
+        state.meta.active_player = resume
+        next_pending = False
+    _record(state, action,
+            f"{side} resolves RECOGNITION OF NEUTRALITY: {applied}")
+    return {"applied": applied, "more_pending": next_pending}
+
+
 CAMPAIGN_HANDLERS = {
+    "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,

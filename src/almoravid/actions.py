@@ -1361,12 +1361,20 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         # T5: the Disband path awards Parias Coin with the Christian
         # player's explicit distribution, so suppress adjust_taifa_status'
         # own auto-award to avoid double-paying (1.4.3 / L7).
-        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "parias",
-                                           award_parias_coin=False)
+        taifa_adjust = adjust_taifa_status(
+            state, lord.home_taifa, "parias", award_parias_coin=False,
+            neutrality_choices=action.get("neutrality_choices"))
         parias_coin = _award_parias_coin(
             state, lord.service_rating, action.get("parias_coin_targets"))
         # Running-score tracker; final VP is recomputed from Parias status.
         state.score.christian += 1.0
+        # T4 (1.4.3): if no explicit neutrality_choices were given and a
+        # side has Lords Besieging a now-Neutral Stronghold, set a pending
+        # RECOGNITION OF NEUTRALITY decision (resolved before play
+        # continues; the disbanding side's turn resumes after).
+        from almoravid.campaign import _maybe_set_neutrality_pending
+        _maybe_set_neutrality_pending(state, taifa_adjust,
+                                      state.meta.active_player)
 
     # Remove this Lord's Seat markers from the map (both 3.3.1 and 3.3.2).
     for loc in state.locales.values():
