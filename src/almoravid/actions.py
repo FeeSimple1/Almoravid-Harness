@@ -385,8 +385,17 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
     else:  # this_lord
         lord_id = action.get("lord_id")
         lord = state.lords.get(lord_id) if lord_id else None
+        # 3.4.4 This-Lord limits also apply when deploying via 3.1.2:
+        # a Lord at the cap (2) or already holding the same title cannot
+        # receive it; such a card is discarded (no Capability assigned).
+        _cap_ok = True
+        if lord is not None:
+            from almoravid.static_data import load_cards as _lc
+            _nm = _lc()["cards"].get(card_id, {}).get("capability_name")
+            _cap_ok = (_nm not in _this_lord_cap_titles(lord)
+                       and len(lord.capabilities) < 2)
         if (lord is not None and lord.side == side
-                and lord.cylinder.kind == "locale"):
+                and lord.cylinder.kind == "locale" and _cap_ok):
             lord.capabilities.append(card_id)
             state.decks.capabilities_in_play.append(CardInPlay(
                 card_id=card_id, scope="this_lord", owner_side=side,
@@ -439,18 +448,29 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
 
 def _free_seats_for(state: GameState, lord_id: str) -> list[str]:
     """Seats that are neither Enemy nor have any Enemy Lord present
-    (per Errata p.12 PROCEDURE bullet 1). Phase 2b applies a simplified
-    'no enemy Lord present' check — territory-side enemy check is in
-    Phase 3 once friendly_locale logic is wired.
+    (Errata p.12, 3.4.1 PROCEDURE bullet 1: "one of his Seats that is
+    neither Enemy nor has any Enemy Lord present").
+
+    "Enemy" means the Seat's Locale is Friendly to the OTHER side
+    (1.3.1); a Neutral Seat (e.g. a Parias Taifa) is NOT Enemy and so
+    remains free for Muster.
     """
+    from almoravid.effective import is_friendly_locale
     lord = state.lords[lord_id]
+    other = "muslim" if lord.side == "christian" else "christian"
     out = []
     for seat in lord.seats:
+        if seat not in state.locales:
+            continue
+        # Enemy Territory check (Errata): exclude Seats Friendly to the
+        # enemy side (e.g. a Reconquista-Conquered Seat for a Muslim).
+        if is_friendly_locale(state, seat, other):
+            continue
         enemy_present = any(
-            other.cylinder.kind == "locale"
-            and other.cylinder.locale_id == seat
-            and other.side != lord.side
-            for other in state.lords.values()
+            o.cylinder.kind == "locale"
+            and o.cylinder.locale_id == seat
+            and o.side != lord.side
+            for o in state.lords.values()
         )
         if not enemy_present:
             out.append(seat)
@@ -1604,6 +1624,33 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
             "lordship_used": lord.lordship_used}
 
 
+def _this_lord_cap_titles(lord) -> list[str]:
+    """capability_name (title) of each This-Lord Capability on this Lord."""
+    from almoravid.static_data import load_cards
+    cards = load_cards()["cards"]
+    return [cards.get(cid, {}).get("capability_name")
+            for cid in lord.capabilities]
+
+
+def _check_this_lord_cap_limits(lord, card_id: str) -> None:
+    """3.4.4 This-Lord Capability restrictions: a Lord may hold at most
+    TWO This-Lord Capabilities, and may not hold two with the same title.
+    Enforced as a hard gate on adding a new one (rather than a forced
+    discard, which would require a separate player choice)."""
+    from almoravid.static_data import load_cards
+    cards = load_cards()["cards"]
+    new_title = cards.get(card_id, {}).get("capability_name")
+    existing = _this_lord_cap_titles(lord)
+    _require(new_title not in existing,
+             f"{lord.id} already has a This-Lord Capability titled "
+             f"{new_title!r} (3.4.4: no two same-title)",
+             code="duplicate_this_lord_title")
+    _require(len(lord.capabilities) < 2,
+             f"{lord.id} already holds two This-Lord Capabilities "
+             f"(3.4.4 max); discard one first",
+             code="this_lord_cap_limit")
+
+
 def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """3.4 Muster Levy action: spend 1 Lordship to add a Capability
     card from this side's board-edge stock to a Lord's mat (this_lord)
@@ -1642,6 +1689,8 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     _require(rec and not rec["no_capability"],
              f"{card_id} has no Capability half", code="no_capability_half")
     scope = rec["capability_scope"]
+    if scope == "this_lord":
+        _check_this_lord_cap_limits(lord, card_id)
     # Move from edge to target
     state.decks.board_edge[side].remove(card_id)
     if scope == "this_lord":

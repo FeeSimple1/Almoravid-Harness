@@ -123,11 +123,16 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 elif rec["capability_scope"] == "side_wide":
                     out.append({"type": "aow_deploy_capability",
                                 "side": side, "card_id": cid})
-                else:  # this_lord: offer each Mustered Lord (+ discard)
-                    musters = [lid for lid, l in state.lords.items()
-                               if l.side == side
-                               and l.cylinder.kind == "locale"]
-                    for lid in musters:
+                else:  # this_lord: offer each eligible Mustered Lord (+ discard)
+                    _nm = rec.get("capability_name")
+                    for lid, l in state.lords.items():
+                        if l.side != side or l.cylinder.kind != "locale":
+                            continue
+                        held = [cards.get(c, {}).get("capability_name")
+                                for c in l.capabilities]
+                        # 3.4.4: max 2 This-Lord caps, no same title.
+                        if len(l.capabilities) >= 2 or _nm in held:
+                            continue
                         out.append({"type": "aow_deploy_capability",
                                     "side": side, "card_id": cid,
                                     "lord_id": lid})
@@ -299,7 +304,17 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                     if v.ready:
                         out.append({"type": "levy_take_vassal", "side": side,
                                     "lord_id": lid, "vassal_index": i})
+                from almoravid.static_data import load_cards as _lc_cap
+                _capcards = _lc_cap()["cards"]
+                _held = [_capcards.get(c, {}).get("capability_name")
+                         for c in lord.capabilities]
                 for card_id in state.decks.board_edge.get(side, []):
+                    _rec = _capcards.get(card_id, {})
+                    if _rec.get("capability_scope") == "this_lord":
+                        # 3.4.4: max 2 This-Lord caps, no same title.
+                        if (len(lord.capabilities) >= 2
+                                or _rec.get("capability_name") in _held):
+                            continue
                     out.append({"type": "levy_take_capability", "side": side,
                                 "lord_id": lid, "card_id": card_id})
                 # 3.4.3 Levy Transport: add a Cart or a Mule.

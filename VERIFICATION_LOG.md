@@ -184,3 +184,28 @@ a punch list of residual base-game gaps. Fixes by group:
   rule. Faithfully implementing 6.3.2 needs an interactive Winter turn-flow (a larger
   change to the turn model); until then it is intentionally not auto-run. Lords at Sieges
   are correctly KEPT (not Disbanded) by Winter Disband so the state is consistent.
+
+### Levy Muster / Capabilities (3.4.4, 3.4.1)
+- 3.4.4 This-Lord Capability limits now enforced: a Lord may hold at most TWO This-Lord
+  Capabilities and may not hold two with the same title (capability_name). New
+  _check_this_lord_cap_limits gates both the Muster Levy path (levy_take_capability) and
+  the 3.1.2 deploy path (aow_deploy_capability — over-limit/duplicate cards are discarded
+  rather than assigned). legal_moves mirrors the gate so no phantom over-limit moves are
+  surfaced. Tests: tests/test_levy_capability_limits_34.py. Implemented as a hard gate on
+  ADDING (not a forced discard-down-to-two), since the discard-and-swap variant would need
+  a separate player-choice action and there is no net gain in offering an immediately-
+  discarded card.
+- 3.4.1 free-Seat check (Errata p.12): _free_seats_for now excludes Seats that are Enemy
+  Territory (Friendly to the other side per 1.3.1) in addition to the existing "no Enemy
+  Lord present" check. A Neutral Seat (e.g. a Parias Taifa) is NOT Enemy and remains free.
+  Tests: tests/test_levy_capability_limits_34.py.
+- 3.4.4 Capability SOURCE pool — NOT changed (flagged ambiguity, not silently altered).
+  The audit suggested Levy Capabilities should draw from "any of the side's currently
+  unused Arts of War cards" rather than only decks.board_edge. But this engine abstracts
+  the card economy differently: board_edge is documented as "Capability cards available
+  for Levy" and is populated by the 3.1 Arts-of-War draw/deploy; there is no separate
+  "unused side deck" pool that a Muster action could legally pull from without redefining
+  how cards flow between draw / pending_draw / board_edge / capabilities_in_play. Changing
+  the source pool risks corrupting that economy, and the correct mapping is genuinely
+  ambiguous given the current model. Per the no-guess rule this is left as-is and recorded
+  here for a design decision rather than altered blind.
