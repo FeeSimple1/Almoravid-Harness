@@ -2165,8 +2165,12 @@ def _h_cmd_ravage(state, action):
             # Lord's marker only.
             from almoravid.actions import _shift_service_left
             for tlid, tlord in state.lords.items():
+                # 4.7.2: shift "if the Lord is Mustered" — only a Taifa
+                # Lord on the map (cylinder at a Locale) has a Service
+                # marker to shift; a Disbanded/Calendar Lord is skipped.
                 if (tlord.is_taifa
                         and tlord.home_taifa == loc.territory
+                        and tlord.cylinder.kind == "locale"
                         and tlid not in ("yusuf", "sir",
                                          "rodrigo_campeador",
                                          "rodrigo_al_sayyid")):

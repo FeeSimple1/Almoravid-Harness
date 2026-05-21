@@ -209,3 +209,24 @@ a punch list of residual base-game gaps. Fixes by group:
   the source pool risks corrupting that economy, and the correct mapping is genuinely
   ambiguous given the current model. Per the no-guess rule this is left as-is and recorded
   here for a design decision rather than altered blind.
+
+### Residual partials (4.7.2, 1.6, both-Concede)
+- 4.7.2 Enforcing Parias Service-shift now gated on "if the Lord is Mustered": the odd-
+  Christian-Ravage-marker Service shift only fires for a Taifa Lord whose cylinder is at a
+  Locale (on the map). Previously it shifted a Disbanded/Calendar Lord's marker too. Tests:
+  tests/test_enforcing_parias_mustered_472.py.
+- 1.6 / 3.3 NOTE standalone no-Forces Disband — VERIFIED already handled where reachable.
+  The only force-removal paths in this engine are combat (apply_battle_losses already
+  permanently removes any Lord left with zero Forces, 3.3.1, at the end of the Losses pass)
+  and the Advanced Vassal Service rule (3.4.2), which is not active in this harness. No
+  Event reduces a Lord's Forces (they only add), and the Unfed penalty (4.8.1) is a Service
+  shift, not a Force removal. So the "last unit removed outside of combat" trigger has no
+  reachable non-combat path; no dead-code hook was added.
+- Both-sides-Concede winner — ADJUDICATED as winner=None (current behavior is correct). Per
+  4.4.2 each Conceding side "declare[s] that the Battle will end ... with that side as the
+  loser"; if BOTH the Attacker and Defender Concede the same Round, both are losers and
+  there is no victor (no Conquest/field-holder), which the resolver already yields. Both
+  sides take the lenient ("conceded_then_retreated") Loss roll. RESIDUAL (rare): the
+  winner=None aftermath shares the path with a max-Rounds stalemate and does not force BOTH
+  sides to Retreat off the field; a full both-sides-retreat geometry for the dual-Concede
+  case is a deferred low-frequency edge (a rational Defender never Concedes when winning).
