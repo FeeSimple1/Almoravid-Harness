@@ -174,16 +174,22 @@ a punch list of residual base-game gaps. Fixes by group:
   (first Levy OR Scenario-F box 9) replaces the bare first_levy_done gate in both the
   handlers (aow_deploy_capability / aow_implement_event) and the legal_moves enumerator.
   Tests: tests/test_winter_sequence_63.py + updated test_fix_l13_aow_draw.py error code.
-- 6.3.2 Winter Siege — DEFERRED (documented limitation, not silently skipped). The Winter
-  boxes (7-8) are processed as deterministic auto-steps (Winter Disband, Plowing, Spring
-  Muster), NOT as interactive turns. Winter Siege requires per-besieger OPTIONAL Supply or
-  Ravage and OPTIONAL Pay choices that materially affect the mandatory at-Siege Feed and
-  at-limit Disband outcomes. Auto-running the mandatory Feed/Disband WITHOUT first offering
-  the optional Supply/Ravage would be a harmful greedy default (it could force an Unfed
-  penalty the player could legally have avoided), which violates the no-greedy-defaults
-  rule. Faithfully implementing 6.3.2 needs an interactive Winter turn-flow (a larger
-  change to the turn model); until then it is intentionally not auto-run. Lords at Sieges
-  are correctly KEPT (not Disbanded) by Winter Disband so the state is consistent.
+- 6.3.2 Winter Siege — STRUCTURE RESOLVED 2026-05-21 (second opinion); implementation is a
+  turn-model rework, scoped separately. The correct faithful structure, per Winter box
+  (7 then 8): (1) walk the Besieging Lords in order, prompting each for ONE Supply or
+  Ravage action, or pass (Forage is NOT offered in Winter Siege); (2) auto-Feed EVERY Lord
+  at a Siege Locale — both sides, including Besieged garrisons inside the Stronghold, not
+  just the besiegers; (3) prompt Christian then Muslim for Pay on Lords at Sieges; (4)
+  auto-Disband any Lord still at/beyond Service limit. The ordering is load-bearing: Supply
+  feeds Provender the mandatory Feed consumes, and Pay can advance Service to dodge the
+  mandatory Disband — so the optional steps MUST be offered before the mandatory ones (it
+  is NOT safe to auto-run only the mandatory core). This requires replacing the ordinary
+  Levy/Campaign cycle at Scenario-F winter boxes 7-8 with an interactive Winter sequence
+  (the engine currently runs boxes 7-8 as normal Levy/Campaign with Winter Disband/Spring
+  Muster bolted on). That box-traversal rework is the single most invasive change in the
+  project and is scoped as a dedicated follow-up to protect the (now 745-test) engine.
+  Until then Lords at Sieges are correctly KEPT (not Disbanded) by Winter Disband so state
+  stays consistent. NO greedy auto-run is performed.
 
 ### Levy Muster / Capabilities (3.4.4, 3.4.1)
 - 3.4.4 This-Lord Capability limits now enforced: a Lord may hold at most TWO This-Lord
