@@ -1833,10 +1833,11 @@ def resolve_relief_sally(
 
     Per-Lord lane Losses: each lane tracks per-Lord Forces + Routed
     units (_init_lane/_push_lane/_lane_step) and commits each Lord
-    EXACTLY (no proportional split). Round-level AoW reorders (M6 Feigned
-    Retreat) are not applied within a Relief Sally; the per-step Hills
-    (C1/M1) and C8 hooks inside _resolve_step still apply. Excess
-    Defenders beyond Front + three Reserve-as-Front do not participate.
+    EXACTLY (no proportional split). M6 Feigned Retreat (Round-2 melee
+    reorder) IS applied within a Relief Sally, alongside the per-step
+    Hills (C1/M1) and C8 hooks. Excess Reserve Defenders beyond Front +
+    three Reserve-as-Front ADVANCE via Reposition (Round 2+) into emptied
+    lane slots up to capacity (4.4.2).
     """
     active_side: Side = state.lords[
         (marcher_ids or sallyer_ids)[0]].side
