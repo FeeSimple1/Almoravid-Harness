@@ -70,3 +70,42 @@ def test_free_seats_allows_neutral_seat() -> None:
                 and o.cylinder.locale_id == seat:
             o.cylinder = type(o.cylinder)(kind="mat")
     assert seat in _free_seats_for(s, ml.id)
+
+
+def test_levy_capability_source_is_full_unused_deck() -> None:
+    """3.4.4: a Lord may Levy a side_wide Capability that is sitting in
+    the undrawn deck (never on the board edge), and it then deploys to
+    the board edge + capabilities_in_play and leaves the unused pool."""
+    from almoravid.actions import _unused_capability_cards, apply_action
+    from almoravid.static_data import load_cards
+    s = load_scenario("scenario_d_arrival")
+    cards = load_cards()["cards"]
+    # A side_wide Muslim Capability that is unused at setup.
+    pool = _unused_capability_cards(s, "muslim")
+    target = next(c for c in pool
+                  if cards[c]["capability_scope"] == "side_wide")
+    assert target not in s.decks.board_edge.get("muslim", [])
+    from tests._plan_helpers import step_levy
+    from tests.test_real_levy import _drive_to_levy_step
+    _drive_to_levy_step(s, "muster")
+    while s.meta.active_player != "muslim":
+        step_levy(s)
+    yusuf = s.lords["yusuf"]
+    assert yusuf.cylinder.kind == "locale"
+    yusuf.lordship_used = 0
+    r = apply_action(s, {"type": "levy_take_capability", "side": "muslim",
+                         "lord_id": "yusuf", "card_id": target})
+    assert r["scope"] == "side_wide"
+    assert target in s.decks.board_edge["muslim"]
+    assert any(c.card_id == target for c in s.decks.capabilities_in_play)
+    assert target not in _unused_capability_cards(s, "muslim")
+
+
+def test_board_edge_card_not_reselectable() -> None:
+    """A Capability already deployed at the board edge is in play and is
+    NOT in the unused pool (cannot be Levied again)."""
+    from almoravid.actions import _unused_capability_cards
+    s = load_scenario("scenario_d_arrival")
+    edge = s.decks.board_edge.get("muslim", [])
+    for cid in edge:
+        assert cid not in _unused_capability_cards(s, "muslim")

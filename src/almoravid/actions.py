@@ -1624,6 +1624,37 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
             "lordship_used": lord.lordship_used}
 
 
+def _unused_capability_cards(state: GameState, side: str) -> list[str]:
+    """3.4.4 source pool: the side's currently UNUSED Arts of War cards
+    that carry a Capability half.
+
+    "Unused" mirrors the 3.1.1 deck rebuild (see _rebuild_aow_deck):
+    every card of this side EXCEPT those currently in play or held —
+    deployed Capabilities (board edge + tucked under Lord mats), Held
+    Events, and cards pending implementation this Levy. Cards in the
+    draw pile the player has never seen, and discarded cards, both
+    count as unused (the deck is a face-up "menu" for Capability Levy).
+    Per the rules there is no permanent card-removal mechanic active in
+    this engine, so nothing else is excluded.
+    """
+    cards = load_cards()["cards"]
+    excluded: set[str] = set()
+    for bucket in (state.decks.this_levy_events,
+                   state.decks.this_campaign_events, state.decks.held):
+        excluded.update(bucket.get(side, []))
+    excluded.update(state.decks.board_edge.get(side, []))
+    excluded.update(c.card_id for c in state.decks.capabilities_in_play
+                    if c.owner_side == side)
+    for l in state.lords.values():
+        if l.side == side:
+            excluded.update(l.capabilities)
+    excluded.update(state.decks.pending_draw.get(side, []))
+    return [cid for cid, c in cards.items()
+            if c["side"] == side and cid not in excluded
+            and not c.get("no_capability")
+            and c.get("capability_scope") is not None]
+
+
 def _this_lord_cap_titles(lord) -> list[str]:
     """capability_name (title) of each This-Lord Capability on this Lord."""
     from almoravid.static_data import load_cards
@@ -1652,12 +1683,12 @@ def _check_this_lord_cap_limits(lord, card_id: str) -> None:
 
 
 def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """3.4 Muster Levy action: spend 1 Lordship to add a Capability
-    card from this side's board-edge stock to a Lord's mat (this_lord)
-    or to capabilities_in_play (side_wide).
-
-    Phase 5g baseline: validates Lordship, capability scope, and card
-    availability; moves card from board_edge to the appropriate target.
+    """3.4.4 Muster Levy action: spend 1 Lordship to obtain a Capability
+    from ANY of the side's currently UNUSED Arts of War cards (the deck
+    functions as a face-up menu), deploying it either to this Lord
+    (this_lord) or to the side's board edge (side_wide). Levying the
+    Capability blocks that card's Event (the card leaves the unused pool
+    once in play). Source = _unused_capability_cards (3.1.1 semantics).
     """
     from almoravid.state import CardInPlay
     from almoravid.static_data import load_cards
@@ -1680,9 +1711,10 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     _require_levy_actor_eligible(state, lord, lord_id)
     _require(lord.lordship_used < lord.lordship_rating,
              "lordship exhausted", code="lordship_exhausted")
-    # Card must be in the side's board_edge stock
-    edge = state.decks.board_edge.get(side, [])
-    _require(card_id in edge, f"{card_id} not in {side} board edge",
+    # 3.4.4: select from ANY of the side's currently UNUSED Capability
+    # cards (full deck minus in-play/held/pending), not just board edge.
+    _require(card_id in _unused_capability_cards(state, side),
+             f"{card_id} is not an unused {side} Capability card (3.4.4)",
              code="card_not_available")
     cards = load_cards()["cards"]
     rec = cards.get(card_id)
@@ -1691,17 +1723,23 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     scope = rec["capability_scope"]
     if scope == "this_lord":
         _check_this_lord_cap_limits(lord, card_id)
-    # Move from edge to target
-    state.decks.board_edge[side].remove(card_id)
+    # Deploy: this_lord caps tuck under the Lord's mat; side_wide caps go
+    # to the board edge. Both register in capabilities_in_play and leave
+    # the unused pool. Drop from the materialised draw list if present.
+    if card_id in state.decks.draw:
+        state.decks.draw.remove(card_id)
     if scope == "this_lord":
         lord.capabilities.append(card_id)
+    else:
+        state.decks.board_edge.setdefault(side, []).append(card_id)
     state.decks.capabilities_in_play.append(CardInPlay(
         card_id=card_id, scope=scope, owner_side=side,
         owner_lord_id=lord_id if scope == "this_lord" else None,
     ))
     lord.lordship_used += 1
     _record(state, action,
-            f"{side} {lord_id} spends Lordship -> takes Capability {card_id}")
+            f"{side} {lord_id} spends Lordship -> Levies Capability {card_id}"
+            f" ({scope})")
     return {"lord_id": lord_id, "card_id": card_id, "scope": scope,
             "lordship_used": lord.lordship_used}
 

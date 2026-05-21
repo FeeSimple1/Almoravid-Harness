@@ -160,23 +160,22 @@ def test_levy_take_vassal_rejects_when_lordship_exhausted() -> None:
 
 
 def test_levy_take_capability_from_board_edge() -> None:
-    """Move a this_lord-scope board-edge Capability onto a Lord's mat.
+    """3.4.4: Levy a this_lord-scope Capability from the side's UNUSED
+    Arts of War deck onto a Lord's mat.
 
-    Rather than depend on whichever cards a scenario happens to seed in
-    the board-edge (Scenario D's Muslim edge is all side-wide), we
-    inject a known this_lord-scope Capability (M8 Dawud ibn Aisha,
-    "Lords: Yusuf or Sir") so the handler path is exercised
-    deterministically and the test never has to skip.
+    M8 (Dawud ibn Aisha, "Lords: Yusuf or Sir") is a this_lord-scope
+    Muslim Capability. It starts UNUSED in Scenario D (not in play /
+    held / pending), so it is selectable for a 3.4.4 Levy and tucks
+    under Yusuf's mat. (Under the corrected model a board-edge card is
+    already deployed and is NOT re-selectable.)
     """
     s = load_scenario("scenario_d_arrival")
     cards = load_cards_local()["cards"]
-    # M8 is a this_lord-scope Muslim Capability for Yusuf/Sir.
     target_card = "M8"
     assert not cards[target_card]["no_capability"]
     assert cards[target_card]["capability_scope"] == "this_lord"
-    s.decks.board_edge.setdefault("muslim", [])
-    if target_card not in s.decks.board_edge["muslim"]:
-        s.decks.board_edge["muslim"].append(target_card)
+    from almoravid.actions import _unused_capability_cards
+    assert target_card in _unused_capability_cards(s, "muslim")
     _drive_to_levy_step(s, "muster")
     while s.meta.active_player != "muslim":
         step_levy(s)
@@ -188,7 +187,8 @@ def test_levy_take_capability_from_board_edge() -> None:
                          "lord_id": "yusuf", "card_id": target_card})
     assert r["scope"] == "this_lord"
     assert target_card in s.lords["yusuf"].capabilities
-    assert target_card not in s.decks.board_edge["muslim"]
+    # Now deployed -> no longer in the unused pool.
+    assert target_card not in _unused_capability_cards(s, "muslim")
 
 
 def load_cards_local():

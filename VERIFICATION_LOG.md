@@ -199,16 +199,19 @@ a punch list of residual base-game gaps. Fixes by group:
   Territory (Friendly to the other side per 1.3.1) in addition to the existing "no Enemy
   Lord present" check. A Neutral Seat (e.g. a Parias Taifa) is NOT Enemy and remains free.
   Tests: tests/test_levy_capability_limits_34.py.
-- 3.4.4 Capability SOURCE pool — NOT changed (flagged ambiguity, not silently altered).
-  The audit suggested Levy Capabilities should draw from "any of the side's currently
-  unused Arts of War cards" rather than only decks.board_edge. But this engine abstracts
-  the card economy differently: board_edge is documented as "Capability cards available
-  for Levy" and is populated by the 3.1 Arts-of-War draw/deploy; there is no separate
-  "unused side deck" pool that a Muster action could legally pull from without redefining
-  how cards flow between draw / pending_draw / board_edge / capabilities_in_play. Changing
-  the source pool risks corrupting that economy, and the correct mapping is genuinely
-  ambiguous given the current model. Per the no-guess rule this is left as-is and recorded
-  here for a design decision rather than altered blind.
+- 3.4.4 Capability SOURCE pool — RESOLVED & FIXED 2026-05-21 (second-opinion confirmed).
+  Levy Capabilities now select from ANY of the side's currently UNUSED Arts of War cards
+  (the deck is a face-up "menu"), not just decks.board_edge. "Unused" follows the 3.1.1
+  rebuild semantics: every card of the side EXCEPT deployed Capabilities (board edge +
+  tucked under Lord mats), Held Events, and cards pending implementation this Levy; cards
+  in the undrawn deck and in discard both count as unused (no permanent card-removal
+  mechanic is active — C18 here is Runaway Slaves, not Milites). New helper
+  _unused_capability_cards(state, side); board_edge is the DESTINATION for a Levied
+  side_wide cap, not a separate source stock. The "Levying blocks the Event" note (3.4.4)
+  is honoured because the card leaves the unused pool once in play. Handler
+  _h_levy_take_capability + legal_moves enumerator both use the helper. Tests:
+  tests/test_levy_capability_limits_34.py (full-deck source, board-edge-not-reselectable),
+  updated tests/test_real_levy.py.
 
 ### Residual partials (4.7.2, 1.6, both-Concede)
 - 4.7.2 Enforcing Parias Service-shift now gated on "if the Lord is Mustered": the odd-

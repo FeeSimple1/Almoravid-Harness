@@ -305,10 +305,14 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                         out.append({"type": "levy_take_vassal", "side": side,
                                     "lord_id": lid, "vassal_index": i})
                 from almoravid.static_data import load_cards as _lc_cap
+                from almoravid.actions import _unused_capability_cards
                 _capcards = _lc_cap()["cards"]
                 _held = [_capcards.get(c, {}).get("capability_name")
                          for c in lord.capabilities]
-                for card_id in state.decks.board_edge.get(side, []):
+                # 3.4.4: select from ANY of the side's unused Capability
+                # cards (full deck minus in-play/held/pending), not just
+                # the board edge.
+                for card_id in _unused_capability_cards(state, side):
                     _rec = _capcards.get(card_id, {})
                     if _rec.get("capability_scope") == "this_lord":
                         # 3.4.4: max 2 This-Lord caps, no same title.
