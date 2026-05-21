@@ -242,3 +242,37 @@ a punch list of residual base-game gaps. Fixes by group:
   winner=None aftermath shares the path with a max-Rounds stalemate and does not force BOTH
   sides to Retreat off the field; a full both-sides-retreat geometry for the dual-Concede
   case is a deferred low-frequency edge (a rational Defender never Concedes when winning).
+
+## Optional / advanced rules (opt-in) — 2026-05-21
+The rulebook's own optional/advanced layer, implemented as opt-in toggles so the standard
+game is unaffected when they are off (all default off).
+
+- 6.1 Bidding for Sides — IMPLEMENTED (opt-in setup action `bid_for_sides`). Two players
+  bid; the LOWER bid takes Muslim and the Taifas-box 1VP count (state.taifas_box_vp) is
+  reset to that bid; ties reset to that number and assign sides randomly (seeded). Scenario
+  F minimum bid is 2 (enforced). The engine's two sides/pieces are fixed, so the only
+  mechanical state effect is taifas_box_vp; the seat assignment is reported. One-time
+  (meta.bidding_done). Intentionally NOT enumerated in the default legal-move stream (it is
+  a pre-game agreement; auto-drivers shouldn't bid / perturb RNG) but is fully callable at
+  setup. Tests: tests/test_bidding_61.py.
+- 1.5.2 Hidden Mats — IMPLEMENTED (opt-in, meta.hidden_mats). New views.redacted_view(state,
+  viewer_side) returns a per-viewer dict: with the option on, the opponent's on-map Lords'
+  strength (Forces, Assets, Vassals, This-Lord Capabilities, Routed units) is hidden
+  (replaced with None, `hidden_mat: True`), EXCEPT Lords in Battle/Storm (a pending
+  march_arrival_response at their Locale reveals them); the opponent's pending AoW draw is
+  also hidden. Identity, ratings, and map position stay public; side-wide Capabilities stay
+  revealed (3.4.4). Purely a view — rules/legal-moves/resolution use full state. Tests:
+  tests/test_hidden_mats_152.py.
+- 3.4.2 Advanced Vassal Service — IMPLEMENTED (opt-in, meta.advanced_vassal_service).
+  Mustered Vassals get their own Calendar Service marker placed right of the Levy marker by
+  the Vassal's Service Rating (data `service_cost`); a Lord's Service shift (any direction/
+  reason) cascades to his Vassal markers (both _shift_service_left and _shift_service_right).
+  At each Disband step (Levy 3.3 via pass_step on service_disband; Campaign 4.8.2 via
+  _h_end_card) `_disband_vassals_for_side` disbands Mustered Vassals at/beyond Service limit:
+  beyond -> permanently removed (Forces returned, no re-Muster); at-limit -> Pennant-DOWN
+  (Unready, Forces returned). If returning Forces leaves a Lord with none, he Disbands to
+  the Calendar (1.6, 3.3.2, via _h_disband_lord with a bypass_limit_check). After a side's
+  Muster segment, `_flip_up_pennants` flips Pennant-down Vassals back to Ready. Pennant-down
+  Vassals may not Muster. New Vassal.pennant_down field (schema regenerated). Bishops/
+  Crusaders (Capability-added) are not Calendar-vassals and are unaffected. Tests:
+  tests/test_advanced_vassal_service_342.py + updated tests/test_phase7d_vassal_service.py.
