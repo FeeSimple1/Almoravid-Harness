@@ -58,6 +58,53 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "choices": {lid: "add" for lid in locs}})
         return moves
 
+    # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord
+    # at a time (Supply / Ravage / pass), then Christian-then-Muslim Pay
+    # (or done) at Sieges. Pattern 11: only the waiting_on side may act.
+    if (state.pending is not None
+            and state.pending.kind == "winter_siege"):
+        from almoravid.static_data import load_strongholds  # noqa: F401
+        side = state.pending.waiting_on
+        payload = state.pending.payload
+        if payload["step"] == "besieger_actions" and payload["queue"]:
+            lord_id = payload["queue"][0]
+            lord = state.lords.get(lord_id)
+            moves.append({"type": "winter_siege_action", "side": side,
+                          "lord_id": lord_id, "mode": "pass"})
+            moves.append({"type": "winter_siege_action", "side": side,
+                          "lord_id": lord_id, "mode": "ravage"})
+            # Supply: one option per reachable Seat (mirror cmd_supply).
+            try:
+                from almoravid.campaign import (_own_seats,
+                                                _find_supply_routes)
+                if lord is not None and lord.cylinder.kind == "locale":
+                    seats = _own_seats(state, lord_id)
+                    here = lord.cylinder.locale_id
+                    cart = lord.assets.get("cart", 0)
+                    mule = lord.assets.get("mule", 0)
+                    routes = _find_supply_routes(state, here, seats,
+                                                 side, lord)
+                    for seat, route in routes.items():
+                        if seat == here or (route is not None
+                                            and len(route) <= cart + mule):
+                            moves.append({"type": "winter_siege_action",
+                                          "side": side, "lord_id": lord_id,
+                                          "mode": "supply",
+                                          "source_seat": seat})
+            except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                pass
+            return moves
+        # Pay step: offer Pay for Lords at Sieges of the current side + done.
+        from almoravid.campaign import _siege_locale_lords
+        siege_lords = [lid for lid in _siege_locale_lords(state)
+                       if state.lords[lid].side == side]
+        for lid in siege_lords:
+            moves.append({"type": "winter_siege_pay", "side": side,
+                          "resource": "coin", "amount": 1,
+                          "target_lord_id": lid})
+        moves.append({"type": "winter_siege_pay", "side": side, "done": True})
+        return moves
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.

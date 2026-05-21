@@ -748,19 +748,7 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # fire above). `prev_box` is the box whose Campaign just ended.
     ghr = _apply_grow_harvest_repairs(state, prev_box)
     # Otherwise return to Levy
-    state.meta.phase = "levy"
-    state.meta.campaign_step = None
-    state.meta.levy_step = "arts_of_war"
-    state.meta.aow_draw_done = {}
-    state.meta.levy_step_completed_christian = False
-    state.meta.levy_step_completed_muslim = False
-    state.meta.cta_option_used_christian = False
-    state.meta.cta_option_used_muslim = False
-    state.meta.cta_crusade_jihad_pending = False
-    for _l in state.lords.values():
-        _l.just_arrived_this_levy = False
-    state.meta.active_player = ACTOR_ORDER[0]
-    state.meta.turn_index += 1
+    _return_to_levy(state)
 
     # Deferred fix: Scenario F Curias / Winter / Spring Muster auto-wire.
     # When the Calendar advances into box 5 or 6 (Autumn 1085), run
@@ -777,16 +765,21 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                 auto_actions.append({"curias": applied})
                 new_box = state.calendar.current_box  # may have advanced to 7
         if new_box == 7:
+            # 6.3.1 Winter Disband, then the interactive 6.3.2 Winter
+            # Siege sequence which OWNS the flow through boxes 7->8 and
+            # ends by entering the box-9 Spring Levy (6.3.3/.4/.5). The
+            # ordinary Levy/Campaign cycle does NOT run at winter boxes.
             wd = winter_disband(state)
             auto_actions.append({"winter_disband": wd})
-        if new_box == 9:
-            # End of box 8: Plowing (6.3.4) first, then Spring Muster
-            # (6.3.3) re-places Disbanded Lords for the box-9 Levy.
-            pl = winter_plowing(state)
-            if pl["plowed"]:
-                auto_actions.append({"winter_plowing": pl})
-            sm = spring_muster(state)
-            auto_actions.append({"spring_muster": sm})
+            ws = _enter_winter_box(state, 7)
+            auto_actions.append({"winter_siege": ws})
+            _record(state, action,
+                    f"End Campaign; advanced box {prev_box} -> 7; Winter "
+                    f"Disband + Winter Siege: {auto_actions}")
+            return {"phase": state.meta.phase, "current_box": 7,
+                    "turn_index": state.meta.turn_index,
+                    "grow_harvest_repairs": ghr,
+                    "auto_actions": auto_actions}
 
     _record(state, action,
             f"End Campaign; advanced box {prev_box} -> {new_box}; back to Levy"
@@ -1088,6 +1081,266 @@ def winter_plowing(state) -> dict:
         out["plowed"].append({"lord_id": lid, "cart": (cart, new_cart),
                               "mule": (mule, new_mule)})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Return-to-Levy reset (shared by End Campaign and the Winter sequence exit).
+# ---------------------------------------------------------------------------
+
+
+def _return_to_levy(state) -> None:
+    """Reset turn state for the start of a new Levy phase."""
+    state.meta.phase = "levy"
+    state.meta.campaign_step = None
+    state.meta.levy_step = "arts_of_war"
+    state.meta.aow_draw_done = {}
+    state.meta.levy_step_completed_christian = False
+    state.meta.levy_step_completed_muslim = False
+    state.meta.cta_option_used_christian = False
+    state.meta.cta_option_used_muslim = False
+    state.meta.cta_crusade_jihad_pending = False
+    for _l in state.lords.values():
+        _l.just_arrived_this_levy = False
+    state.meta.active_player = ACTOR_ORDER[0]
+    state.meta.turn_index += 1
+
+
+# ---------------------------------------------------------------------------
+# 6.3.2 Winter Siege (Scenario F) — interactive per-box mini-sequence.
+#
+# Per Winter box (7 then 8): (1) walk the Besieging Lords offering each
+# ONE Supply or Ravage action, or pass (Forage is NOT offered); (2)
+# auto-Feed EVERY Lord at a Siege Locale (both sides, incl. Besieged
+# garrisons); (3) Christian then Muslim Pay Lords at Sieges; (4)
+# auto-Disband Lords at Sieges at/beyond Service limit (per 3.3). The
+# ordering is load-bearing: Supply feeds the Provender that Feed
+# consumes, and Pay can advance Service to dodge the mandatory Disband.
+# ---------------------------------------------------------------------------
+
+
+def _siege_locale_lords(state) -> list[str]:
+    """All Lords (both sides, including Besieged garrisons inside) whose
+    cylinder is at a Locale that has any Siege marker."""
+    out = []
+    for lid, l in state.lords.items():
+        if l.cylinder.kind != "locale":
+            continue
+        loc = state.locales[l.cylinder.locale_id]
+        if loc.siege_yellow > 0 or loc.siege_green > 0:
+            out.append(lid)
+    return out
+
+
+def _winter_besiegers(state) -> list[str]:
+    """6.3.2 bullet 1 "each Besieging Lord (only)": a Lord OUTSIDE a
+    Stronghold at a Locale where HIS side has a Siege marker."""
+    out = []
+    for lid, l in state.lords.items():
+        if l.cylinder.kind != "locale" or l.in_stronghold:
+            continue
+        loc = state.locales[l.cylinder.locale_id]
+        if l.side == "christian" and loc.siege_yellow > 0:
+            out.append(lid)
+        elif l.side == "muslim" and loc.siege_green > 0:
+            out.append(lid)
+    return out
+
+
+class _MetaCtx:
+    """Save/restore turn-context + pending so the guarded Campaign/Levy
+    command handlers (Supply, Ravage, Pay, Disband) can be reused inside
+    the Winter sequence without duplicating their effect logic."""
+
+    def __init__(self, state, **overrides):
+        self.state = state
+        self.overrides = overrides
+
+    def __enter__(self):
+        m = self.state.meta
+        self._saved = {k: getattr(m, k) for k in (
+            "phase", "campaign_step", "levy_step", "active_player",
+            "active_lord_id", "actions_remaining")}
+        self._pending = self.state.pending
+        for k, v in self.overrides.items():
+            setattr(m, k, v)
+        self.state.pending = None
+        return self
+
+    def __exit__(self, *exc):
+        m = self.state.meta
+        for k, v in self._saved.items():
+            setattr(m, k, v)
+        self.state.pending = self._pending
+        return False
+
+
+def _winter_feed(state) -> dict:
+    """6.3.2 bullet 2: each Lord at a Siege Locale Feeds (4.8.1). Marks
+    those Lords Moved/Fought and runs the shared Feed (Christians then
+    Muslims, Sharing among same-Locale allies, Unfed Service-shift)."""
+    for lid in _siege_locale_lords(state):
+        state.lords[lid].moved_fought = True
+    return _feed_all_moved_fought(state)
+
+
+def _winter_siege_disband(state) -> list[dict]:
+    """6.3.2 bullet 3 (mandatory): Disband Lords at Siege Locales at or
+    beyond Service limit per 3.3 (Beyond -> permanent removal; At limit
+    -> Calendar). Reuses the tested disband handler."""
+    from almoravid.actions import _h_disband_lord
+    results = []
+    cur = state.calendar.current_box
+    for lid in list(_siege_locale_lords(state)):
+        l = state.lords[lid]
+        if l.cylinder.kind != "locale":
+            continue
+        sm = next((m for m in state.calendar.service_markers
+                   if m.lord_id == lid and m.vassal_id is None), None)
+        at_or_beyond = (sm is None) or (sm.box <= cur)
+        if not at_or_beyond:
+            continue
+        with _MetaCtx(state, phase="levy", levy_step="service_disband",
+                      active_player=l.side):
+            results.append(_h_disband_lord(
+                state, {"type": "disband_lord", "side": l.side,
+                        "lord_id": lid}))
+    return results
+
+
+def _enter_winter_box(state, box: int) -> dict:
+    """Begin the Winter Siege sequence for `box` (7 or 8)."""
+    from almoravid.state import PendingDecision
+    state.meta.phase = "winter"
+    state.calendar.current_box = box
+    state.pending = PendingDecision(
+        kind="winter_siege", waiting_on="christian",
+        payload={"box": box, "step": "besieger_actions",
+                 "queue": _winter_besiegers(state)})
+    return _winter_advance(state)
+
+
+def _winter_advance(state) -> dict:
+    """Progress the Winter Siege state machine, pausing (leaving the
+    pending set with waiting_on correct) only when player input is
+    needed; runs the auto Feed at the besieger->pay boundary."""
+    pd = state.pending
+    payload = pd.payload
+    if payload["step"] == "besieger_actions":
+        # Drop any besieger no longer eligible (e.g. removed mid-step).
+        payload["queue"] = [lid for lid in payload["queue"]
+                            if lid in state.lords
+                            and state.lords[lid].cylinder.kind == "locale"]
+        if payload["queue"]:
+            nxt = payload["queue"][0]
+            pd.waiting_on = state.lords[nxt].side
+            state.meta.active_player = pd.waiting_on
+            return {"winter": "besieger_pending", "box": payload["box"],
+                    "lord": nxt}
+        # All besiegers done -> mandatory Feed -> Pay phase.
+        fed = _winter_feed(state)
+        # If no Lords are at any Siege Locale, there is nothing left to
+        # Pay or Disband this box — finish it automatically.
+        if not _siege_locale_lords(state):
+            return {"winter": "no_siege_lords", "box": payload["box"],
+                    "feed": fed, "finish": _finish_winter_box(state, payload["box"])}
+        payload["step"] = "pay"
+        payload["pay_side"] = "christian"
+        pd.waiting_on = "christian"
+        state.meta.active_player = "christian"
+        return {"winter": "pay_pending", "box": payload["box"],
+                "feed": fed, "pay_side": "christian"}
+    # step == "pay": wait for the current side's Pay/done.
+    pd.waiting_on = payload["pay_side"]
+    state.meta.active_player = payload["pay_side"]
+    return {"winter": "pay_pending", "box": payload["box"],
+            "pay_side": payload["pay_side"]}
+
+
+def _finish_winter_box(state, box: int) -> dict:
+    """After both sides' Pay: mandatory at-limit Disband, then either
+    advance to box 8 (interactive again) or, after box 8, run Spring
+    Muster (6.3.3) + Plowing (6.3.4) and enter the box-9 Spring Levy."""
+    disb = _winter_siege_disband(state)
+    if box == 7:
+        nxt = _enter_winter_box(state, 8)
+        return {"winter": "box7_done", "disband": disb, "next": nxt}
+    # box 8: Plowing (end of box 8) + Spring Muster, then box-9 Levy.
+    pl = winter_plowing(state)
+    sm = spring_muster(state)
+    state.pending = None
+    state.calendar.current_box = 9
+    _return_to_levy(state)
+    return {"winter": "box8_done", "disband": disb, "plowing": pl,
+            "spring_muster": sm, "phase": state.meta.phase}
+
+
+def _h_winter_siege_action(state, action):
+    """6.3.2 bullet 1: the current Besieging Lord takes ONE Supply or
+    Ravage action, or passes. Forage is NOT offered in Winter Siege."""
+    side = _require_side(action)
+    pd = _require_pending(state, "winter_siege", side)
+    payload = pd.payload
+    _require(payload["step"] == "besieger_actions",
+             "not the Winter-Siege besieger-action step", code="wrong_winter_step")
+    _require(payload["queue"], "no Besieging Lord awaiting an action",
+             code="no_besieger")
+    lord_id = payload["queue"][0]
+    _require(state.lords[lord_id].side == side,
+             f"the current Besieging Lord {lord_id} is not {side}'s",
+             code="wrong_side")
+    mode = action.get("mode")
+    _require(mode in ("supply", "ravage", "pass"),
+             "mode must be supply|ravage|pass", code="bad_arg")
+    result = None
+    if mode == "supply":
+        with _MetaCtx(state, phase="campaign", campaign_step="activation",
+                      active_player=side, active_lord_id=lord_id,
+                      actions_remaining=1):
+            result = _h_cmd_supply(state, {"type": "cmd_supply", "side": side,
+                                           "source_seat": action.get("source_seat")})
+    elif mode == "ravage":
+        with _MetaCtx(state, phase="campaign", campaign_step="activation",
+                      active_player=side, active_lord_id=lord_id,
+                      actions_remaining=1):
+            result = _h_cmd_ravage(state, {"type": "cmd_ravage", "side": side})
+    # Lord done either way — remove from queue and progress.
+    if payload["queue"] and payload["queue"][0] == lord_id:
+        payload["queue"].pop(0)
+    adv = _winter_advance(state)
+    _record(state, action,
+            f"Winter Siege (box {payload['box']}): {side} {lord_id} {mode}")
+    return {"winter_action": mode, "lord": lord_id, "result": result,
+            "advance": adv}
+
+
+def _h_winter_siege_pay(state, action):
+    """6.3.2 bullet 3 (optional half): Christian then Muslim may Pay
+    Lords at Sieges (3.2). `done` ends that side's Pay; after Muslim's
+    `done` the mandatory at-limit Disband runs and the box completes."""
+    side = _require_side(action)
+    pd = _require_pending(state, "winter_siege", side)
+    payload = pd.payload
+    _require(payload["step"] == "pay", "not the Winter-Siege Pay step",
+             code="wrong_winter_step")
+    _require(side == payload["pay_side"],
+             f"Pay step is waiting on {payload['pay_side']}, not {side}",
+             code="not_pay_side")
+    if action.get("done"):
+        if payload["pay_side"] == "christian":
+            payload["pay_side"] = "muslim"
+            return {"winter_pay": "done", "next_side": "muslim",
+                    "advance": _winter_advance(state)}
+        return _finish_winter_box(state, payload["box"])
+    # A Pay action — only Lords AT a Siege Locale may be Paid (6.3.2).
+    target_id = action.get("target_lord_id")
+    _require(target_id in _siege_locale_lords(state),
+             "Winter Siege Pay may only target a Lord at a Siege Locale",
+             code="not_at_siege")
+    from almoravid.actions import _h_pay_lord
+    with _MetaCtx(state, phase="levy", levy_step="pay", active_player=side):
+        res = _h_pay_lord(state, {**action, "type": "pay_lord"})
+    return {"winter_pay": res}
+
 
 
 
@@ -4277,6 +4530,8 @@ CAMPAIGN_HANDLERS = {
     "toggle_lieutenant": _h_toggle_lieutenant,
     "cmd_encamp": _h_cmd_encamp,
     "cmd_sortie": _h_cmd_sortie,
+    "winter_siege_action": _h_winter_siege_action,
+    "winter_siege_pay": _h_winter_siege_pay,
     "dinars_deposit": _h_dinars_deposit,
     "set_absorption_policy": _h_set_absorption_policy,
 }
