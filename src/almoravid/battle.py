@@ -1831,9 +1831,9 @@ def resolve_relief_sally(
     rule); the Siege-marker reduction to one on Attacker loss is applied
     by the caller / apply_relief_sally_aftermath.
 
-    DOCUMENTED SCOPE: lanes are pooled (consistent with single-Lord
-    Battle resolution), so multi-Lord lanes commit Losses proportionally
-    (4.4.4) rather than per-Lord. Round-level AoW reorders (M6 Feigned
+    Per-Lord lane Losses: each lane tracks per-Lord Forces + Routed
+    units (_init_lane/_push_lane/_lane_step) and commits each Lord
+    EXACTLY (no proportional split). Round-level AoW reorders (M6 Feigned
     Retreat) are not applied within a Relief Sally; the per-step Hills
     (C1/M1) and C8 hooks inside _resolve_step still apply. Excess
     Defenders beyond Front + three Reserve-as-Front do not participate.
