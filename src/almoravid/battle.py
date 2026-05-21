@@ -1960,9 +1960,62 @@ def resolve_relief_sally(
         _push_lane(target, before)
         return step
 
+    def _lane_alive(side_obj) -> int:
+        return sum(1 for lid in side_obj.lord_ids if _lf[id(side_obj)][lid])
+
+    def _advance_reserve(side_obj, cap: int) -> list:
+        """4.4.2 Reposition (relief-sally Defender): bring excess Reserve
+        Defenders into a lane (Front facing Marchers, or Reserve facing
+        Sallyers) up to `cap` engaged Lords, including the forced advance
+        when the lane is fully Routed. Returns advanced lord_ids."""
+        advanced = []
+        while _lane_alive(side_obj) < cap and excess_ids:
+            lid = excess_ids.pop(0)
+            side_obj.lord_ids.append(lid)
+            _lf[id(side_obj)][lid] = dict(state.lords[lid].forces)
+            _lr[id(side_obj)][lid] = {}
+            advanced.append(lid)
+        if advanced:
+            # Re-sync the pooled aggregate to include the advanced Lords.
+            agg: dict = {}
+            for f in _lf[id(side_obj)].values():
+                for ut, n in f.items():
+                    if n > 0:
+                        agg[ut] = agg.get(ut, 0) + n
+            side_obj.forces = agg
+        return advanced
+
     for rnd_i in range(1, max_rounds + 1):
         rnd = BattleRound(index=rnd_i)
-        for step_id, actor_role, step_type, unit_class in _BATTLE_STEPS:
+        # 4.4.2 Reposition (Round 2+): advance excess Reserve Defenders
+        # into emptied Front (Marcher lane) then Reserve-as-Front (Sallyer
+        # lane) positions, up to each lane's capacity.
+        if rnd_i >= 2 and excess_ids:
+            if def_front is not None:
+                _advance_reserve(def_front, n_front)
+            if def_rear is not None and not shared:
+                _advance_reserve(def_rear, min(3, len(defender_ids)))
+        # M6 Feigned Retreat: on Round 2, all Muslim Melee Strikes resolve
+        # before all Christian Melee (regardless of who Attacks). The
+        # Relief Sally Attacker is the active (relieving/sallying) side;
+        # the Defender is the besieger `other`.
+        if (rnd_i == 2
+                and "M6" in state.decks.this_levy_events.get("muslim", [])):
+            m_role: Role = ("attacker" if active_side == "muslim"
+                            else "defender")
+            c_role: Role = ("attacker" if active_side == "christian"
+                            else "defender")
+            steps_this_round = [
+                ("1.a", "defender", "missile", None),
+                ("1.b", "attacker", "missile", None),
+                ("2.a", m_role, "melee", "horse"),
+                ("2.b", m_role, "melee", "foot"),
+                ("2.c", c_role, "melee", "horse"),
+                ("2.d", c_role, "melee", "foot"),
+            ]
+        else:
+            steps_this_round = _BATTLE_STEPS
+        for step_id, actor_role, step_type, unit_class in steps_this_round:
             # Lane M: Marchers <-> Front Defenders (open field).
             if (def_front is not None
                     and (marchers.has_unrouted()
@@ -1989,6 +2042,8 @@ def resolve_relief_sally(
         result.rounds.append(rnd)
         if rnd_i == 1:
             _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        if rnd_i == 2:
+            _discard_round1_events(state, ["M6"])
         if _over():
             break
 
