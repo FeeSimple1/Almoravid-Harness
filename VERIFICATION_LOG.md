@@ -174,22 +174,25 @@ a punch list of residual base-game gaps. Fixes by group:
   (first Levy OR Scenario-F box 9) replaces the bare first_levy_done gate in both the
   handlers (aow_deploy_capability / aow_implement_event) and the legal_moves enumerator.
   Tests: tests/test_winter_sequence_63.py + updated test_fix_l13_aow_draw.py error code.
-- 6.3.2 Winter Siege — STRUCTURE RESOLVED 2026-05-21 (second opinion); implementation is a
-  turn-model rework, scoped separately. The correct faithful structure, per Winter box
-  (7 then 8): (1) walk the Besieging Lords in order, prompting each for ONE Supply or
-  Ravage action, or pass (Forage is NOT offered in Winter Siege); (2) auto-Feed EVERY Lord
-  at a Siege Locale — both sides, including Besieged garrisons inside the Stronghold, not
-  just the besiegers; (3) prompt Christian then Muslim for Pay on Lords at Sieges; (4)
-  auto-Disband any Lord still at/beyond Service limit. The ordering is load-bearing: Supply
-  feeds Provender the mandatory Feed consumes, and Pay can advance Service to dodge the
-  mandatory Disband — so the optional steps MUST be offered before the mandatory ones (it
-  is NOT safe to auto-run only the mandatory core). This requires replacing the ordinary
-  Levy/Campaign cycle at Scenario-F winter boxes 7-8 with an interactive Winter sequence
-  (the engine currently runs boxes 7-8 as normal Levy/Campaign with Winter Disband/Spring
-  Muster bolted on). That box-traversal rework is the single most invasive change in the
-  project and is scoped as a dedicated follow-up to protect the (now 745-test) engine.
-  Until then Lords at Sieges are correctly KEPT (not Disbanded) by Winter Disband so state
-  stays consistent. NO greedy auto-run is performed.
+- 6.3.2 Winter Siege — IMPLEMENTED 2026-05-21 (interactive, Scenario F). On entering box 7
+  (after Winter Disband) the engine starts an interactive Winter sequence that OWNS the
+  flow through boxes 7->8 and ends by entering the box-9 Spring Levy — the ordinary
+  Levy/Campaign cycle no longer runs at winter boxes. Per box: (1) walk the Besieging
+  Lords (a Lord outside a Stronghold where his side has a Siege marker), offering each ONE
+  Supply or Ravage action, or pass (Forage is NOT offered) — winter_siege_action, driven
+  via a saved/restored turn-context (_MetaCtx) that reuses the tested cmd_supply/cmd_ravage
+  handlers; (2) auto-Feed EVERY Lord at a Siege Locale (both sides, incl. Besieged
+  garrisons inside) via _winter_feed -> _feed_all_moved_fought (Sharing + Unfed shift);
+  (3) Christian then Muslim Pay Lords at Sieges (winter_siege_pay, reuses _h_pay_lord),
+  each side ending with done; (4) auto-Disband Lords at Sieges at/beyond Service limit per
+  3.3 (_winter_siege_disband reuses _h_disband_lord). After box 8: Plowing (6.3.4) + Spring
+  Muster (6.3.3), then box-9 Spring Levy (Capabilities, 6.3.5). The load-bearing ordering
+  is honoured (Supply feeds the Provender that Feed consumes; Pay can advance Service to
+  dodge the mandatory Disband) — both proven by tests. A winter box with no Siege Locales
+  resolves fully automatically (no pointless pauses). Pending kind "winter_siege" with a
+  legal_moves short-circuit; handlers registered in CAMPAIGN_HANDLERS. Tests:
+  tests/test_winter_siege_632.py (8: no-siege fast path, besieger->Feed->Pay->box8->box9,
+  Ravage marker, at-limit Disband, Pay-dodges-Disband, legal_moves, end_campaign wiring).
 
 ### Levy Muster / Capabilities (3.4.4, 3.4.1)
 - 3.4.4 This-Lord Capability limits now enforced: a Lord may hold at most TWO This-Lord
