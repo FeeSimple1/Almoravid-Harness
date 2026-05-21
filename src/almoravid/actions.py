@@ -203,6 +203,53 @@ def _record(state: GameState, action: dict[str, Any], summary: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _h_bid_for_sides(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """6.1 Bidding for Sides (optional, setup only). Two players each bid
+    (total pips of dice they hide); the LOWER bid takes the Muslim side
+    and the number of 1VP markers in the Taifas box is reset to equal
+    that bid. Ties reset to that number and assign sides randomly. The
+    lowest allowed bid in Scenario F is 2.
+
+    In this engine the two sides (Christian/Muslim) and their pieces are
+    fixed; bidding's only mechanical effect on game state is resetting
+    the Muslim Taifas-box VP (state.taifas_box_vp). The seat assignment
+    (which player plays Muslim) is reported for the human players.
+
+    Action args: bid1 (int>=0), bid2 (int>=0).
+    """
+    from almoravid.rng import roll_d6
+    _require(state.meta.phase == "setup",
+             "Bidding for Sides is a setup-time option (6.1)",
+             code="wrong_phase")
+    _require(not state.meta.bidding_done,
+             "Bidding has already been done (6.1)", code="already_bid")
+    b1 = action.get("bid1")
+    b2 = action.get("bid2")
+    _require(isinstance(b1, int) and isinstance(b2, int)
+             and b1 >= 0 and b2 >= 0,
+             "bid1 and bid2 must be non-negative ints", code="bad_arg")
+    min_bid = 2 if state.meta.scenario_letter == "F" else 0
+    _require(b1 >= min_bid and b2 >= min_bid,
+             f"Scenario {state.meta.scenario_letter}: minimum bid is "
+             f"{min_bid} (6.1)", code="bid_too_low")
+    tie = (b1 == b2)
+    if b1 < b2:
+        muslim_player, winning = "player1", b1
+    elif b2 < b1:
+        muslim_player, winning = "player2", b2
+    else:
+        muslim_player = "player1" if roll_d6(state) <= 3 else "player2"
+        winning = b1
+    state.taifas_box_vp = float(winning)
+    state.meta.bidding_done = True
+    _record(state, action,
+            f"Bidding (6.1): bids {b1}/{b2}; {muslim_player} plays Muslim; "
+            f"Taifas-box VP reset to {winning}"
+            + (" (tie, random sides)" if tie else ""))
+    return {"muslim_player": muslim_player, "winning_bid": winning,
+            "taifas_box_vp": state.taifas_box_vp, "tie": tie}
+
+
 def _h_begin_levy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Transition from setup (or campaign) into the Levy phase (SoP §3).
 
@@ -1746,6 +1793,7 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
 
 _HANDLERS = {
     "begin_levy": _h_begin_levy,
+    "bid_for_sides": _h_bid_for_sides,
     "pass_step": _h_pass_step,
     "aow_shuffle": _h_aow_shuffle,
     "aow_draw": _h_aow_draw,

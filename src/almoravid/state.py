@@ -128,6 +128,14 @@ class Meta(StrictModel):
     # Mustered Vassals get their own Calendar Service markers and Lord
     # Service shifts cascade to them.
     advanced_vassal_service: bool = False
+    # Optional Hidden Mats fog-of-war (1.5.2). When True, redacted_view()
+    # hides a side's Lord Forces/Assets/This-Lord Capabilities from the
+    # opponent (except Lords engaged in Battle/Storm). Rules/legal moves
+    # are unaffected — this only governs what an opponent's view exposes.
+    hidden_mats: bool = False
+    # 6.1 Bidding for Sides is a one-time setup option; once used it is
+    # no longer offered (prevents re-bidding / setup loops).
+    bidding_done: bool = False
     # FIX-A (Call to Arms, 3.5): per-Levy bookkeeping for the
     # call_to_arms step. Each side may take at most ONE Call-to-Arms
     # option ("do nothing OR one of the following", 3.5.1-.2); these
