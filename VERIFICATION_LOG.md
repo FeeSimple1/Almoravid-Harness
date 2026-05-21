@@ -130,3 +130,28 @@ a punch list of residual base-game gaps. Fixes by group:
   correct). The tally was being credited at Ravage placement (4.7.2) but NOT debited at
   Grow removal (4.9.2 "adjust VP") nor moved at the adjust_taifa_status Allegiance flip
   (1.4.3). Both now keep the tally honest. Tests: tests/test_ravage_flip_and_grow_vp.py.
+
+### Siege / Battle / March (4.5.1, 4.3.4, 4.3.6)
+- 4.5.1 MOVED/FOUGHT: the Siege command now marks ALL Lords of both sides at the
+  Locale as Fought ("Finally, mark all Lords of both sides there as Fought"; SoP
+  siege.moved_fought_marks). Previously a Siege left no Moved/Fought marker, so Lords
+  escaped the end-of-card Feed (4.8.1). Tests: tests/test_moved_fought_siege_avoid.py.
+- 4.3.4 Avoid Battle now marks avoiding Lords Moved/Fought ("Mark Avoiding Lords as
+  Moved/Fought"; 4.8.1 lists Avoid Battle). The prior code explicitly did NOT mark them
+  (citing the withdraw definition) — but only Withdrawal alone is exempt (4.3.4 WITHDRAW).
+  Tests: tests/test_moved_fought_siege_avoid.py.
+- 4.3.4 Avoiding into an Unbesieged Enemy Stronghold's Locale now marks that side
+  Bypassing it ("Mark Lords Avoiding Battle to an Unbesieged Enemy Stronghold as
+  Bypassing it (4.3.5)") — a per-Locale Bypass marker of the avoider's color. Tests:
+  tests/test_moved_fought_siege_avoid.py.
+- 4.3.6 SORTIE implemented (new cmd_sortie): a Lord (or Marshal/Lieutenant-led group,
+  4.3.1) inside a Bypassed Friendly Stronghold uses 1 March action (ignore Laden) to
+  Approach the Bypassing Enemy in the same Locale. Builds the march_arrival_response
+  pending directly (Sortie is the one Approach that targets a *Bypassed* Enemy, which
+  4.3.4's normal trigger skips); the Enemy may Avoid/Withdraw/Stand; loss → normal
+  Withdraw/Retreat aftermath. Enumerated in legal_moves (Encamp was also un-enumerated
+  and is now offered too). Tests: tests/test_sortie_436.py.
+- 4.3.5/4.3.6 DEPART: marching the last besieging/bypassing Lord out of a Stronghold's
+  Locale now removes that side's Siege/Bypass markers there (new
+  _remove_orphaned_siege_bypass; "becomes free of Enemy Lords ... remove markers").
+  Tests: tests/test_depart_marker_cleanup.py.

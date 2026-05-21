@@ -693,6 +693,37 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         if besiegers:
                             out.append({"type": "cmd_sally",
                                         "side": active})
+                    # Encamp (4.3.6): a Bypassing Lord (our Bypass marker
+                    # here) may replace it with 1 Siege marker.
+                    if (lord.cylinder.kind == "locale"
+                            and state.meta.actions_remaining >= 1):
+                        here = lord.cylinder.locale_id
+                        loc = state.locales[here]
+                        our_bypass = (loc.bypass_yellow if active == "christian"
+                                      else loc.bypass_green)
+                        if our_bypass:
+                            out.append({"type": "cmd_encamp", "side": active})
+                    # Sortie (4.3.6): a Lord inside a Friendly Stronghold
+                    # that the Enemy is Bypassing may Approach the
+                    # Bypassing Enemy.
+                    if (lord.cylinder.kind == "locale"
+                            and lord.in_stronghold
+                            and state.meta.actions_remaining >= 1):
+                        here = lord.cylinder.locale_id
+                        loc = state.locales[here]
+                        enemy_bypass = (loc.bypass_green if active == "christian"
+                                        else loc.bypass_yellow)
+                        if (loc.base_type != "region" and enemy_bypass
+                                and is_friendly_locale(state, here, active)):
+                            enemy_out = any(
+                                l for l in state.lords.values()
+                                if l.side != active
+                                and l.cylinder.kind == "locale"
+                                and l.cylinder.locale_id == here
+                                and not l.in_stronghold)
+                            if enemy_out:
+                                out.append({"type": "cmd_sortie",
+                                            "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
             out.append({"type": "end_card", "side": active})

@@ -1612,6 +1612,10 @@ def _h_cmd_march(state, action):
         m.moved_fought = True
     lord.first_march_used_this_card = True  # Pattern 3 per-card flag
     state.meta.actions_remaining -= cost
+    # 4.3.5/4.3.6 DEPART: if the group's departure leaves the origin
+    # Stronghold free of this side's Lords, remove our Siege/Bypass
+    # markers there ("becomes free of Enemy Lords ... remove markers").
+    _remove_orphaned_siege_bypass(state, from_loc)
     _record(state, action,
             f"{side} {lord_id} marches {from_loc} -> {target} via {way_type}"
             f" ({'Laden, 2 actions' if laden else '1 action'})")
@@ -2361,6 +2365,18 @@ def _h_cmd_siege(state, action):
             setattr(loc, marker_field, current + 1)
             placed = 1
 
+    # 4.5.1 MOVED/FOUGHT: "Finally, mark all Lords of both sides there
+    # as Fought." This holds whether the Stronghold Surrendered, gained
+    # Siegeworks, or neither — every Lord (both sides) at the Locale is
+    # marked, so they must Feed at end of card (4.8.1) and cannot escape
+    # the Feed by Besieging. Besieged Lords inside count as "there".
+    fought_marked = []
+    for other in state.lords.values():
+        if other.cylinder.kind == "locale" and other.cylinder.locale_id == here:
+            if not other.moved_fought:
+                other.moved_fought = True
+                fought_marked.append(other.id)
+
     # End-of-card: consume all remaining actions (SoP end_card_action).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -2375,6 +2391,7 @@ def _h_cmd_siege(state, action):
     return {"locale": here, "color": color, "placed": placed,
             "total_markers": getattr(loc, marker_field),
             "siegeworks": siegeworks, "surrender": surrender_result,
+            "fought_marked": fought_marked,
             "actions_consumed": consumed}
 
 
@@ -2779,6 +2796,34 @@ def _h_cmd_sally(state, action):
 # ---------------------------------------------------------------------------
 
 
+def _remove_orphaned_siege_bypass(state, locale_id: str) -> dict:
+    """4.3.5/4.3.6 DEPART: when a Besieged or Bypassed Stronghold
+    becomes free of the besieging side's (Enemy) Lords in the Locale,
+    remove that side's Siege and Bypass markers there. Markers are
+    color-coded, so a side's markers clear once that side has no Lord
+    present at the Locale. Called after any departure (e.g. March)."""
+    loc = state.locales.get(locale_id)
+    out: dict = {"removed": []}
+    if loc is None or loc.base_type == "region":
+        return out
+    for color, sd in (("yellow", "christian"), ("green", "muslim")):
+        present = any(
+            l for l in state.lords.values()
+            if l.side == sd and l.cylinder.kind == "locale"
+            and l.cylinder.locale_id == locale_id)
+        if present:
+            continue
+        sfield = "siege_yellow" if color == "yellow" else "siege_green"
+        bfield = "bypass_yellow" if color == "yellow" else "bypass_green"
+        if getattr(loc, sfield) or getattr(loc, bfield):
+            out["removed"].append(
+                {"side": sd, "siege": getattr(loc, sfield),
+                 "bypass": getattr(loc, bfield)})
+            setattr(loc, sfield, 0)
+            setattr(loc, bfield, False)
+    return out
+
+
 def _check_approach_trigger(
     state, locale_id: str, active_side: Side,
     from_locale_id: str, way_type: str, active_lord_id: str,
@@ -2984,13 +3029,33 @@ def _h_respond_avoid_battle(state, action):
     if spoils and attackers:
         from almoravid.battle import distribute_spoils_round_robin
         spoils_dist = distribute_spoils_round_robin(state, attackers, spoils)
-    # Move the avoiding subset. Avoid Battle does NOT mark moved_fought
-    # (SoP withdraw_definition / 4.3.4 — avoidance is reactive).
+    # Move the avoiding subset. Avoid Battle DOES mark Moved/Fought
+    # (4.3.4 "Mark Avoiding Lords as Moved/Fought"; 4.8.1 lists Avoid
+    # Battle among the Moved/Fought triggers). Only Withdrawal alone is
+    # exempt (4.3.4 WITHDRAW).
     for lid in avoiding:
         if lid in state.lords:
             l = state.lords[lid]
             l.cylinder = Cylinder(kind="locale", locale_id=target)
             l.in_stronghold = False
+            l.moved_fought = True
+    # 4.3.4: "Mark Lords Avoiding Battle to an Unbesieged Enemy
+    # Stronghold as Bypassing it (4.3.5)." If the destination holds an
+    # Enemy Stronghold to the avoiding (inactive) side that is not
+    # already Besieged/Bypassed, place a Bypass marker of that side's
+    # color (per-Locale, like _h_respond_bypass). Lords arriving at an
+    # already-Bypassed/Besieged Stronghold simply join it.
+    from almoravid.effective import is_friendly_locale as _is_friendly
+    dest = state.locales.get(target)
+    bypass_marked = None
+    if (avoiding and dest is not None and dest.base_type != "region"
+            and not _is_friendly(state, target, side)):
+        if side == "christian" and not dest.bypass_yellow and dest.siege_yellow == 0:
+            dest.bypass_yellow = True
+            bypass_marked = "bypass_yellow"
+        elif side == "muslim" and not dest.bypass_green and dest.siege_green == 0:
+            dest.bypass_green = True
+            bypass_marked = "bypass_green"
     # C2: remove the avoiding subset from the still-pending defenders.
     payload["defender_lord_ids"] = [
         d for d in payload["defender_lord_ids"] if d not in avoiding]
@@ -3794,6 +3859,104 @@ def _h_cmd_encamp(state, action):
     return {"locale": here, "encamped": True, "actions_consumed": consumed}
 
 
+def _h_cmd_sortie(state, action):
+    """4.3.6 SORTIE: a Lord (or a Marshal/Lieutenant-led group, 4.3.1)
+    inside a Bypassed FRIENDLY Stronghold uses one March action
+    (regardless of Laden status, 4.3.2) to Approach (4.3.4) the
+    Bypassing Enemy in the same Locale instead of moving adjacent.
+
+    The Sortieing Lords come out of the Stronghold and become the
+    Active Attacker; the Bypassing Enemy may then Avoid / Withdraw /
+    Stand (handled by the standard march_arrival_response machinery).
+    This is the one case where an Approach targets a *Bypassed* Enemy
+    (4.3.4 normally skips Besieged/Bypassed Lords), so the pending is
+    built directly here. If they lose the Battle they Withdraw or
+    Retreat normally (4.3.4/4.4.3 aftermath). Sortieing Lords are
+    marked Moved (4.3.6 "mark Marching Lords as Moved")."""
+    from almoravid.effective import is_friendly_locale
+    from almoravid.state import PendingDecision
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    lord_id = state.meta.active_lord_id
+    _require(lord_id is not None, "no active Lord", code="no_active_lord")
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(lord.cylinder.kind == "locale", f"{lord_id} not at a Locale",
+             code="not_on_map")
+    here = lord.cylinder.locale_id
+    loc = state.locales[here]
+    _require(loc.base_type != "region",
+             f"Sortie requires a Stronghold; {here} is a Region",
+             code="region_no_stronghold")
+    _require(lord.in_stronghold,
+             f"Sortie requires {lord_id} inside the Stronghold (4.3.6)",
+             code="not_in_stronghold")
+    _require(is_friendly_locale(state, here, side),
+             "Sortie only from a Friendly Stronghold (4.3.6)",
+             code="not_friendly")
+    other = _other(side)
+    enemy_bypass = loc.bypass_green if side == "christian" else loc.bypass_yellow
+    _require(enemy_bypass,
+             f"{here} is not Bypassed by the Enemy (4.3.6)",
+             code="not_bypassed")
+    bypassing_enemy = [
+        l.id for l in state.lords.values()
+        if l.side == other and l.cylinder.kind == "locale"
+        and l.cylinder.locale_id == here and not l.in_stronghold]
+    _require(bypassing_enemy,
+             "no Bypassing Enemy Lord to Sortie against (4.3.6)",
+             code="no_enemy")
+    _require(state.meta.actions_remaining >= 1,
+             "Sortie costs 1 March action (4.3.6)", code="not_enough_actions")
+
+    # Group Sortie: only a Marshal or a Lieutenant may take a group
+    # (4.3.1). Members must be same-side, inside this Stronghold.
+    sortie_ids = [lord_id]
+    group_req = list(action.get("group_lord_ids", []) or [])
+    if group_req:
+        _require(_is_marshal(lord_id, side) or lord.is_lieutenant,
+                 "only a Marshal or Lieutenant may Sortie a group (4.3.1)",
+                 code="not_group_leader")
+        for gid in group_req:
+            _require(gid in state.lords and gid != lord_id,
+                     f"bad group member {gid!r}", code="bad_group")
+            g = state.lords[gid]
+            _require(g.side == side and g.cylinder.kind == "locale"
+                     and g.cylinder.locale_id == here and g.in_stronghold,
+                     f"{gid} is not inside {here} with the leader (4.3.6)",
+                     code="bad_group")
+            sortie_ids.append(gid)
+
+    # Come out of the Stronghold and mark Moved (4.3.6).
+    for sid in sortie_ids:
+        state.lords[sid].in_stronghold = False
+        state.lords[sid].moved_fought = True
+    state.meta.actions_remaining -= 1
+
+    # Approach the Bypassing Enemy in-place (no incoming Way, so Avoid
+    # is unrestricted by the approach Way; from_locale_id = None).
+    payload = {
+        "locale_id": here,
+        "from_locale_id": None,
+        "via_way_type": None,
+        "active_lord_id": lord_id,
+        "active_side": side,
+        "defender_lord_ids": bypassing_enemy,
+        "sortie": True,
+    }
+    state.pending = PendingDecision(
+        kind="march_arrival_response", waiting_on=other, payload=payload)
+    state.meta.active_player = other
+    _record(state, action,
+            f"{side} {lord_id} Sorties from {here} (4.3.6) vs Bypassing "
+            f"Enemy {bypassing_enemy}; awaiting their Approach response")
+    return {"sortie": here, "sortie_lords": sortie_ids,
+            "defenders": bypassing_enemy,
+            "actions_remaining": state.meta.actions_remaining}
+
+
 def _h_dinars_deposit(state, action):
     """4.1.4 Dinars: an Unbesieged Taifa Lord (not Yusuf/Sir/Rodrigo)
     deposits any Coin from his mat into the Taifas box (Plan step)."""
@@ -4031,6 +4194,7 @@ CAMPAIGN_HANDLERS = {
     "designate_lieutenant": _h_designate_lieutenant,
     "toggle_lieutenant": _h_toggle_lieutenant,
     "cmd_encamp": _h_cmd_encamp,
+    "cmd_sortie": _h_cmd_sortie,
     "dinars_deposit": _h_dinars_deposit,
     "set_absorption_policy": _h_set_absorption_policy,
 }
