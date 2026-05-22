@@ -498,11 +498,18 @@ def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, 
         return {"no_op": True, "reason": "no service marker (already off-Calendar)"}
     if sm.box > state.calendar.current_box:
         return {"no_op": True, "reason": "not at service limit"}
+    # Locale being vacated — for the 4.3.5 Siege/Bypass-marker cleanup.
+    left_locale = (lord.cylinder.locale_id
+                   if lord.cylinder.kind == "locale" else None)
     new_box = _compute_disband_target_box(state, lord)
     if new_box > 16:
         new_box = 17
         state.calendar.off_right.append(lord_id)
     lord.cylinder = Cylinder(kind="calendar", box=new_box)
+    # 4.3.5 / playtest F7: a Stronghold free of the besieging side's
+    # Lords loses that side's Siege/Bypass markers.
+    if left_locale is not None:
+        _remove_orphaned_siege_bypass(state, left_locale)
     # Pattern 8: cleanup
     lord.forces = {}
     lord.assets = {}
@@ -2446,7 +2453,7 @@ def _h_cmd_ravage(state, action):
     state.meta.actions_remaining -= 1
     _record(state, action,
             f"{side} {lord_id} Ravages {here}: {rustling_note}, "
-            f"+0.5 VP{', Enforcing Parias triggered (Service shift TODO)' if enforcing_parias else ''}")
+            f"+0.5 VP{', Enforcing Parias triggered (Taifa Lord Service shifted left 1)' if enforcing_parias else ''}")
     return {"locale": here, "color": color, "rustling": rustling_note,
             "enforcing_parias": enforcing_parias,
             "actions_remaining": state.meta.actions_remaining}

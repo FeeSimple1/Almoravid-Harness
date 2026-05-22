@@ -98,12 +98,22 @@ def render_summary(state: GameState) -> str:
     season = state.calendar.boxes[box - 1].season
     turn_type = state.calendar.boxes[box - 1].turn_type
     year = _year_for_box(box)
+    # Playtest F6: the running state.score tracker can lag the board
+    # (it doesn't reflect Taifa-status VP, the Taifas box, etc.). Show
+    # the AUTHORITATIVE board VP (recomputed via compute_final_vp, the
+    # same function the final verdict uses) as the primary figure.
+    try:
+        from almoravid.campaign import compute_final_vp
+        _cvp, _mvp = compute_final_vp(state)
+        _vp = f"VP (board): C {_cvp:g} / M {_mvp:g}"
+    except Exception:
+        _vp = f"VP: C {state.score.christian:g} / M {state.score.muslim:g}"
     header = (
         f"=== Almoravid — Scenario {state.meta.scenario_letter} "
         f"({state.meta.scenario_id}) ===\n"
         f"Box {box} ({_SEASON_SHORT[season]} {year} {turn_type})  |  "
         f"Active: {state.meta.active_player}  |  "
-        f"VP: C {state.score.christian} / M {state.score.muslim}"
+        f"{_vp}"
     )
 
     lines = [header, ""]
