@@ -70,7 +70,7 @@
       "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Hueste",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "C9": {
@@ -123,9 +123,9 @@
       "event_name": "Pope Gregory",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Cabalgadas",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "C15": {
       "side": "christian",
@@ -150,9 +150,9 @@
       "event_name": "Genoa & Pisa send fleets",
       "event_persistence": "immediate",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Cabalgadas",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "C18": {
       "side": "christian",
@@ -313,7 +313,7 @@
       "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Emir al-Muslimin",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "M10": {
