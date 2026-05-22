@@ -186,7 +186,13 @@ def test_m11_bonus_when_yusuf_in_kingdom_locale() -> None:
         next(iter(s.taifas.values())).status = "parias"
         target_taifa = next(t for t in s.taifas.values()
                             if t.status == "parias")
-    r = resolve_event(s, "muslim", "M11")
+    # M11 is HOLD: drawing it holds the card; the bonus applies when
+    # PLAYED with Yusuf/Sir in a Kingdom/Reconquista/Parias.
+    resolve_event(s, "muslim", "M11")
+    assert "M11" in s.decks.this_levy_events.get("muslim", [])
+    s.meta.phase = "campaign"
+    s.meta.active_player = "muslim"
+    r = apply_action(s, {"type": "play_al_qadir", "side": "muslim"})
     assert r["jihad_added"] in (1, 3)
 
 
@@ -199,7 +205,10 @@ def test_m11_base_one_jihad_when_no_yusuf_eligible() -> None:
     for lid in ("yusuf", "sir"):
         if lid in s.lords:
             s.lords[lid].cylinder = Cylinder(kind="calendar")
-    r = resolve_event(s, "muslim", "M11")
+    resolve_event(s, "muslim", "M11")   # held
+    s.meta.phase = "campaign"
+    s.meta.active_player = "muslim"
+    r = apply_action(s, {"type": "play_al_qadir", "side": "muslim"})
     assert r["jihad_added"] == 1
     assert r["bonus"] is False
 

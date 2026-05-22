@@ -105,6 +105,15 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "winter_siege_pay", "side": side, "done": True})
         return moves
 
+    # M11 "Al-Qadir balks at payment" is a discretionary HOLD event: the
+    # Muslim may play it (to add Jihad) at any of his decision points
+    # once held (3.1.3 / 1.4.4). Offered in Levy or Campaign on Muslim's
+    # turn; carried through since the phase branches extend this list.
+    if (state.meta.active_player == "muslim"
+            and state.meta.phase in ("levy", "campaign")
+            and "M11" in state.decks.this_levy_events.get("muslim", [])):
+        moves.append({"type": "play_al_qadir", "side": "muslim"})
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.
