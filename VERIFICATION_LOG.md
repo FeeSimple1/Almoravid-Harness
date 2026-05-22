@@ -297,3 +297,34 @@ invariants after EVERY action) surfaced three issues, now fixed:
   (no negative counters, siege<=4, never both Conquered+Jihad, service box 0..17, pending/
   active sync, legal_moves->apply_action total). After fixes the full 260-session deep run
   reports NO PROBLEMS.
+
+## Independent LLM playtest — Scenario A (2026-05-22), 8 findings fixed
+A separate Cowork chat played a full Scenario A game with the rulebook open and filed 8
+findings (F1-F8). All verified against the rules and fixed (one was a misread):
+- F8 (CRITICAL, fixed): Taifas-box green 1VP Conquered markers were never loaded into
+  state.taifas_box_vp, so compute_final_vp dropped them (4 Muslim VP in Scenario A) and
+  reported the WRONG WINNER. scenarios.py now seeds taifas_box_vp from the JSON. Tests:
+  test_taifas_box_vp_loaded_f8.py.
+- F4 (systemic, fixed): printed home-Seat pennants were loaded into seat_marker_lord_ids
+  and conferred Friendliness via is_friendly_locale. Per 1.3.1 only PLACED Seat markers
+  (Rodrigo/Yusuf-Sir/Cathedrals) confer Friendliness; printed Seats do not. Split into a
+  new Locale.printed_seat_lord_ids; seat_marker_lord_ids now holds only placed markers
+  (Yusuf/Sir double-Seat placed at Algeciras only when mustered; set-aside Lords get none).
+  Fixed wrongly-Muslim-Friendly Parias capitals (Lerida/Badajoz/Granada). Tests:
+  test_printed_seats_vs_markers_f4.py.
+- F5 (fixed + one misread): M11 Al-Qadir is a HOLD event — now held on draw (not auto-
+  fired) with a discretionary play_al_qadir handler (base +1 Jihad, +3 with the Yusuf/Sir
+  bonus); re-tagged M11/M13 event_persistence=hold. The "base path needs an eligible Lord"
+  claim was a MISREAD: the base +1 is unconditional; "Lords. Yusuf or Sir" governs the
+  Capability half (Hasham). Tests: test_m11_hold_f5.py.
+- F1/F2 (fixed, data): C14 & C17 now carry the Cabalgadas this_lord capability (were
+  no_capability); C8 Hueste and M9 Emir al-Muslimin re-scoped side_wide -> this_lord.
+  (Their special EFFECTS remain unwired — a separate known capability-effects gap.) Tests:
+  test_capability_data_f1f2.py.
+- F7 (fixed): orphaned Siege/Bypass markers are now removed when the sole besieging Lord
+  leaves via Disband (to Calendar / permanent removal), not just via March (4.3.5). Tests:
+  test_siege_cleanup_on_disband_f7.py.
+- F3 (fixed, cosmetic): the Enforcing-Parias log no longer says "(Service shift TODO)" —
+  the shift is and was applied.
+- F6 (fixed, display): render now shows the AUTHORITATIVE board VP (compute_final_vp), not
+  the lagging running state.score tracker, so mid-game VP is accurate.
