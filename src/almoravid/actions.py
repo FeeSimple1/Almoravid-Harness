@@ -1630,6 +1630,9 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.is_lieutenant = False
     lord.lieutenant_of = None
 
+    # Locale being vacated, for the 4.3.5 Siege/Bypass-marker cleanup.
+    left_locale = (lord.cylinder.locale_id
+                   if lord.cylinder.kind == "locale" else None)
     if beyond:
         # 3.3.1 permanent removal.
         lord.cylinder = Cylinder(kind="removed")
@@ -1644,6 +1647,12 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         lord.cylinder = Cylinder(kind="calendar", box=new_box)
         outcome = f"to Calendar box {new_box} (3.3.2 At Limit)"
         result_box = new_box
+
+    # 4.3.5 / playtest F7: a Stronghold left free of the besieging side's
+    # Lords loses that side's Siege/Bypass markers.
+    if left_locale is not None:
+        from almoravid.campaign import _remove_orphaned_siege_bypass
+        _remove_orphaned_siege_bypass(state, left_locale)
 
     _record(state, action, f"{side} {lord_id} Disbands -> {outcome}")
     return {"lord_id": lord_id, "permanent": beyond,

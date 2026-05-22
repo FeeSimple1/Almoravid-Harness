@@ -431,6 +431,13 @@
           "title": "Seat Marker Lord Ids",
           "type": "array"
         },
+        "printed_seat_lord_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Printed Seat Lord Ids",
+          "type": "array"
+        },
         "siege_yellow": {
           "default": 0,
           "title": "Siege Yellow",

@@ -171,7 +171,10 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             has_gardens=loc["gardens"],
             has_port=loc["port"],
             is_reconquista_target=loc["reconquista_target"],
-            seat_marker_lord_ids=list(loc["printed_seats"]),
+            # Printed pennants -> printed_seat_lord_ids (no Friendliness,
+            # 1.3.1). seat_marker_lord_ids holds only PLACED markers, set
+            # below for special Lords actually on the map (playtest F4).
+            printed_seat_lord_ids=list(loc["printed_seats"]),
         )
     # Apply per-locale scenario markers
     for entry in raw.get("locale_markers", []):
@@ -307,9 +310,31 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
         board_edge=board_edge,
     )
 
+    # Place the Almoravid double-Seat MARKER (Yusuf/Sir, 1.8/3.5) at its
+    # printed Seat (Algeciras) only if Yusuf or Sir is Mustered on the
+    # map at setup. Set-aside Lords have NO Seat marker (playtest F4).
+    # Other placed Seat markers (Rodrigo, Cathedrals) arrive via play or
+    # explicit scenario `seat_marker_lord_ids` entries.
+    for _sp in ("yusuf", "sir"):
+        _spl = lords_state.get(_sp)
+        if _spl is not None and _spl.cylinder.kind == "locale":
+            for _lid, _loc in locales_state.items():
+                if _sp in _loc.printed_seat_lord_ids:
+                    if _sp not in _loc.seat_marker_lord_ids:
+                        _loc.seat_marker_lord_ids.append(_sp)
+
     # ---- Score ----------------------------------------------------
     sv = raw["starting_vp"]
     score = Score(christian=float(sv["christian"]), muslim=float(sv["muslim"]))
+
+    # Taifas box: green 1VP Conquered markers count for the Muslims at
+    # scoring (rules 1.4.2 / 5.1). compute_final_vp() sums taifas_box_vp,
+    # so it MUST be seeded from setup or those Muslim VP are dropped at
+    # the final tally (playtest F8). starting_vp feeds only the running
+    # display Score; the authoritative compute_final_vp recomputes from
+    # board markers + taifas_box_vp, so this is not double-counted.
+    tb = raw.get("taifas_box", {}) or {}
+    taifas_box_vp = float(tb.get("conquered_green_1vp", 0))
 
     state = GameState(
         meta=meta,
@@ -325,5 +350,6 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             summary=f"Loaded scenario {raw['scenario_letter']}: {raw['name']}",
         )],
         score=score,
+        taifas_box_vp=taifas_box_vp,
     )
     return state

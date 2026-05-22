@@ -498,11 +498,18 @@ def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, 
         return {"no_op": True, "reason": "no service marker (already off-Calendar)"}
     if sm.box > state.calendar.current_box:
         return {"no_op": True, "reason": "not at service limit"}
+    # Locale being vacated — for the 4.3.5 Siege/Bypass-marker cleanup.
+    left_locale = (lord.cylinder.locale_id
+                   if lord.cylinder.kind == "locale" else None)
     new_box = _compute_disband_target_box(state, lord)
     if new_box > 16:
         new_box = 17
         state.calendar.off_right.append(lord_id)
     lord.cylinder = Cylinder(kind="calendar", box=new_box)
+    # 4.3.5 / playtest F7: a Stronghold free of the besieging side's
+    # Lords loses that side's Siege/Bypass markers.
+    if left_locale is not None:
+        _remove_orphaned_siege_bypass(state, left_locale)
     # Pattern 8: cleanup
     lord.forces = {}
     lord.assets = {}
@@ -2446,7 +2453,7 @@ def _h_cmd_ravage(state, action):
     state.meta.actions_remaining -= 1
     _record(state, action,
             f"{side} {lord_id} Ravages {here}: {rustling_note}, "
-            f"+0.5 VP{', Enforcing Parias triggered (Service shift TODO)' if enforcing_parias else ''}")
+            f"+0.5 VP{', Enforcing Parias triggered (Taifa Lord Service shifted left 1)' if enforcing_parias else ''}")
     return {"locale": here, "color": color, "rustling": rustling_note,
             "enforcing_parias": enforcing_parias,
             "actions_remaining": state.meta.actions_remaining}
@@ -3767,6 +3774,41 @@ def _h_play_pope_gregory(state, action):
     return result
 
 
+def _h_play_al_qadir(state, action):
+    """Play held M11 "Al-Qadir balks at payment" (Hold, Muslim) to add
+    Jihad per 1.4.4: base 1, or 3 if the Yusuf/Sir bonus is active
+    (_m11_jihad_bonus_active). Optional payload jihad_targets choose the
+    eligible Locale(s); base_only=True forces the +1 option even when the
+    +3 bonus is available (the card's "OR" — player's choice)."""
+    from almoravid.events import _add_jihad, _m11_jihad_bonus_active
+    side = _require_side(action)
+    _require(side == "muslim", "M11 is a Muslim event", code="wrong_side")
+    _require("M11" in state.decks.this_levy_events.get("muslim", []),
+             "M11 not held", code="card_not_held")
+    # The card's "Lords. Yusuf or Sir" line restricts the EVENT: M11 can
+    # only be played with Yusuf or Sir on the map. (Resolved ambiguity /
+    # Q-candidate: the conservative reading — it prevents fabricating
+    # Jihad VP when neither Almoravid leader is in play, e.g. Scenario A.)
+    _require(any(state.lords.get(x) is not None
+                 and state.lords[x].cylinder.kind == "locale"
+                 for x in ("yusuf", "sir")),
+             "M11 requires Yusuf or Sir on the map to play (Lords line)",
+             code="no_eligible_lord")
+    bonus = _m11_jihad_bonus_active(state)
+    add = 3 if (bonus and not action.get("base_only")) else 1
+    placement = _add_jihad(state, add, action.get("payload") or
+                           {"jihad_targets": action.get("jihad_targets")})
+    if placement is None:
+        return {"no_op": True, "reason": "no eligible Jihad locale"}
+    state.decks.this_levy_events["muslim"].remove("M11")
+    state.decks.discard.append("M11")
+    _record(state, action,
+            f"Muslim plays M11 Al-Qadir: +{add} Jihad "
+            f"(bonus {'active' if bonus else 'inactive'}) -> {placement}")
+    return {"card_id": "M11", "side": side, "jihad_added": add,
+            "bonus": bonus, "placement": placement}
+
+
 def _h_play_cluniacs(state, action):
     """C15 (Hold) Cluniacs: Play on a Lord to Muster from Calendar,
     OR shift Service +1 right, OR Lordship +2.
@@ -4538,6 +4580,7 @@ CAMPAIGN_HANDLERS = {
     "respond_bypass": _h_respond_bypass,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
+    "play_al_qadir": _h_play_al_qadir,
     "play_de_vivar_reconcile": _h_play_de_vivar_reconcile,
     "cmd_march_port_to_port": _h_cmd_march_port_to_port,
     "designate_lieutenant": _h_designate_lieutenant,

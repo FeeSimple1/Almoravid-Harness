@@ -85,7 +85,7 @@ def _locale_markers_short(loc: Locale) -> str:
     if loc.bypass_green:
         parts.append("Bypass-G")
     if loc.seat_marker_lord_ids:
-        parts.append(f"Seats({','.join(loc.seat_marker_lord_ids)})")
+        parts.append(f"SeatMarkers({','.join(loc.seat_marker_lord_ids)})")
     return " ".join(parts)
 
 
@@ -98,12 +98,22 @@ def render_summary(state: GameState) -> str:
     season = state.calendar.boxes[box - 1].season
     turn_type = state.calendar.boxes[box - 1].turn_type
     year = _year_for_box(box)
+    # Playtest F6: the running state.score tracker can lag the board
+    # (it doesn't reflect Taifa-status VP, the Taifas box, etc.). Show
+    # the AUTHORITATIVE board VP (recomputed via compute_final_vp, the
+    # same function the final verdict uses) as the primary figure.
+    try:
+        from almoravid.campaign import compute_final_vp
+        _cvp, _mvp = compute_final_vp(state)
+        _vp = f"VP (board): C {_cvp:g} / M {_mvp:g}"
+    except Exception:
+        _vp = f"VP: C {state.score.christian:g} / M {state.score.muslim:g}"
     header = (
         f"=== Almoravid — Scenario {state.meta.scenario_letter} "
         f"({state.meta.scenario_id}) ===\n"
         f"Box {box} ({_SEASON_SHORT[season]} {year} {turn_type})  |  "
         f"Active: {state.meta.active_player}  |  "
-        f"VP: C {state.score.christian} / M {state.score.muslim}"
+        f"{_vp}"
     )
 
     lines = [header, ""]
@@ -328,7 +338,8 @@ def _render_focus_locale(state: GameState, loc_id: str) -> str:
         f"Base type: {loc.base_type}"
         + (f" (Cap {state.locales[loc_id]})" if False else ""),
         f"Gardens: {loc.has_gardens}  |  Port: {loc.has_port}  |  Reconquista target: {loc.is_reconquista_target}",
-        f"Printed seats: {', '.join(loc.seat_marker_lord_ids) or '—'}",
+        f"Printed seats: {', '.join(loc.printed_seat_lord_ids) or '—'}  |  "
+        f"Seat markers: {', '.join(loc.seat_marker_lord_ids) or '—'}",
     ]
     markers = _locale_markers_short(loc)
     if markers:

@@ -143,6 +143,7 @@ def test_c25_taifas_box_vp_counts_for_muslim() -> None:
         loc.ravaged = "none"
     for t in s.taifas.values():
         t.status = "independent"
+    s.taifas_box_vp = 0.0  # isolate the +1 banked by De Vivar Reconciliation
     apply_action(s, {"type": "play_de_vivar_reconcile", "side": "christian"})
     assert s.taifas_box_vp == 1.0
     cvp, mvp = compute_final_vp(s)

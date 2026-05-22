@@ -917,12 +917,9 @@ def _m8_ahmad_ibn_rumayla(state, side, card_id, payload):
             "jihad_added": 2, "placement": placement}
 
 
-@register("M11")  # Al-Qadir balks at payment
-def _m11_al_qadir(state, side, card_id, payload):
-    """M11 (Hold): Add 1 Jihad OR — if Yusuf or Sir in any Reconquista
-    or Parias Taifa or Kingdom — 3 Jihad.
-    """
-    bonus_active = False
+def _m11_jihad_bonus_active(state) -> bool:
+    """M11 3-Jihad bonus: Yusuf or Sir in any Reconquista/Parias Taifa
+    or in a Kingdom (Leon/Aragon)."""
     for lid in ("yusuf", "sir"):
         l = state.lords.get(lid)
         if l is None or l.cylinder.kind != "locale":
@@ -930,27 +927,27 @@ def _m11_al_qadir(state, side, card_id, payload):
         loc = state.locales.get(l.cylinder.locale_id)
         if loc is None:
             continue
-        # Check Taifa status if in a Taifa.
-        for t in state.taifas.values():
-            if l.cylinder.locale_id in t.locale_ids                     and t.status in ("reconquista", "parias"):
-                bonus_active = True
-                break
-        else:
-            # Not in a Taifa — check if in a Kingdom (territory "leon"
-            # or "aragon"). Treat any non-Taifa territory as Kingdom.
-            if loc.territory in ("leon", "aragon"):
-                bonus_active = True
-        if bonus_active:
-            break
-    add = 3 if bonus_active else 1
-    placement = _add_jihad(state, add, payload)
-    if placement is None:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Jihad locale")
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side,
-            "jihad_added": add, "placement": placement,
-            "bonus": bonus_active}
+        in_taifa_bonus = any(
+            l.cylinder.locale_id in t.locale_ids
+            and t.status in ("reconquista", "parias")
+            for t in state.taifas.values())
+        if in_taifa_bonus or loc.territory in ("leon", "aragon"):
+            return True
+    return False
+
+
+@register("M11")  # Al-Qadir balks at payment
+def _m11_al_qadir(state, side, card_id, payload):
+    """M11 "Al-Qadir balks at payment" is a HOLD event (the card text
+    begins "Hold:"). It is NOT applied when drawn; it is held and the
+    Muslim plays it at a moment of his choosing to add Jihad (base 1, or
+    3 if the Yusuf/Sir bonus is active — see _h_play_al_qadir). Bucketed
+    like its sibling Hold-Jihad cards (M13, C9). The card's "Lords. Yusuf
+    or Sir" line is the EVENT's restriction: M11 may be played only with
+    Yusuf or Sir on the map (enforced in _h_play_al_qadir). Base +1 Jihad;
+    +3 if that Lord is in a Reconquista/Parias Taifa or a Kingdom."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
+
 
 
 @register("M18")  # Refugees
