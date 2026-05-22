@@ -201,10 +201,20 @@ def test_m11_base_one_jihad_when_no_yusuf_eligible() -> None:
     # Force a Parias for jihad-target.
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "parias"
-    # Remove yusuf/sir from the map if they exist.
+    # Yusuf on map in an INDEPENDENT Taifa (no bonus) -> base +1. (M11
+    # requires Yusuf/Sir on the map to play; the +3 bonus needs them in a
+    # Reconquista/Parias Taifa or a Kingdom.)
     for lid in ("yusuf", "sir"):
         if lid in s.lords:
             s.lords[lid].cylinder = Cylinder(kind="calendar")
+    indep = next((t for t in s.taifas.values()
+                  if t.status == "independent"), None)
+    if indep is None:
+        next(iter(s.taifas.values())).status = "independent"
+        indep = next(t for t in s.taifas.values() if t.status == "independent")
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale",
+                                         locale_id=indep.locale_ids[0])
+    s.lords["yusuf"].in_stronghold = False
     resolve_event(s, "muslim", "M11")   # held
     s.meta.phase = "campaign"
     s.meta.active_player = "muslim"

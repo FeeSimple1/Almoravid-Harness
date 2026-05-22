@@ -111,7 +111,10 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     # turn; carried through since the phase branches extend this list.
     if (state.meta.active_player == "muslim"
             and state.meta.phase in ("levy", "campaign")
-            and "M11" in state.decks.this_levy_events.get("muslim", [])):
+            and "M11" in state.decks.this_levy_events.get("muslim", [])
+            and any(state.lords.get(x) is not None
+                    and state.lords[x].cylinder.kind == "locale"
+                    for x in ("yusuf", "sir"))):
         moves.append({"type": "play_al_qadir", "side": "muslim"})
 
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions

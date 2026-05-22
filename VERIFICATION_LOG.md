@@ -312,11 +312,15 @@ findings (F1-F8). All verified against the rules and fixed (one was a misread):
   (Yusuf/Sir double-Seat placed at Algeciras only when mustered; set-aside Lords get none).
   Fixed wrongly-Muslim-Friendly Parias capitals (Lerida/Badajoz/Granada). Tests:
   test_printed_seats_vs_markers_f4.py.
-- F5 (fixed + one misread): M11 Al-Qadir is a HOLD event — now held on draw (not auto-
-  fired) with a discretionary play_al_qadir handler (base +1 Jihad, +3 with the Yusuf/Sir
-  bonus); re-tagged M11/M13 event_persistence=hold. The "base path needs an eligible Lord"
-  claim was a MISREAD: the base +1 is unconditional; "Lords. Yusuf or Sir" governs the
-  Capability half (Hasham). Tests: test_m11_hold_f5.py.
+- F5 (fixed): M11 Al-Qadir is a HOLD event — now held on draw (not auto-fired), played via
+  a discretionary play_al_qadir handler (base +1 Jihad; +3 if Yusuf/Sir is in a
+  Reconquista/Parias Taifa or a Kingdom); re-tagged M11/M13 event_persistence=hold. The
+  card's "Lords. Yusuf or Sir" line restricts the EVENT (an independent audit found the
+  Capability "Hasham" is "Any Muslim", so that line is NOT the Capability's), so M11 may be
+  played only with Yusuf or Sir on the map — which is exactly the playtest's concern (it
+  could not legitimately fire in Scenario A, where both are set aside). Adopted the
+  conservative reading (don't fabricate Jihad VP when neither Almoravid leader is in play);
+  flagged as a Q-candidate. Tests: test_m11_hold_f5.py.
 - F1/F2 (fixed, data): C14 & C17 now carry the Cabalgadas this_lord capability (were
   no_capability); C8 Hueste and M9 Emir al-Muslimin re-scoped side_wide -> this_lord.
   (Their special EFFECTS remain unwired — a separate known capability-effects gap.) Tests:

@@ -942,9 +942,10 @@ def _m11_al_qadir(state, side, card_id, payload):
     begins "Hold:"). It is NOT applied when drawn; it is held and the
     Muslim plays it at a moment of his choosing to add Jihad (base 1, or
     3 if the Yusuf/Sir bonus is active — see _h_play_al_qadir). Bucketed
-    like its sibling Hold-Jihad cards (M13, C9). The base "+1 Jihad" is
-    unconditional; the "Lords. Yusuf or Sir" line governs the card's
-    Capability half (Hasham), not the Event."""
+    like its sibling Hold-Jihad cards (M13, C9). The card's "Lords. Yusuf
+    or Sir" line is the EVENT's restriction: M11 may be played only with
+    Yusuf or Sir on the map (enforced in _h_play_al_qadir). Base +1 Jihad;
+    +3 if that Lord is in a Reconquista/Parias Taifa or a Kingdom."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 

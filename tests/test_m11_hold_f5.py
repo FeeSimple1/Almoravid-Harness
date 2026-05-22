@@ -23,12 +23,18 @@ def test_m11_held_on_draw_not_fired() -> None:
 
 
 def test_play_m11_adds_one_jihad_base() -> None:
+    from almoravid.state import Cylinder
     s = load_scenario("scenario_a_toledo_beset")
     resolve_event(s, "muslim", "M11", {})   # hold it
+    # M11 requires Yusuf/Sir on map. Put Yusuf in an INDEPENDENT Taifa
+    # (no bonus) -> base +1.
+    indep = next(t for t in s.taifas.values() if t.status == "independent")
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale",
+                                         locale_id=indep.locale_ids[0])
+    s.lords["yusuf"].in_stronghold = False
     s.meta.phase = "campaign"
     s.meta.active_player = "muslim"
     total0 = sum(l.jihad_markers for l in s.locales.values())
-    # Yusuf/Sir set aside in Scenario A -> base +1.
     r = apply_action(s, {"type": "play_al_qadir", "side": "muslim"})
     assert r["jihad_added"] == 1 and r["bonus"] is False
     assert sum(l.jihad_markers for l in s.locales.values()) == total0 + 1
@@ -36,9 +42,27 @@ def test_play_m11_adds_one_jihad_base() -> None:
 
 
 def test_m11_enumerated_when_held() -> None:
+    from almoravid.state import Cylinder
+    s = load_scenario("scenario_a_toledo_beset")
+    resolve_event(s, "muslim", "M11", {})
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale", locale_id="algeciras")
+    s.lords["yusuf"].in_stronghold = False
+    s.meta.phase = "campaign"
+    s.meta.active_player = "muslim"
+    from almoravid.legal_moves import legal_moves
+    assert any(m.get("type") == "play_al_qadir" for m in legal_moves(s))
+
+
+def test_m11_not_playable_without_yusuf_or_sir() -> None:
+    # Scenario A sets Yusuf/Sir aside -> M11 cannot be played.
     s = load_scenario("scenario_a_toledo_beset")
     resolve_event(s, "muslim", "M11", {})
     s.meta.phase = "campaign"
     s.meta.active_player = "muslim"
     from almoravid.legal_moves import legal_moves
-    assert any(m.get("type") == "play_al_qadir" for m in legal_moves(s))
+    assert not any(m.get("type") == "play_al_qadir" for m in legal_moves(s))
+    import pytest
+    from almoravid.actions import IllegalAction
+    with pytest.raises(IllegalAction) as ei:
+        apply_action(s, {"type": "play_al_qadir", "side": "muslim"})
+    assert ei.value.code == "no_eligible_lord"

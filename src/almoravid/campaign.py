@@ -3785,6 +3785,15 @@ def _h_play_al_qadir(state, action):
     _require(side == "muslim", "M11 is a Muslim event", code="wrong_side")
     _require("M11" in state.decks.this_levy_events.get("muslim", []),
              "M11 not held", code="card_not_held")
+    # The card's "Lords. Yusuf or Sir" line restricts the EVENT: M11 can
+    # only be played with Yusuf or Sir on the map. (Resolved ambiguity /
+    # Q-candidate: the conservative reading — it prevents fabricating
+    # Jihad VP when neither Almoravid leader is in play, e.g. Scenario A.)
+    _require(any(state.lords.get(x) is not None
+                 and state.lords[x].cylinder.kind == "locale"
+                 for x in ("yusuf", "sir")),
+             "M11 requires Yusuf or Sir on the map to play (Lords line)",
+             code="no_eligible_lord")
     bonus = _m11_jihad_bonus_active(state)
     add = 3 if (bonus and not action.get("base_only")) else 1
     placement = _add_jihad(state, add, action.get("payload") or
