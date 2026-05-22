@@ -311,6 +311,15 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
     sv = raw["starting_vp"]
     score = Score(christian=float(sv["christian"]), muslim=float(sv["muslim"]))
 
+    # Taifas box: green 1VP Conquered markers count for the Muslims at
+    # scoring (rules 1.4.2 / 5.1). compute_final_vp() sums taifas_box_vp,
+    # so it MUST be seeded from setup or those Muslim VP are dropped at
+    # the final tally (playtest F8). starting_vp feeds only the running
+    # display Score; the authoritative compute_final_vp recomputes from
+    # board markers + taifas_box_vp, so this is not double-counted.
+    tb = raw.get("taifas_box", {}) or {}
+    taifas_box_vp = float(tb.get("conquered_green_1vp", 0))
+
     state = GameState(
         meta=meta,
         calendar=calendar,
@@ -325,5 +334,6 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             summary=f"Loaded scenario {raw['scenario_letter']}: {raw['name']}",
         )],
         score=score,
+        taifas_box_vp=taifas_box_vp,
     )
     return state

@@ -16,6 +16,7 @@ def test_compute_final_vp_counts_taifa_status() -> None:
         loc.conquered_markers = 0
         loc.jihad_markers = 0
         loc.ravaged = "none"
+    s.taifas_box_vp = 0.0  # isolate Taifa-status VP from the box VP
     taifas = list(s.taifas.values())
     taifas[0].status = "reconquista"  # +3 Christian
     if len(taifas) > 1:
@@ -98,6 +99,7 @@ def test_tie_is_draw() -> None:
         loc.ravaged = "none"
     for t in s.taifas.values():
         t.status = "independent"
+    s.taifas_box_vp = 0.0  # both sides 0 -> a genuine tie
     verdict = compute_victory(s)
     assert verdict["christian_vp"] == verdict["muslim_vp"]
     assert verdict["winner"] == "draw"
