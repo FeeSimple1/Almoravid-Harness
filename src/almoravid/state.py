@@ -373,7 +373,15 @@ class Locale(StrictModel):
     # Overlay markers (counts where applicable; lists where multiple).
     conquered_markers: int = 0  # 1 VP each (Christian on Muslim, or Muslim on Christian)
     jihad_markers: int = 0  # 1/2 VP each
+    # PLACED Seat MARKERS only (Rodrigo, Yusuf/Sir double-Seat, Cathedrals
+    # — 1.8 / 1.9.1 / 3.5.1-.2). Per 1.3.1 a Stronghold with a Seat MARKER
+    # is Friendly to that Lord's side. Printed home-Seat pennants do NOT
+    # confer Friendliness and live in `printed_seat_lord_ids` instead.
     seat_marker_lord_ids: list[str] = Field(default_factory=list)
+    # PRINTED Seat pennants (1.3.1 SEATS): affect Reconquista (1.4.1),
+    # Call Upon an Emir (3.5.2), Muster (3.4.1), Supply (4.6.1), Tax
+    # (4.7.3) — but NOT Locale Friendliness.
+    printed_seat_lord_ids: list[str] = Field(default_factory=list)
     siege_yellow: int = 0  # Christian-placed Siege progress markers
     siege_green: int = 0  # Muslim-placed Siege progress markers
     bypass_yellow: bool = False

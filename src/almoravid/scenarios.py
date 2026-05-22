@@ -171,7 +171,10 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             has_gardens=loc["gardens"],
             has_port=loc["port"],
             is_reconquista_target=loc["reconquista_target"],
-            seat_marker_lord_ids=list(loc["printed_seats"]),
+            # Printed pennants -> printed_seat_lord_ids (no Friendliness,
+            # 1.3.1). seat_marker_lord_ids holds only PLACED markers, set
+            # below for special Lords actually on the map (playtest F4).
+            printed_seat_lord_ids=list(loc["printed_seats"]),
         )
     # Apply per-locale scenario markers
     for entry in raw.get("locale_markers", []):
@@ -306,6 +309,19 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
         capabilities_in_play=capabilities_in_play,
         board_edge=board_edge,
     )
+
+    # Place the Almoravid double-Seat MARKER (Yusuf/Sir, 1.8/3.5) at its
+    # printed Seat (Algeciras) only if Yusuf or Sir is Mustered on the
+    # map at setup. Set-aside Lords have NO Seat marker (playtest F4).
+    # Other placed Seat markers (Rodrigo, Cathedrals) arrive via play or
+    # explicit scenario `seat_marker_lord_ids` entries.
+    for _sp in ("yusuf", "sir"):
+        _spl = lords_state.get(_sp)
+        if _spl is not None and _spl.cylinder.kind == "locale":
+            for _lid, _loc in locales_state.items():
+                if _sp in _loc.printed_seat_lord_ids:
+                    if _sp not in _loc.seat_marker_lord_ids:
+                        _loc.seat_marker_lord_ids.append(_sp)
 
     # ---- Score ----------------------------------------------------
     sv = raw["starting_vp"]

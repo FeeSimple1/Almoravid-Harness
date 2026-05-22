@@ -85,7 +85,7 @@ def _locale_markers_short(loc: Locale) -> str:
     if loc.bypass_green:
         parts.append("Bypass-G")
     if loc.seat_marker_lord_ids:
-        parts.append(f"Seats({','.join(loc.seat_marker_lord_ids)})")
+        parts.append(f"SeatMarkers({','.join(loc.seat_marker_lord_ids)})")
     return " ".join(parts)
 
 
@@ -328,7 +328,8 @@ def _render_focus_locale(state: GameState, loc_id: str) -> str:
         f"Base type: {loc.base_type}"
         + (f" (Cap {state.locales[loc_id]})" if False else ""),
         f"Gardens: {loc.has_gardens}  |  Port: {loc.has_port}  |  Reconquista target: {loc.is_reconquista_target}",
-        f"Printed seats: {', '.join(loc.seat_marker_lord_ids) or '—'}",
+        f"Printed seats: {', '.join(loc.printed_seat_lord_ids) or '—'}  |  "
+        f"Seat markers: {', '.join(loc.seat_marker_lord_ids) or '—'}",
     ]
     markers = _locale_markers_short(loc)
     if markers:
