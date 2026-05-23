@@ -493,3 +493,45 @@ Locale. Audited all three "doors" independently; the §1 co-location invariant
   legal_moves, so no Pattern-9 risk). Tests: test_advisory2_doors_bc.py
   (C14 rejects an enemy-occupied Seat). Door B sweep does NOT rescue this — it
   clears markers, not co-located cylinders; the §1 invariant is the catch.
+
+## Cross-harness Advisory #3 — enumerator/handler asymmetry (2026-05-23)
+Nevsky's consolidated advisory: the dominant agent-harness bug class is the
+legal-move MENU drifting from the authoritative executor (over- and under-
+enumeration). Applied the §2 full-fanout round-trip detector and the §1
+under-enumeration cross-check.
+- Prerequisite (§2): RNG is fully in-state (meta.seed + atomic meta.rng_state,
+  no module global), so deepcopy->apply->discard probing is safe. Confirmed.
+- OVER-enumeration (§1/§2): drove random + combat-seeking trajectories across
+  ALL scenarios/seeds, probing EVERY enumerated candidate at each step with
+  deepcopy+apply. Result: ZERO over-enumeration found anywhere. The enumerator
+  and handlers are in lockstep for reachable states. Made permanent: a trimmed
+  random+combat full-fanout probe added to tests/test_enumerator_handler_roundtrip.py
+  (the heavy full version lives as a standalone diagnostic; per §2/§9 the suite
+  keeps a lighter smoke variant so it stays a fast gate).
+- UNDER-enumeration (§1): cross-checked all 56 dispatchable handlers against
+  what the menu can emit. Found working handlers with NO menu entry (a
+  menu-driven/LLM player can never invoke them):
+  * dinars_deposit (4.1.4) — FIXED. Enumerated at the Plan step for each
+    Unbesieged Muslim Taifa Lord (not Yusuf/Sir/Rodrigo) with Coin.
+  * designate_lieutenant (4.1.3) — FIXED. Enumerated at the Plan step for each
+    valid (Lower Lord, Lieutenant) pair: same side, same Locale, neither the
+    Marshal, the commander not itself a Lower Lord nor already leading one.
+  Both mirror the handler gates exactly; the round-trip probe confirms no new
+  over-enumeration was introduced. Tests: tests/test_advisory3_underenum.py
+  (positive + negative enumerator tests per §9).
+  REMAINING under-enumeration (identified, scoped for a focused follow-up):
+  * play_pope_gregory (C14) and play_cluniacs (C15) — discretionary HOLD events
+    (like M11 play_al_qadir, which IS enumerated). Each has three modes
+    (muster_from_calendar / service_shift_right / lordship_plus_2) with distinct
+    per-mode preconditions; enumerating them needs careful per-mode gating to
+    avoid introducing over-enumeration, so deferred rather than rushed.
+  * toggle_lieutenant (C15 Alferez CAPABILITY half) — activation-step action
+    gated on the active Lord holding the C15 capability; low-frequency.
+  NOT bugs: set_absorption_policy is settable as a combat-action parameter and
+  its greedy default is the documented B5 ADJ (4.4.2 owner-choice); bid_for_sides
+  is intentionally un-enumerated (pre-game, 6.1); begin_campaign is a recovery
+  action; the rest of the "never-enumerated in a short walk" list have valid
+  emission paths reached only under specific conditions (verified statically).
+  NOTE on the advisory's "Papal Legate" example: that is Nevsky-specific content
+  (out of scope per BRIEF); used here only as the under-enumeration bug-SHAPE.
+  The Almoravid findings derive from Almoravid's own rules (4.1.3/4.1.4, C14/C15).

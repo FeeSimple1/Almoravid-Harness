@@ -615,6 +615,45 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     if used < cap:
                         out.append({"type": "plan_add_card", "side": side,
                                     "plan_kind": "command", "lord_id": lid})
+            # 4.1.4 Dinars: an Unbesieged Muslim Taifa Lord (not Yusuf/
+            # Sir/Rodrigo) with Coin may deposit it into the Taifas box
+            # during the Plan step. (Was a working handler with no menu
+            # entry -> under-enumeration; mirrors _h_dinars_deposit gates.)
+            if side == "muslim":
+                from almoravid.effective import is_besieged as _ib_dn
+                for lid, lord in state.lords.items():
+                    if (lord.side == "muslim" and lord.is_taifa
+                            and lid not in ("yusuf", "sir",
+                                            "rodrigo_campeador",
+                                            "rodrigo_al_sayyid")
+                            and lord.cylinder.kind == "locale"
+                            and lord.assets.get("coin", 0) > 0
+                            and not _ib_dn(state, lid)):
+                        out.append({"type": "dinars_deposit", "side": side,
+                                    "lord_id": lid})
+            # 4.1.3 Designate Lieutenant: stack a Lower Lord under a
+            # Lieutenant at the same Locale (Plan step). Both same-side on
+            # the map, neither the Marshal, the commander not itself a Lower
+            # Lord and not already leading one. (Working handler, no menu
+            # entry -> under-enumeration; mirrors _h_designate_lieutenant.)
+            from almoravid.campaign import _is_marshal as _ismar
+            side_on_map = [(lid, l) for lid, l in state.lords.items()
+                           if l.side == side and l.cylinder.kind == "locale"]
+            for lid, l in side_on_map:
+                if _ismar(lid, side):
+                    continue
+                for cid, cl in side_on_map:
+                    if cid == lid or _ismar(cid, side):
+                        continue
+                    if cl.cylinder.locale_id != l.cylinder.locale_id:
+                        continue
+                    if cl.lieutenant_of is not None:
+                        continue
+                    if any(x.lieutenant_of == cid
+                           for x in state.lords.values()):
+                        continue
+                    out.append({"type": "designate_lieutenant", "side": side,
+                                "lord_id": lid, "commander_id": cid})
             already_fin = (state.meta.plan_finalized_christian
                            if side == "christian"
                            else state.meta.plan_finalized_muslim)

@@ -126,3 +126,48 @@ def test_pattern_14_marker_in_capabilities_source() -> None:
     from almoravid import capabilities
     src = inspect.getsource(capabilities)
     assert "Pattern 14" in src
+
+
+# ---- Advisory #3 §2: full-fanout probe under random + combat-seeking ----
+# The greedy sweep above walks one narrow trajectory. Per Advisory #3 §5,
+# cold paths (combat/storm/sally/capability branches) hide behind choices
+# a first-legal walker never makes. This drives random and combat-seeking
+# trajectories and probes EVERY enumerated candidate at each step, so an
+# over-enumeration in a rarely-reached state still fails CI. Safe because
+# RNG lives in state (deepcopy->apply->discard never touches the real game).
+
+import random as _random
+
+_COMBAT_PREF = {
+    "cmd_march", "cmd_battle", "cmd_storm", "cmd_sally", "cmd_sortie",
+    "respond_stand_battle", "cmd_siege", "cmd_ravage", "levy_take_capability",
+    "aow_draw", "muster_lord", "cmd_encamp", "cta_employ_rodrigo",
+    "designate_lieutenant", "dinars_deposit",
+}
+
+
+@pytest.mark.parametrize("name", list_scenarios())
+@pytest.mark.parametrize("policy", ["random", "combat"])
+def test_roundtrip_probe_random_and_combat(name: str, policy: str) -> None:
+    seed = 1
+    s = load_scenario(name, seed=seed)
+    rng = _random.Random(seed * 7 + (0 if policy == "random" else 1))
+    for step in range(22):
+            if s.meta.phase == "ended":
+                break
+            moves = legal_moves(s)
+            assert moves, f"{name}/{policy}/{seed} step {step}: zero moves"
+            for m in moves:
+                snap = copy.deepcopy(s)
+                try:
+                    apply_action(snap, m)
+                except IllegalAction as e:
+                    pytest.fail(
+                        f"{name}/{policy}/{seed} step {step}: over-enumeration "
+                        f"{m['type']} -> {e.code} ({e}); move={m}")
+            if policy == "combat":
+                pref = [m for m in moves if m["type"] in _COMBAT_PREF]
+                chosen = rng.choice(pref) if pref else rng.choice(moves)
+            else:
+                chosen = rng.choice(moves)
+            apply_action(s, chosen)
