@@ -1019,16 +1019,20 @@ def _m22_massacre(state, side, card_id, payload):
                 and l.cylinder.kind == "calendar"):
             from almoravid.static_data import load_lords as _ll
             from almoravid.state import Cylinder
+            from almoravid.actions import _free_seats_for
             rec = _ll()["lords"].get(lid, {})
-            seats = list(rec.get("seats", []))
-            if seats:
-                l.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+            # 3.4.1: auto-Muster places only at a free Seat (neither Enemy
+            # nor with an Enemy Lord present); no free Seat -> fall through
+            # to the Jihad branch (the Muster cannot happen). [Door C]
+            free = _free_seats_for(state, lid)
+            if free:
+                l.cylinder = Cylinder(kind="locale", locale_id=free[0])
                 l.forces = dict(rec.get("forces", {}))
                 l.assets = dict(rec.get("assets", {}))
                 l.just_arrived_this_levy = True
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
-                        "mustered": lid, "seat": seats[0], "bonus": True}
+                        "mustered": lid, "seat": free[0], "bonus": True}
     add = 3 if bonus else 1
     placement = _add_jihad(state, add, payload)
     if placement is None:
@@ -1156,17 +1160,19 @@ def _m21_al_sumaisir(state, side, card_id, payload):
         from almoravid.static_data import load_lords as _ll
         l = state.lords[target_lord_id]
         if l.is_taifa and l.side == "muslim" and l.cylinder.kind == "calendar":
+            from almoravid.actions import _free_seats_for
             rec = _ll()["lords"].get(target_lord_id, {})
-            seats = list(rec.get("seats", []))
-            if seats:
+            # 3.4.1 free Seat only; no free Seat -> fall through to Jihad. [Door C]
+            free = _free_seats_for(state, target_lord_id)
+            if free:
                 from almoravid.state import Cylinder
-                l.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+                l.cylinder = Cylinder(kind="locale", locale_id=free[0])
                 l.forces = dict(rec.get("forces", {}))
                 l.assets = dict(rec.get("assets", {}))
                 l.just_arrived_this_levy = True
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
-                        "mustered": target_lord_id, "seat": seats[0]}
+                        "mustered": target_lord_id, "seat": free[0]}
     # Jihad branch (default) — Parias Taifa, Table-4 eligible.
     eligible = _jihad_eligible_locales(state, statuses=("parias",))
     if not eligible:
@@ -1212,18 +1218,20 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
                                     "no Christian Lord on Calendar to Muster")
         from almoravid.static_data import load_lords as _ll
         from almoravid.state import Cylinder
+        from almoravid.actions import _free_seats_for
         rec = _ll()["lords"].get(target.id, {})
-        seats = list(rec.get("seats", []))
-        if not seats:
+        # 3.4.1: Muster only at a free Seat (neither Enemy nor Enemy-occupied). [Door C]
+        free = _free_seats_for(state, target.id)
+        if not free:
             return _no_op_with_note(state, card_id, side,
-                                    f"{target.id} has no Seat")
-        target.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+                                    f"{target.id} has no free Seat (3.4.1)")
+        target.cylinder = Cylinder(kind="locale", locale_id=free[0])
         target.forces = dict(rec.get("forces", {}))
         target.assets = dict(rec.get("assets", {}))
         target.just_arrived_this_levy = True
         state.decks.discard.append(card_id)
         return {"card_id": card_id, "side": side,
-                "mustered": target.id, "seat": seats[0]}
+                "mustered": target.id, "seat": free[0]}
     # service_right branch
     candidates = [
         sm for sm in state.calendar.service_markers

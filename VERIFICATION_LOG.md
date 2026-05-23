@@ -440,3 +440,47 @@ Audited Almoravid for the same shape.
   and the enumerator gates on a valid Port existing; explicit pre-payment
   check in _h_cta_employ_rodrigo. (call_emir already used _free_seats_for.)
   Tests: tests/test_fix_retreat_relocation_p3p4p5.py.
+
+## Cross-project Advisory #2 — illegal co-location bug CLASS (2026-05-23)
+Inferno/Seljuk generalized Advisory #1 into a class: any path that leaves two
+opposing FIELD Lords (both outside a Stronghold, no pending Approach) sharing a
+Locale. Audited all three "doors" independently; the §1 co-location invariant
+(added with P-3) is the oracle and stays the permanent gate.
+
+- Door A (combat disposition) — VERIFIED OK. apply_retreat_aftermath relocates
+  the loser (Battle) and P-3 relocates a losing Sally besieger. Destination
+  constraints are ENFORCED, not a dead pass-through: confirmed a marching
+  attacker that loses Retreats to its approach origin (breadcrumb threaded
+  March -> march_arrival_response payload {from_locale_id, via_way_type} ->
+  apply_retreat_aftermath). The direct cmd_battle path has no march, so it
+  correctly passes no breadcrumb (no Way restriction applies).
+- Door B (marker lifecycle) — FIXED with a backstop. The per-handler sweeps
+  (P-2 combat removal, P-3 sally, F7 Disband/March) did not cover M19 Sail
+  (_h_cmd_march_port_to_port), event removal (C25 De Vivar reconcile), or
+  Winter/Curias Disband — a sole besieger leaving via those orphaned its Siege
+  marker (indirect harm: stale Siege corrupts Supply/Forage/Tax legality;
+  direct harm: stale Bypass suppresses a later Approach -> co-location). FIX:
+  new campaign._sweep_all_orphaned_markers(state) called at the end of EVERY
+  apply_action (the single action chokepoint). It is per-side and idempotent —
+  clears a Siege/Bypass marker only when the owning side has no Lord at the
+  Locale, so it never touches a live siege (the besieger is still present).
+  RoP 4.3.5/4.3.6/4.4.1 ("becomes free of Enemy Lords -> remove all Siege and
+  Bypass markers there") holds unconditionally, so a marker with no owning-side
+  Lord is always illegal and clearing is always correct. _conquer_stronghold
+  already clears Siege on conquest, so the Storm/Surrender path was fine. Tests:
+  tests/test_advisory2_doors_bc.py (backstop clears M19 orphan; keeps a live
+  siege). Full + deep sweep green.
+- Door C (placement onto a contested Locale) — FIXED. Normal Muster
+  (_free_seats_for), CtA Muster (P-5), and spring_muster already excluded
+  enemy-occupied Seats. But the three EVENT auto-Musters — M22 Massacre, M21
+  Al-Sumaisir, C16 Bernard de Sedirac — placed the Lord at seats[0] blindly,
+  so they could Muster onto an Enemy-occupied Seat (co-location with no battle,
+  on a pure Levy/Event path). 3.4.1 PROCEDURE: place "at one of his Seats that
+  is neither Enemy nor has any Enemy Lords present"; 3.4.1 ARTS OF WAR: these
+  cards "must otherwise still Muster by the usual rules." FIX: all three now use
+  _free_seats_for and Muster at the first free Seat; M21/M22 fall through to
+  their Jihad branch when none is free, C16 no-ops. Almoravid has NO "Muster
+  into a Besieged Stronghold (placed inside)" exception (3.4 requires a Friendly
+  Locale free of Siege), so the advisory's inside-placement case is N/A; the
+  Crusaders/Bishops events add Forces to already-placed Lords, not new cylinders.
+  Tests: tests/test_advisory2_doors_bc.py (C16 + M21 reject enemy Seat).

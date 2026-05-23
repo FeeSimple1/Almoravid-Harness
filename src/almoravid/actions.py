@@ -1991,4 +1991,10 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             f"Known: {sorted(_HANDLERS)}",
             code="unknown_action",
         )
-    return _HANDLERS[action_type](state, action)
+    result = _HANDLERS[action_type](state, action)
+    # Door B backstop (Advisory #2 / RoP 4.3.5-.6, 4.4.1): clear any Siege
+    # or Bypass marker left at a Locale now free of the owning side's
+    # Lords, regardless of which path moved/removed the Lord. Idempotent.
+    from almoravid.campaign import _sweep_all_orphaned_markers
+    _sweep_all_orphaned_markers(state)
+    return result

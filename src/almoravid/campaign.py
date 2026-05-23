@@ -3152,6 +3152,21 @@ def _h_cmd_sally(state, action):
 # ---------------------------------------------------------------------------
 
 
+def _sweep_all_orphaned_markers(state) -> None:
+    """Door B backstop (Advisory #2; RoP 4.3.5/4.3.6/4.4.1): "Whenever a
+    Besieged or Bypassed Stronghold becomes free of Enemy Lords in the
+    Locale, remove all Siege and Bypass markers there." Run after every
+    action so NO departure path (March-out, Depart, Disband, combat
+    Removal, M19 Sail, event removal, Winter/Curias Disband) can leave an
+    orphaned marker. Per-side and idempotent: a marker is cleared only
+    when the owning side has no Lord at that Locale, so it never touches a
+    live Siege/Bypass (the besieger/bypasser is still present there)."""
+    for lid, loc in state.locales.items():
+        if (loc.siege_yellow or loc.siege_green
+                or loc.bypass_yellow or loc.bypass_green):
+            _remove_orphaned_siege_bypass(state, lid)
+
+
 def _remove_orphaned_siege_bypass(state, locale_id: str) -> dict:
     """4.3.5/4.3.6 DEPART: when a Besieged or Bypassed Stronghold
     becomes free of the besieging side's (Enemy) Lords in the Locale,
