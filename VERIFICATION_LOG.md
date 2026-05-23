@@ -371,3 +371,23 @@ at setup). Findings prefixed P- to distinguish from the earlier F- playtest.
   campaign._remove_orphaned_siege_bypass on each afterward; that helper is
   per-side, so the surviving side's markers are untouched. Tests:
   tests/test_fix_siege_cleanup_combat_p2.py (2: live Scenario-A Storm + unit).
+
+- Live combat coverage exercised (the gap the F- playtest left open):
+  * BATTLE (open field) — VERIFIED OK. Drove Scenario A to a real March ->
+    Approach (4.3.4) -> Stand -> Battle at Huesca (al-Mustain attacker vs
+    Sancho defender, 2 rounds). 4.4.4 Losses verified against the rulebook:
+    BOTH sides roll for Routed units; a Lord who Retreated without Conceding
+    keeps each unit only on a "1"; all OTHER Lords (incl. the WINNER) keep
+    each unit only within its unmodified Protection range ([1,N] in
+    forces.json: Knights 1-4, Sergeants/MaA 1-3, AfricanFoot 1-2, Unarmored
+    1, African-Horse Evade 1-2; Serfs auto-remove). So the winning al-Mustain
+    correctly LOST his Routed Light Horse + Militia (Unarmored, survive only
+    on a 1). apply_losses_rolls + _losses_keep_threshold match the rule.
+  * SALLY (4.5.3) — VERIFIED OK. Drove a Besieged al-Mustain to cmd_sally vs
+    besieger Sancho; the besieger defends with Siegeworks-as-Walls (S9), so
+    al-Mustain (4 units) lost to Sancho (3 units) and on attacker loss the
+    Siege markers reduced to one (2 -> 1, 4.5.3). The P-2 cleanup correctly
+    did NOT clear the besieger's marker (the besieging side still has a Lord
+    present), confirming P-2 is per-side.
+  * STORM (4.5.2) — exercised (see P-2): attacker repelled by City walls 1-4
+    + garrison strikes, eliminated, orphaned marker bug found and fixed.
