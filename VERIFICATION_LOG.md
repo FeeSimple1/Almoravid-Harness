@@ -391,3 +391,52 @@ at setup). Findings prefixed P- to distinguish from the earlier F- playtest.
     present), confirming P-2 is per-side.
   * STORM (4.5.2) — exercised (see P-2): attacker repelled by City walls 1-4
     + garrison strikes, eliminated, orphaned marker bug found and fixed.
+
+## Cross-project "Retreat penalizes but never relocates" advisory (2026-05-22)
+A sibling L&C engine (Inferno) reported a class where post-combat Retreat
+applied the Service penalty but never moved the loser, leaving opposing
+field Lords illegally co-located; it hid because Concede (the surviving-
+loser branch) is cold under auto-play AND no invariant forbade co-location.
+Audited Almoravid for the same shape.
+- Battle Retreat — VERIFIED OK: apply_retreat_aftermath RELOCATES the loser
+  (cylinder -> a legal adjacent Locale) and enforces destination rules
+  (marching attacker -> approach origin; defender not back along the
+  attacker's Way; _retreat_target_clear excludes Enemy Lords/Strongholds).
+- P-3 (fixed): the SALLY besieger-loss path had the exact bug. 4.5.3:
+  "Losing Defenders Retreat normally, ending the Siege." apply_sally_aftermath
+  built a "retreat" fate but never called apply_retreat_aftermath, and
+  apply_retreat_aftermath early-returned for ALL engagement=='sally'. So a
+  surviving losing besieger stayed at the Locale (co-located with the winning
+  Besieged Lord) and the Siege never ended. FIX: apply_retreat_aftermath now
+  early-returns only when the loser is the SALLYING attacker (who Withdraws
+  back inside); a losing besieging DEFENDER falls through and Retreats
+  (relocates) via the standard branch. apply_sally_aftermath now mirrors the
+  standard Battle order (relocate -> Losses -> Aftermath) for the besieger-
+  loss case and calls _remove_orphaned_siege_bypass to END the Siege. Relief
+  Sally is unaffected (engagement=='battle'). Tests:
+  tests/test_fix_retreat_relocation_p3p4p5.py.
+- Co-location INVARIANT added (advisory item #3) to the permanent gate
+  tests/test_deep_invariants.py: no two opposing FIELD Lords (both
+  in_stronghold=False) may share a Locale once nothing is pending (an
+  Approach co-locates transiently until the defender responds). This single
+  cheap invariant immediately surfaced TWO latent bugs the 100-seed sweep had
+  laundered as "passing":
+- P-4 (fixed, data): scenario_d_arrival.json started al-Mustain as a FIELD
+  Lord at Zaragoza with NO Siege marker, co-located with the besieging
+  Alfonso/Sancho. Scenario Reference: "Alfonso, Sancho, and one yellow Siege
+  on al-Mustain at Zaragoza City." FIX: al-Mustain in_stronghold=true
+  (Besieged inside), zaragoza siege_yellow=1; taught scenarios.py to read an
+  in_stronghold flag from mustered_lords (defaults false).
+- P-5 (fixed): CtA auto-Muster placed a Lord at a Friendly Stronghold without
+  checking it was free of Enemy Lords, so Employing Rodrigo (3.5.1) Mustered
+  him into an Enemy-occupied Locale -> co-located. Rule 3.4.1 PROCEDURE:
+  "Place that Lord's cylinder at one of his Seats that is neither Enemy nor
+  has any Enemy Lords present"; 3.4.1 ARTS OF WAR: CtA Musters "must otherwise
+  still Muster by the usual rules." FIX: new _cta_seat_has_enemy_lord guard at
+  the _cta_auto_muster chokepoint (covers Employ Rodrigo, Call for Crusade,
+  Invite Almoravids, Call upon an Emir, Uphold Dynasties); enumerator mirrors
+  added so no enemy-occupied Seat is offered (employ_rodrigo both sides,
+  call_crusade), invite_almoravids port-selection skips Enemy-occupied Ports
+  and the enumerator gates on a valid Port existing; explicit pre-payment
+  check in _h_cta_employ_rodrigo. (call_emir already used _free_seats_for.)
+  Tests: tests/test_fix_retreat_relocation_p3p4p5.py.

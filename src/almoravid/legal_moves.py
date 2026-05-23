@@ -411,6 +411,13 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         loc = state.locales[lid]
         return loc.siege_yellow == 0 and loc.siege_green == 0
 
+    def no_enemy_lord(lid: str) -> bool:
+        # 3.4.1: a Muster Seat must have no Enemy Lord present. [P-5]
+        return not any(
+            l.cylinder.kind == "locale" and l.cylinder.locale_id == lid
+            and l.side != side
+            for l in state.lords.values())
+
     def ready(lord) -> bool:
         return (lord.cylinder.kind == "calendar"
                 and (lord.cylinder.box is None
@@ -469,12 +476,14 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             if pay is not None:
                 for lid, loc in state.locales.items():
                     if (loc.base_type in STRONG and free_of_siege(lid)
-                            and is_friendly_locale(state, lid, "christian")):
+                            and is_friendly_locale(state, lid, "christian")
+                            and no_enemy_lord(lid)):
                         out.append({"type": "cta_employ_rodrigo",
                                     "side": "christian", "seat": lid,
                                     "payments": pay})
         if (ready(eudes) and free_of_siege("pamplona")
-                and is_friendly_locale(state, "pamplona", "christian")):
+                and is_friendly_locale(state, "pamplona", "christian")
+                and no_enemy_lord("pamplona")):
             out.append({"type": "cta_call_crusade", "side": "christian"})
         return out
 
@@ -487,14 +496,35 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         if pay is not None:
             for lid, loc in state.locales.items():
                 if (loc.base_type in STRONG and free_of_siege(lid)
-                        and is_friendly_locale(state, lid, "muslim")):
+                        and is_friendly_locale(state, lid, "muslim")
+                        and no_enemy_lord(lid)):
                     out.append({"type": "cta_employ_rodrigo",
                                 "side": "muslim", "seat": lid,
                                 "payments": pay})
-    for cand in ("yusuf", "sir"):
-        if ready(state.lords[cand]):
-            out.append({"type": "cta_invite_almoravids", "side": "muslim",
-                        "lord_id": cand})
+    # Invite the Almoravids (3.5.2): only offer when an actual Muster Port
+    # exists -- Algeciras (Muslim-Friendly, free of Siege, no Enemy Lord),
+    # else the nearest qualifying Port. Mirrors _h_cta_invite_almoravids so
+    # the enumerator never offers a move the handler would reject. [P-5]
+    from almoravid.map import nearest_ports as _nearest_ports
+
+    def _invite_seat_exists() -> bool:
+        if (is_friendly_locale(state, "algeciras", "muslim")
+                and free_of_siege("algeciras")
+                and no_enemy_lord("algeciras")):
+            return True
+        for port, _d in _nearest_ports("algeciras"):
+            if port == "algeciras":
+                continue
+            if (is_friendly_locale(state, port, "muslim")
+                    and free_of_siege(port) and no_enemy_lord(port)):
+                return True
+        return False
+
+    if _invite_seat_exists():
+        for cand in ("yusuf", "sir"):
+            if ready(state.lords[cand]):
+                out.append({"type": "cta_invite_almoravids", "side": "muslim",
+                            "lord_id": cand})
 
     def on_cal_ready(lord) -> bool:
         return (lord.cylinder.kind == "calendar"

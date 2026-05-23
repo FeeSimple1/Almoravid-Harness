@@ -697,6 +697,19 @@ def _cta_locale_free_of_siege(state: GameState, locale_id: str) -> bool:
     return loc.siege_yellow == 0 and loc.siege_green == 0
 
 
+def _cta_seat_has_enemy_lord(state: GameState, locale_id: str,
+                             side: Side) -> bool:
+    """3.4.1: a Muster Seat must be "neither Enemy nor has any Enemy Lords
+    present". Returns True if any Lord of the other side is at the Locale
+    (same test as the normal-Muster _free_seats_for helper, so the CtA
+    auto-Muster paths stay consistent with 3.4.1 Muster). [P-5 playtest]"""
+    return any(
+        l.cylinder.kind == "locale" and l.cylinder.locale_id == locale_id
+        and l.side != side
+        for l in state.lords.values()
+    )
+
+
 def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any]:
     """Automatically Muster `lord_id` at `seat` (no Fealty roll) per the
     3.5 Call-to-Arms option that triggered it. Mirrors the success
@@ -706,6 +719,14 @@ def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any
     """
     from almoravid.state import Cylinder, ServiceMarker
     lord = state.lords[lord_id]
+    # 3.4.1: place the cylinder at a Seat "neither Enemy nor has any Enemy
+    # Lords present". CtA auto-Muster must obey the usual Muster rule
+    # (3.4.1 ARTS OF WAR "must otherwise still Muster by the usual rules"),
+    # otherwise a Lord could Muster into an Enemy-occupied Locale and sit
+    # there co-located -- an illegal, unresolvable board state. [P-5]
+    _require(not _cta_seat_has_enemy_lord(state, seat, lord.side),
+             f"{seat} has an Enemy Lord present — cannot Muster there "
+             f"(3.4.1)", code="enemy_lord_present")
     lord.cylinder = Cylinder(kind="locale", locale_id=seat)
     static = load_lords()["lords"][lord_id]
     lord.forces = dict(static["forces"])
@@ -899,6 +920,11 @@ def _h_cta_employ_rodrigo(state: GameState, action: dict[str, Any]) -> dict[str,
              f"{seat} is not Friendly to {side} (3.5)", code="not_friendly")
     _require(_cta_locale_free_of_siege(state, seat),
              f"{seat} is not free of Siege (3.5)", code="under_siege")
+    # 3.4.1: the Muster Seat must have no Enemy Lord present. Check before
+    # collecting payment so a rejected Employ does not charge Coin. [P-5]
+    _require(not _cta_seat_has_enemy_lord(state, seat, side),
+             f"{seat} has an Enemy Lord present — cannot Muster there "
+             f"(3.4.1)", code="enemy_lord_present")
     # Pay first (validates fully before any mutation), then place Seat
     # and auto-Muster.
     _cta_collect_payment(state, side, action.get("payments", []),
@@ -974,14 +1000,16 @@ def _h_cta_invite_almoravids(state: GameState, action: dict[str, Any]) -> dict[s
     # Algeciras unless not Friendly / Besieged, then nearest qualifying Port.
     seat = None
     if (is_friendly_locale(state, "algeciras", "muslim")
-            and _cta_locale_free_of_siege(state, "algeciras")):
+            and _cta_locale_free_of_siege(state, "algeciras")
+            and not _cta_seat_has_enemy_lord(state, "algeciras", "muslim")):
         seat = "algeciras"
     else:
         for port, _dist in nearest_ports("algeciras"):
             if port == "algeciras":
                 continue
             if (is_friendly_locale(state, port, "muslim")
-                    and _cta_locale_free_of_siege(state, port)):
+                    and _cta_locale_free_of_siege(state, port)
+                    and not _cta_seat_has_enemy_lord(state, port, "muslim")):
                 seat = port
                 break
     _require(seat is not None,

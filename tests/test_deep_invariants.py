@@ -43,6 +43,20 @@ def _invariants(s) -> list[str]:
         errs.append("negative counter")
     if s.pending is not None and s.pending.waiting_on != s.meta.active_player:
         errs.append("pending/active desync")
+    # P-3 (Retreat-relocation bug class): no two opposing FIELD Lords
+    # (both OUTSIDE a Stronghold) may share a Locale. Besieged-inside vs
+    # besiegers-outside is legal (the inside Lord is in_stronghold). An
+    # Approach (march_arrival_response) co-locates Lords transiently until
+    # the defender Avoids/Withdraws/Stands, so assert only when nothing is
+    # pending (settled state).
+    if s.pending is None:
+        by_loc: dict[str, set] = {}
+        for lid, l in s.lords.items():
+            if l.cylinder.kind == "locale" and not l.in_stronghold:
+                by_loc.setdefault(l.cylinder.locale_id, set()).add(l.side)
+        for loc_id, sides in by_loc.items():
+            if "christian" in sides and "muslim" in sides:
+                errs.append(f"{loc_id}: opposing field Lords co-located")
     return errs
 
 

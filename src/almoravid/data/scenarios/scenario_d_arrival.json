@@ -61,6 +61,10 @@
       "seat_marker_lord_ids": [
         "yusuf"
       ]
+    },
+    {
+      "locale_id": "zaragoza",
+      "siege_yellow": 1
     }
   ],
   "mustered_lords": [
@@ -114,7 +118,8 @@
       "capabilities": [
         "M17",
         "M14"
-      ]
+      ],
+      "in_stronghold": true
     }
   ],
   "calendar": [

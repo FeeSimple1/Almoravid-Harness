@@ -1747,19 +1747,34 @@ def resolve_sally(
 
 def apply_sally_aftermath(state: GameState, result: BattleResult,
                           locale_id: str) -> None:
-    """Sally-specific aftermath (rule 4.5.3 / SoP on_attacker_loss).
+    """Sally-specific aftermath (rule 4.5.3).
 
-    If the Sallying side lost: their Lords Withdraw back into the
-    Stronghold (in_stronghold=True) and Siege markers there reduce to 1.
+    4.5.3: "Losing Defenders Retreat normally, ending the Siege. Losing
+    Attackers must Withdraw back into their Stronghold (4.4.3, not
+    Retreat)." RAID: "If Sallying Attackers lose, remove all but one
+    Siege marker at the Locale ... The Siege goes on."
+
+    So:
+      * Sallying Attackers (the Besieged) LOSE -> Withdraw back inside
+        (in_stronghold=True); Siege markers reduce to one (RAID).
+      * Besieging Defenders LOSE -> they Retreat normally, RELOCATING
+        off the Locale (apply_retreat_aftermath), and the Siege ENDS
+        (the besieger's Siege/Bypass markers are removed -- the Locale
+        is now free of those Enemy Lords, 4.5.3/4.5.4).
+    Mirrors the standard Battle order: relocate -> Losses -> Aftermath.
+    [P-3 playtest] Previously the besieger-loss branch built a "retreat"
+    fate but never called apply_retreat_aftermath, so a surviving losing
+    besieger was left co-located with the (winning) Besieged Lord and
+    the Siege never ended.
     """
+    from almoravid.campaign import _remove_orphaned_siege_bypass
     sallying_side = result.attacker.side
+    besieger_side = result.defender.side
     loc = state.locales[locale_id]
-    # Build the loser-fate summary (4.5.3): a losing Sallying side
-    # Withdraws back into the Stronghold; losing Defenders (besiegers)
-    # Retreat normally.
-    losers: list[dict] = []
+
     if result.winner is not None and result.winner != sallying_side:
-        # Sallying side lost -> Withdraw back inside; reduce Siege to 1.
+        # Sallying Attackers lost -> Withdraw back inside; Siege -> 1 (RAID).
+        losers: list[dict] = []
         for lid in result.attacker.lord_ids:
             if lid in state.lords:
                 state.lords[lid].in_stronghold = True
@@ -1770,19 +1785,30 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
         else:
             if loc.siege_green > 1:
                 loc.siege_green = 1
-    elif result.winner is not None and result.winner == sallying_side:
-        # Besiegers lost -> they Retreat normally (4.5.3).
-        for lid in result.defender.lord_ids:
-            losers.append({"lord_id": lid, "fate": "retreat"})
-    # 4.4.4 Losses for both sides, then 4.4.5 Aftermath.
-    apply_battle_losses(state, result, {"losers": losers}, storm=False)
+        apply_battle_losses(state, result, {"losers": losers}, storm=False)
+        apply_aftermath(state, result)
+        result.notes.append(
+            f"Sally raid: {sallying_side} withdrew, siege at {locale_id} "
+            f"reduced to 1"
+        )
+        return
+
+    # Besiegers lost (or stalemate): the losing Besieging DEFENDERS
+    # Retreat normally (4.4.3) -- apply_retreat_aftermath relocates each
+    # off the Locale (Retreat branch; no Friendly Stronghold there for
+    # them) and rolls the Service penalty. Then Losses + Aftermath.
+    retreat_summary = apply_retreat_aftermath(state, result)
+    apply_battle_losses(state, result, retreat_summary, storm=False)
     apply_aftermath(state, result)
     if result.winner == sallying_side:
-        return  # Sally succeeded; no further Siege-reduction note.
-    result.notes.append(
-        f"Sally raid: {sallying_side} withdrew, siege at {locale_id} "
-        f"reduced to 1"
-    )
+        # "...ending the Siege": the besieging side's Lords have left the
+        # Locale, so clear that side's Siege/Bypass markers (per-side, so
+        # the Besieged winner's own state is untouched). 4.5.3/4.5.4.
+        _remove_orphaned_siege_bypass(state, locale_id)
+        result.notes.append(
+            f"Sally: {besieger_side} besiegers Retreated; siege at "
+            f"{locale_id} ended"
+        )
 
 
 
@@ -2376,8 +2402,12 @@ def apply_retreat_aftermath(
 
     loser_side_obj = (result.attacker if result.winner == result.defender.side
                       else result.defender)
-    if result.engagement == "sally":
-        # Sally has its own Withdraw-back logic in apply_sally_aftermath.
+    if result.engagement == "sally" and loser_side_obj is result.attacker:
+        # Losing Sallying Attackers Withdraw back inside (handled by
+        # apply_sally_aftermath, 4.5.3 "Losing Attackers must Withdraw").
+        # The losing Besieging DEFENDER, by contrast, "Retreat[s]
+        # normally, ending the Siege" -- so fall through and relocate
+        # it here via the standard Retreat branch. [P-3 playtest]
         return summary
 
     # Battle locale = first loser Lord's cylinder.locale_id.

@@ -218,6 +218,7 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
 
     for lid, l in lord_static.items():
         # Pick cylinder location for this Lord
+        in_stronghold = False
         if lid in mustered_index:
             m = mustered_index[lid]
             cylinder = Cylinder(kind="locale", locale_id=m["locale_id"])
@@ -226,6 +227,9 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             if "assets_override" in m:
                 assets.update(m["assets_override"])
             capabilities = list(m.get("capabilities", []))
+            # A Lord Besieged at scenario start sits INSIDE the Stronghold
+            # (e.g. Scenario D: al-Mustain Besieged at Zaragoza, 4.5/1.3.1).
+            in_stronghold = bool(m.get("in_stronghold", False))
         elif lid in set_aside:
             cylinder = Cylinder(kind="set_aside")
             forces = {}
@@ -272,6 +276,7 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             assets=assets,
             capabilities=capabilities,
             vassals=vassals,
+            in_stronghold=in_stronghold,
         )
 
     # ---- Ways -----------------------------------------------------
