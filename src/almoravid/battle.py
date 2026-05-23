@@ -158,12 +158,22 @@ class BattleSide:
 
 @dataclass
 class StepResolution:
-    """Outcome of one Strike substep."""
+    """Outcome of one Strike substep.
+
+    raw_hits      = accumulated half-Hits before rounding.
+    rounded_hits  = raw_hits rounded up (the actual Hits dealt this step,
+                    BEFORE Protection). [resolver-fix (d)]
+    units_routed  = number of target units actually Routed (post-Protection).
+                    Previously the per-pair path overloaded `rounded_hits`
+                    with this count, which was misleading.
+    losses        = {unit_type: count} of units Routed this step.
+    """
 
     step: str                  # "1.a" etc.
     actor: Role
     raw_hits: float = 0.0      # accumulated halves before rounding
-    rounded_hits: int = 0
+    rounded_hits: int = 0      # raw_hits rounded up (Hits dealt, pre-Protection)
+    units_routed: int = 0      # units actually Routed (post-Protection)
     losses: dict[UnitType, int] = field(default_factory=dict)
 
 
@@ -252,6 +262,12 @@ def build_strike_rows(
     caps_in_play = set(side.capabilities_in_play)
     rows: list[StrikeRow] = []
 
+    # (b) Jabalinas (C7) / Harbah (M3,M6): "Up to 4 of this Lord's Unarmored
+    # units have Missiles ... (mark)". Cap the Javelin-granted units at 4
+    # ACROSS the Lord's Unarmored types, not per unit-type. build_strike_rows
+    # runs over one Lord's force (the single-Lord pooled case; the per-pair
+    # path caps per LordPosition in _build_strike_rows_for_position).
+    javelin_budget = 4
     for unit_type, count in side.forces.items():
         if count <= 0:
             continue
@@ -275,9 +291,16 @@ def build_strike_rows(
         for cap_row in unit.get("strikes_by_capability", []):
             required = set(cap_row.get("card_ids", []))
             if required and required & caps_in_play:
+                row_count = count
+                if cap_row.get("cap_type") == "javelins" or \
+                        cap_row.get("kind") == "javelins":
+                    row_count = min(count, javelin_budget)
+                    javelin_budget -= row_count
+                    if row_count <= 0:
+                        continue
                 rows.append(StrikeRow(
                     unit_type=unit_type,
-                    count=count,
+                    count=row_count,
                     kind=cap_row["kind"],
                     rate=cap_row["rate"],
                     one_round_only=cap_row.get("any_one_round", False),
@@ -594,6 +617,13 @@ def _resolve_step(
         return result
 
     rows = build_strike_rows(state, actor, context=context)
+    # (a) Javelins / other one_round_only Strikes fire on only ONE Round.
+    # The owner may choose WHICH Round (Arts of War ref C7/M3 "any 1 Battle
+    # Round"); we default to Round 1 (full-strength, max effect) and drop
+    # one_round_only rows thereafter. (Owner round-choice TODO: a per-combat
+    # policy, consistent with the atomic resolver's Concede/Reposition.)
+    if round_index != 1:
+        rows = [r for r in rows if not r.one_round_only]
     raw, by_kind = _step_hits(rows, step_type, unit_class)
 
     # Per-card combat-event bonuses (Phase 6 / deferred-fix structural
@@ -2705,6 +2735,7 @@ def _build_strike_rows_for_position(
     forces_data = load_forces()
     caps_in_play = set(side.capabilities_in_play) | set(lp.capabilities_in_play)
     rows: list[StrikeRow] = []
+    javelin_budget = 4   # (b) up to 4 Unarmored units per Lord (C7/M3/M6)
     for unit_type, count in lp.forces.items():
         if count <= 0:
             continue
@@ -2724,8 +2755,15 @@ def _build_strike_rows_for_position(
         for cap_row in unit.get("strikes_by_capability", []):
             required = set(cap_row.get("card_ids", []))
             if required and required & caps_in_play:
+                row_count = count
+                if cap_row.get("cap_type") == "javelins" or \
+                        cap_row.get("kind") == "javelins":
+                    row_count = min(count, javelin_budget)
+                    javelin_budget -= row_count
+                    if row_count <= 0:
+                        continue
                 rows.append(StrikeRow(
-                    unit_type=unit_type, count=count,
+                    unit_type=unit_type, count=row_count,
                     kind=cap_row["kind"], rate=cap_row["rate"],
                     one_round_only=cap_row.get("any_one_round", False),
                     card_ids=sorted(required & caps_in_play),
@@ -2919,6 +2957,11 @@ def _resolve_step_per_pair(
     # Keyed by id(target_lp) to combine opposed + Flanking strikers.
     contributions: dict[int, dict] = {}
     target_order: list[int] = []
+    # (c) C8 Cantador adds +1 to up to 4 of ONE Christian Lord's Knights/
+    # Sergeants in Round 1. Across multiple Christian Lords this step the
+    # +4 must NOT recur per Lord -- a single shared budget of 4 spends down
+    # across the actor Lords (it lands on whichever Lord(s) Strike first).
+    cantador_budget = [4]
 
     for actor_pos in ("front_center", "front_left", "front_right"):
         actor_lp = next((lp for lp in actor.array
@@ -2938,6 +2981,9 @@ def _resolve_step_per_pair(
 
         rows = _build_strike_rows_for_position(state, actor, actor_lp,
                                                context="battle")
+        # (a) one_round_only Strikes (Javelins) fire on Round 1 only.
+        if round_index != 1:
+            rows = [r for r in rows if not r.one_round_only]
         raw, by_kind = _step_hits(rows, step_type, unit_class)
 
         # Phase 6a Hills hook (per-Lord application: defender side's
@@ -2976,8 +3022,9 @@ def _resolve_step_per_pair(
                         and r.unit_type in ("knights", "sergeants")
                         and _unit_class(r.unit_type) == unit_class):
                     eligible += r.count
-            eligible = min(4, eligible)
+            eligible = min(eligible, cantador_budget[0])   # (c) shared cap of 4
             if eligible > 0:
+                cantador_budget[0] -= eligible
                 raw += float(eligible)
                 by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
@@ -3015,6 +3062,7 @@ def _resolve_step_per_pair(
             per_kind_hits = _allocate_rounded_hits(raw, by_kind)
         else:
             per_kind_hits = {"melee": rounded}
+        step_res.rounded_hits += rounded   # (d) Hits dealt this step (pre-Protection)
 
         # 4.4.2 ASSIGN HITS -- absorbing owner's per-combat policy.
         absorb_policy = state.meta.absorption_policy.get(
@@ -3038,7 +3086,7 @@ def _resolve_step_per_pair(
                 if routed is not None:
                     step_res.losses[routed] = (
                         step_res.losses.get(routed, 0) + 1)
-                    step_res.rounded_hits += 1
+                    step_res.units_routed += 1   # (d) post-Protection routs
 
     step_res.raw_hits = aggregate_raw
 
