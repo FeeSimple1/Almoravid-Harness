@@ -535,3 +535,25 @@ under-enumeration cross-check.
   NOTE on the advisory's "Papal Legate" example: that is Nevsky-specific content
   (out of scope per BRIEF); used here only as the under-enumeration bug-SHAPE.
   The Almoravid findings derive from Almoravid's own rules (4.1.3/4.1.4, C14/C15).
+
+### Advisory #3 follow-up — C14/C15 Hold-event enumeration + Alférez Q-001
+- play_pope_gregory (C14) and play_cluniacs (C15) — FIXED (under-enumeration).
+  Both are discretionary Christian HOLD events ("play on a Lord any time to
+  Muster from Calendar, OR shift Service, OR for Lordship +2"; Arts of War ref
+  C14/C15). Now enumerated on the Christian's turn in Levy/Campaign once held
+  (mirroring the M11 play_al_qadir pattern), per valid target Lord (Sancho/Eudes
+  for C14; any Christian for C15), with each (lord, mode) gated by that mode's
+  precondition: muster_from_calendar only for a Calendar Lord with a free Seat
+  (3.4.1); service_shift only when a Service marker exists; lordship_plus_2 for
+  any on-map/Calendar target. Round-trip full-fanout probe over C14/C15-held
+  states across scenarios: no over-enumeration. Tests:
+  tests/test_advisory3_underenum.py (C14 modes, C15 any-Christian, not-when-
+  unheld, muster-mode-absent-without-free-Seat).
+- toggle_lieutenant (Alférez, C15 Capability half) — NOT enumerated; logged as
+  Q-001 instead of guessed. The capability's effect (4.1.3 stack/unstack a
+  Lieutenant via a Command action) is real, but its data scope is side_wide
+  while the handler gates on a this_lord check (so it is currently dead), and
+  the eligible-Lord set (Lords.txt names Álvar Fáñez; references Rodrigo) is
+  unmodeled. Faithful wiring needs the scope + eligibility adjudicated
+  (RULES_QUESTIONS.md Q-001). Left a documented no-op note at the enumeration
+  site so the gap is visible.

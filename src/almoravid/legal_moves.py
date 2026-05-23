@@ -117,6 +117,46 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                     for x in ("yusuf", "sir"))):
         moves.append({"type": "play_al_qadir", "side": "muslim"})
 
+    # C14 Pope Gregory (Sancho/Eudes) and C15 Cluniacs (any Christian) are
+    # discretionary Christian HOLD events: "play on a Lord any time to
+    # Muster him from Calendar, OR shift his Service, OR for Lordship +2"
+    # (Arts of War ref C14/C15; 3.4.1). Like M11 above, offered on the
+    # Christian's turn in Levy/Campaign once held. Each (lord, mode) combo
+    # is gated by that mode's precondition so the menu mirrors the handler
+    # (muster needs a Calendar lord + free Seat; the shift needs a Service
+    # marker; +2 Lordship applies to any usable target). [Advisory #3 under-enum]
+    if (state.meta.active_player == "christian"
+            and state.meta.phase in ("levy", "campaign")):
+        from almoravid.actions import _free_seats_for as _fs_c
+
+        def _has_svc_marker(lid: str) -> bool:
+            return any(sm.lord_id == lid and sm.vassal_id is None
+                       for sm in state.calendar.service_markers)
+
+        _held_c = state.decks.this_levy_events.get("christian", [])
+        _c_targets = {
+            "C14": (("sancho", "eudes"), "play_pope_gregory"),
+            "C15": (tuple(lid for lid, l in state.lords.items()
+                          if l.side == "christian"), "play_cluniacs"),
+        }
+        for _card, (_targets, _atype) in _c_targets.items():
+            if _card not in _held_c:
+                continue
+            for _lid in _targets:
+                _l = state.lords.get(_lid)
+                if _l is None or _l.cylinder.kind not in ("calendar", "locale"):
+                    continue  # set-aside: not a usable target
+                if _l.cylinder.kind == "calendar" and _fs_c(state, _lid):
+                    moves.append({"type": _atype, "side": "christian",
+                                  "lord_id": _lid,
+                                  "mode": "muster_from_calendar"})
+                if _has_svc_marker(_lid):
+                    moves.append({"type": _atype, "side": "christian",
+                                  "lord_id": _lid,
+                                  "mode": "service_shift_right"})
+                moves.append({"type": _atype, "side": "christian",
+                              "lord_id": _lid, "mode": "lordship_plus_2"})
+
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
     # agent never has to explicitly invoke a phase-start handler mid-game.
@@ -690,6 +730,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 lord_id = state.meta.active_lord_id
                 lord = state.lords[lord_id]
                 out.append({"type": "cmd_pass", "side": active})
+                # NOTE: C15 Alferez (the Capability half of C15) lets an
+                # ELIGIBLE Christian Lord (Lords.txt: Alvar Fanez, Rodrigo)
+                # spend a Command action to stack/unstack as a Lieutenant
+                # (4.1.3; Arts of War ref C15). It is intentionally NOT
+                # enumerated yet: the capability's scope is recorded as
+                # side_wide but its handler (toggle_lieutenant) gates on a
+                # this_lord check, and the eligible-Lord set is unmodeled.
+                # Wiring it correctly is a Q-candidate (see RULES_QUESTIONS) —
+                # not guessed here. [Advisory #3 / known unwired capability]
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.

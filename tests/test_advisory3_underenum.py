@@ -82,3 +82,74 @@ def test_designate_lieutenant_excludes_marshal_and_other_locales() -> None:
     pairs = [m for m in legal_moves(s) if m["type"] == "designate_lieutenant"
              and "toledo" == s.lords[m["lord_id"]].cylinder.locale_id]
     assert pairs == [], f"Marshal must not form a Lieutenant pair: {pairs}"
+
+
+# --- C14 Pope Gregory / C15 Cluniacs Hold-event plays (under-enum) -------
+import copy as _copy
+from almoravid.actions import IllegalAction
+
+
+def _christian_levy_muster(scenario="scenario_a_toledo_beset", seed=1):
+    """A state on the Christian side mid-Levy (muster step), where Hold
+    events are playable 'any time'."""
+    s = load_scenario(scenario, seed=seed)
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
+    s.meta.active_player = "christian"
+    return s
+
+
+def test_c14_pope_gregory_offered_when_held_with_correct_modes() -> None:
+    s = _christian_levy_muster()
+    s.decks.this_levy_events["christian"] = ["C14"]
+    # Put Sancho on the Calendar so muster_from_calendar is applicable.
+    from almoravid.state import Cylinder, ServiceMarker
+    s.lords["sancho"].cylinder = Cylinder(kind="calendar",
+                                          box=s.calendar.current_box)
+    if not any(m.lord_id == "sancho" for m in s.calendar.service_markers):
+        s.calendar.service_markers.append(
+            ServiceMarker(lord_id="sancho", box=s.calendar.current_box))
+    moves = [m for m in legal_moves(s) if m["type"] == "play_pope_gregory"]
+    modes = {(m["lord_id"], m["mode"]) for m in moves}
+    assert ("sancho", "muster_from_calendar") in modes
+    assert ("sancho", "service_shift_right") in modes
+    assert ("sancho", "lordship_plus_2") in modes
+    # Only Sancho/Eudes are valid C14 targets.
+    assert all(m["lord_id"] in ("sancho", "eudes") for m in moves)
+    # Every offered C14 play is accepted by the handler (no over-enum).
+    for m in moves:
+        apply_action(_copy.deepcopy(s), m)
+
+
+def test_c14_not_offered_when_not_held() -> None:
+    s = _christian_levy_muster()
+    s.decks.this_levy_events["christian"] = []
+    assert not [m for m in legal_moves(s) if m["type"] == "play_pope_gregory"]
+
+
+def test_c15_cluniacs_offered_for_any_christian_when_held() -> None:
+    s = _christian_levy_muster()
+    s.decks.this_levy_events["christian"] = ["C15"]
+    moves = [m for m in legal_moves(s) if m["type"] == "play_cluniacs"]
+    assert moves, "C15 should be offered when held"
+    targets = {m["lord_id"] for m in moves}
+    # At least one on-map Christian Lord is a target; all targets Christian.
+    assert all(s.lords[lid].side == "christian" for lid in targets)
+    for m in moves:
+        apply_action(_copy.deepcopy(s), m)   # no over-enumeration
+
+
+def test_c14_muster_mode_absent_when_no_free_seat() -> None:
+    """If the target's only Seat is enemy-occupied, the muster mode must
+    NOT be offered (mirrors the handler's 3.4.1 free-Seat gate)."""
+    s = _christian_levy_muster(scenario="scenario_d_arrival")
+    s.decks.this_levy_events["christian"] = ["C14"]
+    from almoravid.state import Cylinder
+    s.lords["sancho"].cylinder = Cylinder(kind="calendar",
+                                          box=s.calendar.current_box)
+    assert s.lords["sancho"].seats == ["jaca"]
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="jaca")
+    s.lords["al_mustain"].in_stronghold = False
+    modes = {(m["lord_id"], m["mode"]) for m in legal_moves(s)
+             if m["type"] == "play_pope_gregory"}
+    assert ("sancho", "muster_from_calendar") not in modes
