@@ -72,8 +72,7 @@ def test_lieutenant_has_at_most_one_lower_lord() -> None:
     s.meta.active_player = "christian"
     ids = [lid for lid, l in s.lords.items()
            if l.side == "christian" and lid != "alfonso"]
-    if len(ids) < 3:
-        pytest.skip("need 3 non-Marshal Christian Lords")
+    assert len(ids) >= 3, "need 3 non-Marshal Christian Lords"
     cmd, s1, s2 = ids[0], ids[1], ids[2]
     for lid in (cmd, s1, s2):
         s.lords[lid].cylinder = Cylinder(kind="locale", locale_id="leon")

@@ -74,9 +74,8 @@ def test_take_vassal_places_service_marker_under_advanced_rule() -> None:
                              if lord.seats else "leon")
     lord.lordship_used = 0
     # Ensure at least one Ready Vassal.
-    if not lord.vassals or not any(v.ready for v in lord.vassals):
-        import pytest
-        pytest.skip("alfonso has no Ready Vassal in this scenario")
+    assert lord.vassals and any(v.ready for v in lord.vassals), \
+        "alfonso has no Ready Vassal in this scenario"
     ready_idx = next(i for i, v in enumerate(lord.vassals) if v.ready)
     vassal_id = lord.vassals[ready_idx].id
     s.meta.phase = "levy"

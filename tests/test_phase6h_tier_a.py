@@ -174,8 +174,7 @@ def test_m8_adds_two_jihad_to_first_eligible_locale() -> None:
 
 def test_m11_bonus_when_yusuf_in_kingdom_locale() -> None:
     s = load_scenario("scenario_d_arrival", seed=1)
-    if "yusuf" not in s.lords:
-        pytest.skip("yusuf not present in this scenario")
+    assert "yusuf" in s.lords
     # Put Yusuf at a Christian Kingdom locale ("leon" if exists).
     if "leon" in s.locales:
         s.lords["yusuf"].cylinder = Cylinder(kind="locale", locale_id="leon")
@@ -232,8 +231,7 @@ def test_m18_restores_unarmored_and_adds_mule() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     taifa_lords = [lid for lid, l in s.lords.items()
                    if l.is_taifa and l.cylinder.kind == "locale"]
-    if not taifa_lords:
-        pytest.skip("no Taifa Lords on map in this scenario")
+    assert taifa_lords, "no Taifa Lords on map in this scenario"
     # Strip a Light Horse from the first Taifa Lord so M18 should
     # restore it.
     target = taifa_lords[0]
@@ -255,8 +253,7 @@ def test_m18_restores_unarmored_and_adds_mule() -> None:
 def test_m22_three_jihad_when_eudes_on_map() -> None:
     s = load_scenario("scenario_e_alfonso", seed=1) \
         if True else load_scenario("scenario_a_toledo_beset", seed=1)
-    if "eudes" not in s.lords:
-        pytest.skip("eudes not present in this scenario")
+    assert "eudes" in s.lords
     s.lords["eudes"].cylinder = Cylinder(kind="locale", locale_id="leon")
     next(iter(s.taifas.values())).status = "parias"
     r = resolve_event(s, "muslim", "M22")

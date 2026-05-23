@@ -17,8 +17,7 @@ from almoravid.state import Cylinder
 
 def test_m9_two_jihad_when_yusuf_in_reconquista() -> None:
     s = load_scenario("scenario_d_arrival", seed=1)
-    if "yusuf" not in s.lords:
-        pytest.skip("yusuf not present")
+    assert "yusuf" in s.lords
     # Force a Taifa to Reconquista with Yusuf inside.
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "reconquista"
@@ -35,8 +34,7 @@ def test_m9_two_jihad_when_yusuf_in_reconquista() -> None:
 
 def test_m20_three_jihad_when_yusuf_in_reconquista_locale() -> None:
     s = load_scenario("scenario_d_arrival", seed=1)
-    if "yusuf" not in s.lords:
-        pytest.skip("yusuf not present")
+    assert "yusuf" in s.lords
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "reconquista"
     loc_id = target_taifa.locale_ids[0]
@@ -49,8 +47,7 @@ def test_m20_three_jihad_when_yusuf_in_reconquista_locale() -> None:
 
 def test_m21_jihad_branch_doubled_with_yusuf() -> None:
     s = load_scenario("scenario_d_arrival", seed=1)
-    if "yusuf" not in s.lords:
-        pytest.skip("yusuf not present")
+    assert "yusuf" in s.lords
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "parias"
     loc_id = target_taifa.locale_ids[0]
@@ -68,8 +65,7 @@ def test_m21_jihad_branch_doubled_with_yusuf() -> None:
 def test_c19_fitna_shifts_two_taifa_lords_and_bans() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     r = resolve_event(s, "christian", "C19")
-    if r.get("no_op"):
-        pytest.skip("no Taifa Lords on Calendar in this scenario")
+    assert not r.get("no_op"), "expected Taifa Lords on Calendar (C19)"
     assert len(r["shifted"]) == 2
     banned = set(s.meta.muster_banned_this_levy_lord_ids)
     for entry in r["shifted"]:
@@ -95,8 +91,7 @@ def test_c24_shifts_yusuf_and_sir_when_on_calendar() -> None:
             s.calendar.service_markers.append(
                 ServiceMarker(lord_id=lid, box=8))
     r = resolve_event(s, "christian", "C24")
-    if r.get("no_op"):
-        pytest.skip("yusuf/sir not on calendar")
+    assert not r.get("no_op"), "yusuf/sir should be on calendar"
     banned = set(s.meta.muster_banned_this_levy_lord_ids)
     assert {"yusuf", "sir"} <= banned
 
@@ -120,8 +115,7 @@ def test_c17_genoa_pisa_ravages_two_muslim_ports() -> None:
                     and l.cylinder.locale_id == lid):
                 l.cylinder = Cylinder(kind="locale", locale_id="sahagun")
     r = resolve_event(s, "christian", "C17")
-    if r.get("no_op"):
-        pytest.skip("no eligible Muslim Ports in this scenario")
+    assert not r.get("no_op"), "expected eligible Muslim Ports (C17)"
     assert len(r["ravaged"]) <= 2
     for p in r["ravaged"]:
         assert s.locales[p].ravaged == "yellow"
@@ -131,16 +125,14 @@ def test_c18_runaway_slaves_restores_christian_foot() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     christians = [lid for lid, l in s.lords.items()
                   if l.side == "christian" and l.cylinder.kind == "locale"]
-    if not christians:
-        pytest.skip("no Christian Lord on map")
+    assert christians, "no Christian Lord on map"
     target = christians[0]
     # Strip a Men-at-Arms unit so C18 restores it.
     if s.lords[target].forces.get("men_at_arms", 0) > 0:
         s.lords[target].forces["men_at_arms"] = 0
     mules_before = s.lords[target].assets.get("mule", 0)
     r = resolve_event(s, "christian", "C18")
-    if r.get("no_op"):
-        pytest.skip("no eligible Christian Lord (Phase 6j C18)")
+    assert not r.get("no_op"), "expected an eligible Christian Lord (C18)"
     assert s.lords[target].assets.get("mule", 0) == mules_before + 1
 
 
@@ -178,8 +170,7 @@ def test_c16_bernard_shifts_service_right() -> None:
         if s.lords.get(sm.lord_id)
         and s.lords[sm.lord_id].side == "christian"
     ]
-    if not christians_on_cal:
-        pytest.skip("no Christian Lord on Calendar")
+    assert christians_on_cal, "no Christian Lord on Calendar"
     target = min(s.calendar.service_markers,
                  key=lambda sm: sm.box if sm.lord_id in christians_on_cal
                  else 999)
@@ -217,8 +208,7 @@ def test_c25_de_vivar_parks_as_hold() -> None:
 
 def test_c26_freebooter_disbands_rodrigo_al_sayyid() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    if "rodrigo_al_sayyid" not in s.lords:
-        pytest.skip("rodrigo_al_sayyid not present in this scenario")
+    assert "rodrigo_al_sayyid" in s.lords
     s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
         kind="locale", locale_id="leon")
     s.lords["rodrigo_al_sayyid"].in_stronghold = False

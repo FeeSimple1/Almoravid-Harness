@@ -56,8 +56,7 @@ def test_levy_transport_returns_lost_serf():
                 and l.lordship_rating > 0):
             lid = cand
             break
-    if lid is None:
-        pytest.skip("no Christian Lord with Serfs at a Friendly Locale")
+    assert lid is not None, "no Christian Lord with Serfs at a Friendly Locale"
     # Simulate a lost Serf.
     start = statics[lid]["forces"]["serfs"]
     s.lords[lid].forces["serfs"] = start - 1
@@ -75,8 +74,7 @@ def test_levy_transport_rejected_at_enemy_locale():
                       if l.side == "christian" and l.cylinder.kind == "locale"
                       and not is_friendly_locale(s, l.cylinder.locale_id,
                                                  "christian")), None)
-    if enemy_lid is None:
-        pytest.skip("no Christian Lord at an Enemy Locale in this scenario")
+    assert enemy_lid is not None, "no Christian Lord at an Enemy Locale in this scenario"
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "levy_transport", "side": "christian",
                          "lord_id": enemy_lid, "transport": "cart"})

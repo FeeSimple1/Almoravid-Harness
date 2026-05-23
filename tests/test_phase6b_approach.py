@@ -185,8 +185,7 @@ def test_respond_avoid_battle_succeeds_to_other_neighbor() -> None:
         if not blocked:
             target = n
             break
-    if target is None:
-        pytest.skip("No clean Avoid Battle target on this map seed")
+    assert target is not None, "expected a clean Avoid Battle target on this seed"
     res = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                            "target_locale_id": target, "way_type": "road"})
     assert res["avoided_to"] == target

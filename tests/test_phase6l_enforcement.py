@@ -96,8 +96,7 @@ def test_add_jihad_spreads_round_robin_across_eligible() -> None:
                 and l.cylinder.locale_id in t.locale_ids):
             l.cylinder = Cylinder(kind="locale", locale_id="leon")
     eligible = _jihad_eligible_locales(s)
-    if len(eligible) < 2:
-        pytest.skip("need >=2 eligible locales for round-robin test")
+    assert len(eligible) >= 2, "need >=2 eligible locales for round-robin test"
     placement = _add_jihad(s, 3, {})
     # 3 markers across >=2 locales: round-robin gives no single locale
     # more than ceil(3/len) — and total is exactly 3.
@@ -138,8 +137,7 @@ def test_m12_cylinder_left_for_calendar_lord() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     taifa_lord = next((lid for lid, l in s.lords.items()
                        if l.is_taifa and l.side == "muslim"), None)
-    if taifa_lord is None:
-        pytest.skip("no Taifa Lord")
+    assert taifa_lord is not None, "no Taifa Lord"
     s.lords[taifa_lord].cylinder = Cylinder(kind="calendar", box=8)
     r = resolve_event(s, "muslim", "M12", payload={"lord_ids": [taifa_lord]})
     entry = r["shifted"][0]
@@ -151,8 +149,7 @@ def test_m12_lordship_plus_2_branch() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     taifa_lord = next((lid for lid, l in s.lords.items()
                        if l.is_taifa and l.side == "muslim"), None)
-    if taifa_lord is None:
-        pytest.skip("no Taifa Lord")
+    assert taifa_lord is not None, "no Taifa Lord"
     rating_before = s.lords[taifa_lord].lordship_rating
     r = resolve_event(s, "muslim", "M12",
                       payload={"mode": "lordship", "lord_id": taifa_lord})
@@ -173,8 +170,7 @@ def test_c16_muster_branch_musters_christian_from_calendar() -> None:
     s.lords[christian].cylinder = Cylinder(kind="calendar", box=6)
     r = resolve_event(s, "christian", "C16",
                       payload={"mode": "muster", "lord_id": christian})
-    if r.get("no_op"):
-        pytest.skip(f"{christian} has no Seat in static data")
+    assert not r.get("no_op"), f"{christian} should have a Seat in static data"
     assert r["mustered"] == christian
     assert s.lords[christian].cylinder.kind == "locale"
 
@@ -192,8 +188,7 @@ def test_c23_cylinder_branch_shifts_calendar_box() -> None:
         if lid in s.lords:
             target = lid
             break
-    if target is None:
-        pytest.skip("neither abu_bakr nor al_mustain in scenario")
+    assert target is not None, "neither abu_bakr nor al_mustain in scenario"
     s.lords[target].cylinder = Cylinder(kind="calendar", box=9)
     if not any(sm.lord_id == target for sm in s.calendar.service_markers):
         s.calendar.service_markers.append(ServiceMarker(lord_id=target, box=9))

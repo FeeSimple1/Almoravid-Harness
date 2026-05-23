@@ -47,5 +47,4 @@ def test_yusuf_sir_double_seat_placed_when_mustered() -> None:
         if y is not None and y.cylinder.kind == "locale":
             assert "yusuf" in s.locales["algeciras"].seat_marker_lord_ids
             return
-    import pytest
-    pytest.skip("no scenario starts with Yusuf mustered")
+    raise AssertionError("expected a scenario starting with Yusuf mustered")

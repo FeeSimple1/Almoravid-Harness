@@ -58,8 +58,7 @@ def test_muster_places_service_marker_ahead():
     levier = _pick_levier(s, "christian")
     assert levier is not None
     r = _muster_until_success(s, "christian", lid, levier)
-    if r is None:
-        pytest.skip("Fealty roll never succeeded in window")
+    assert r is not None, "Fealty roll should succeed within the retry window"
     expected = min(17, s.calendar.current_box + svc_rating)
     assert r["service_box"] == expected
     sm = next(m for m in s.calendar.service_markers
@@ -90,8 +89,7 @@ def test_muster_taifa_lord_sets_independent():
     lid = next((l.id for l in s.lords.values()
                 if l.is_taifa and l.side == "muslim" and l.fealty is not None
                 and l.home_taifa), None)
-    if lid is None:
-        pytest.skip("no Taifa Lord with Fealty")
+    assert lid is not None, "no Taifa Lord with Fealty"
     s.lords[lid].cylinder = Cylinder(kind="calendar",
                                      box=s.calendar.current_box)
     s.calendar.service_markers = [m for m in s.calendar.service_markers
@@ -102,9 +100,7 @@ def test_muster_taifa_lord_sets_independent():
     while s.meta.active_player != "muslim":
         step_levy(s)
     levier = _pick_levier(s, "muslim")
-    if levier is None:
-        pytest.skip("no eligible Muslim Levying Lord")
+    assert levier is not None, "no eligible Muslim Levying Lord"
     r = _muster_until_success(s, "muslim", lid, levier)
-    if r is None:
-        pytest.skip("Fealty roll never succeeded")
+    assert r is not None, "Fealty roll should succeed within the retry window"
     assert s.taifas[home].status == "independent"

@@ -41,8 +41,7 @@ def test_bfs_finds_multi_hop_route() -> None:
                 break
         if two:
             break
-    if two is None:
-        pytest.skip("no 2-hop road locale from seat in this map")
+    assert two is not None, "no 2-hop road locale from seat in this map"
     # Clear enemies off the path.
     for l in s.lords.values():
         if l.side == "muslim":
@@ -59,8 +58,7 @@ def test_multi_seat_supply_adds_prov_per_seat() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     lord_id = "alfonso"
     seats = s.lords[lord_id].seats
-    if len(seats) < 2:
-        pytest.skip("alfonso has <2 Seats")
+    assert len(seats) >= 2, "alfonso should have >=2 Seats"
     from almoravid.map import neighbors_via
     # Need the two seats road-connected and enemy-free.
     s0, s1 = seats[0], seats[1]
@@ -68,8 +66,7 @@ def test_multi_seat_supply_adds_prov_per_seat() -> None:
         if l.side == "muslim":
             l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
     routes = _find_supply_routes(s, s0, seats, "christian", s.lords[lord_id])
-    if routes.get(s1) is None:
-        pytest.skip("seats not connected by an unblocked route")
+    assert routes.get(s1) is not None, "seats should be connected by a route"
     hops = len(routes[s1])
     _activate_supply(s, lord_id, s0, {"mule": hops})
     prov_before = 0
@@ -85,15 +82,13 @@ def test_supply_insufficient_transport_for_multi_seat_rejected() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     lord_id = "alfonso"
     seats = s.lords[lord_id].seats
-    if len(seats) < 2:
-        pytest.skip("alfonso has <2 Seats")
+    assert len(seats) >= 2, "alfonso should have >=2 Seats"
     s0, s1 = seats[0], seats[1]
     for l in s.lords.values():
         if l.side == "muslim":
             l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
     routes = _find_supply_routes(s, s0, seats, "christian", s.lords[lord_id])
-    if routes.get(s1) is None:
-        pytest.skip("seats not connected")
+    assert routes.get(s1) is not None, "seats should be connected"
     # Zero transport — the non-here Seat can't be supplied.
     _activate_supply(s, lord_id, s0, {})  # no cart/mule
     with pytest.raises(IllegalAction) as ei:

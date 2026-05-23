@@ -130,12 +130,10 @@ def test_dawud_supply_amount_via_handler() -> None:
     1 extra). Set up an activation state directly to avoid scenario-
     specific plan-size plumbing."""
     s = load_scenario("scenario_d_arrival", seed=1)
-    if "yusuf" not in s.lords:
-        pytest.skip("yusuf not in scenario_d")
+    assert "yusuf" in s.lords
     from almoravid.static_data import load_lords
     seats = load_lords()["lords"]["yusuf"].get("seats", [])
-    if not seats:
-        pytest.skip("yusuf has no seat")
+    assert seats, "yusuf has no seat"
     seat = seats[0]
     s.lords["yusuf"].cylinder = Cylinder(kind="locale", locale_id=seat)
     s.lords["yusuf"].in_stronghold = False
@@ -161,8 +159,7 @@ def test_camels_negates_arid_terrain() -> None:
     from tests.test_phase6h_tier_a import _setup_active_lord
     # Muslim marches; Christian holds C4 Arid Terrain; Muslim has Camels.
     s = load_scenario("scenario_a_toledo_beset", seed=11)
-    if "al_mutamid" not in s.lords:
-        pytest.skip("al_mutamid missing")
+    assert "al_mutamid" in s.lords
     s2 = _setup_active_lord("scenario_a_toledo_beset", "al_mutamid",
                             "sevilla", seed=11)
     s2.decks.this_levy_events["christian"] = ["C4"]

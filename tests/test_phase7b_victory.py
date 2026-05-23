@@ -112,9 +112,7 @@ def test_full_game_advance_to_end_sets_winner() -> None:
     # Jump the Calendar marker to just before the Scenario End box.
     end_box = next((b.number for b in s.calendar.boxes
                     if "scenario_end" in b.decorations), None)
-    if end_box is None:
-        import pytest
-        pytest.skip("no scenario_end marker in scenario A")
+    assert end_box is not None, "no scenario_end marker in scenario A"
     # Drive the end-of-Campaign Calendar advance (which performs the
     # scenario_end check) via the end_campaign action.
     s.calendar.current_box = end_box - 1

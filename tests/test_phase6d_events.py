@@ -115,15 +115,13 @@ def test_m15_adds_three_jihad_when_yusuf_present() -> None:
     target_taifa = next(t for t in s.taifas.values())
     target_taifa.status = "parias"
     target_locale = target_taifa.locale_ids[0]
-    if "yusuf" in s.lords:
-        s.lords["yusuf"].cylinder = Cylinder(kind="locale",
-                                             locale_id=target_locale)
-        s.lords["yusuf"].in_stronghold = False
-        r = resolve_event(s, "muslim", "M15",
-                          payload={"locale_id": target_locale})
-        assert r["jihad_added"] == 3
-    else:
-        pytest.skip("yusuf not in this scenario")
+    assert "yusuf" in s.lords
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale",
+                                         locale_id=target_locale)
+    s.lords["yusuf"].in_stronghold = False
+    r = resolve_event(s, "muslim", "M15",
+                      payload={"locale_id": target_locale})
+    assert r["jihad_added"] == 3
 
 
 def test_m15_no_op_when_no_parias_taifa() -> None:
@@ -146,8 +144,7 @@ def test_m16_shifts_service_and_bans_alfonso_muster() -> None:
     box_before = next(
         (sm.box for sm in s.calendar.service_markers
          if sm.lord_id == "alvar_fanez"), None)
-    if box_before is None:
-        pytest.skip("alvar_fanez not on Calendar in this scenario")
+    assert box_before is not None, "alvar_fanez should be on Calendar"
     r = resolve_event(s, "muslim", "M16",
                       payload={"lord_id": "alvar_fanez"})
     assert r["service_shifted"] == "alvar_fanez"

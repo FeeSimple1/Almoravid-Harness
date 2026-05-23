@@ -26,8 +26,7 @@ def test_c13_grants_units_when_count_with_christians() -> None:
     target_candidates = [lid for lid in ("sancho", "eudes",
                                           "al_mustain", "al_mundir")
                          if lid in s.lords]
-    if not target_candidates:
-        pytest.skip("no Berenguer-eligible Lord in this scenario")
+    assert target_candidates, "no Berenguer-eligible Lord in this scenario"
     target = target_candidates[0]
     s.lords[target].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords[target].in_stronghold = False
@@ -66,13 +65,11 @@ def test_m23_mirrors_c13_when_count_with_christians() -> None:
 
 def test_c14_pope_gregory_service_shift_right() -> None:
     s = load_scenario("scenario_e_alfonso", seed=1)
-    if "sancho" not in s.lords:
-        pytest.skip("sancho not in this scenario")
+    assert "sancho" in s.lords
     s.decks.this_levy_events["christian"] = ["C14"]
     sm = next((m for m in s.calendar.service_markers
                if m.lord_id == "sancho"), None)
-    if sm is None:
-        pytest.skip("sancho not on Calendar")
+    assert sm is not None, "sancho should be on Calendar"
     box_before = sm.box
     r = apply_action(s, {"type": "play_pope_gregory",
                          "side": "christian",
@@ -84,8 +81,7 @@ def test_c14_pope_gregory_service_shift_right() -> None:
 
 def test_c14_pope_gregory_muster_from_calendar() -> None:
     s = load_scenario("scenario_e_alfonso", seed=1)
-    if "sancho" not in s.lords:
-        pytest.skip("sancho not in this scenario")
+    assert "sancho" in s.lords
     s.decks.this_levy_events["christian"] = ["C14"]
     s.lords["sancho"].cylinder = Cylinder(kind="calendar")
     r = apply_action(s, {"type": "play_pope_gregory",
@@ -117,8 +113,7 @@ def test_c15_cluniacs_service_shift_right_on_alfonso() -> None:
     s.decks.this_levy_events["christian"] = ["C15"]
     sm = next((m for m in s.calendar.service_markers
                if m.lord_id == "alfonso"), None)
-    if sm is None:
-        pytest.skip("alfonso not on Calendar")
+    assert sm is not None, "alfonso should be on Calendar"
     box_before = sm.box
     r = apply_action(s, {"type": "play_cluniacs",
                          "side": "christian",
@@ -204,8 +199,7 @@ def test_m19_african_fleet_moves_lord_between_ports() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     # Find two Muslim-side Ports.
     ports = [lid for lid, loc in s.locales.items() if loc.has_port]
-    if len(ports) < 2:
-        pytest.skip("not enough Ports in scenario map")
+    assert len(ports) >= 2, "not enough Ports in scenario map"
     from_port = ports[0]
     to_port = ports[1]
     # Drive state to a Muslim activation with al_mutamid at from_port.
@@ -230,8 +224,7 @@ def test_m19_african_fleet_moves_lord_between_ports() -> None:
 def test_m19_rejects_non_port_destination() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     ports = [lid for lid, loc in s.locales.items() if loc.has_port]
-    if not ports:
-        pytest.skip("no Ports in scenario")
+    assert ports, "no Ports in scenario"
     from tests.test_phase6h_tier_a import _setup_active_lord
     s2 = _setup_active_lord("scenario_a_toledo_beset", "al_mutamid",
                              ports[0])
@@ -253,8 +246,7 @@ def test_m19_rejects_non_port_destination() -> None:
 
 def test_c25_reconcile_removes_sayyid_and_grants_muslim_vp() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    if "rodrigo_al_sayyid" not in s.lords:
-        pytest.skip("rodrigo_al_sayyid not in scenario")
+    assert "rodrigo_al_sayyid" in s.lords
     s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
         kind="locale", locale_id="leon")
     s.lords["rodrigo_al_sayyid"].in_stronghold = False
@@ -271,8 +263,7 @@ def test_c25_reconcile_removes_sayyid_and_grants_muslim_vp() -> None:
 
 def test_c25_rejects_when_sayyid_not_on_map() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    if "rodrigo_al_sayyid" not in s.lords:
-        pytest.skip("rodrigo_al_sayyid not in scenario")
+    assert "rodrigo_al_sayyid" in s.lords
     s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(kind="calendar")
     s.decks.this_levy_events["christian"] = ["C25"]
     with pytest.raises(IllegalAction) as ei:

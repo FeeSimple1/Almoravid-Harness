@@ -51,8 +51,7 @@ def test_c12_song_of_roland_mirrors_c11() -> None:
 
 def test_c11_eudes_musters_ready_vassals_when_on_map() -> None:
     s = load_scenario("scenario_e_alfonso", seed=1)
-    if "eudes" not in s.lords:
-        pytest.skip("eudes not in this scenario")
+    assert "eudes" in s.lords
     s.lords["eudes"].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords["eudes"].in_stronghold = False
     # Mark Eudes's Vassals as not yet Mustered (Phase 6i auto-Musters).
@@ -116,48 +115,46 @@ def test_m6_discarded_after_round2() -> None:
 
 
 def test_c9_betrayal_doubles_spoils_and_adds_jihad() -> None:
-    """When C9 is held during a successful Christian Surrender, Spoils
-    are doubled and Muslims add 1 Jihad."""
+    """C9 (Hold): on a successful Christian Surrender, take Spoils as if
+    Sack (doubled) and the Muslims add 1 Jihad.
+
+    Deterministic setup: Alfonso besieges Játiva (a Muslim/Independent
+    TOWN, hence Enemy and besiegeable), with the Surrender threshold
+    maxed (Siege 4 + Ravaged = 5). A Town rolls a single Surrender die
+    (value 1); seed=1 rolls 5, so the Surrender succeeds every run. The
+    earlier version besieged a *city* but compared against *town* spoils
+    and only asserted inside `if surrender succeeded`, so it passed
+    vacuously whenever the (unpinned) roll failed."""
     from almoravid.static_data import load_strongholds
-    # Build a state where Alfonso besieges a Town and forces Surrender.
-    s = load_scenario("scenario_a_toledo_beset", seed=99)
-    # Place Alfonso outside Tudela (or similar Muslim Town). Use cordoba.
-    target_loc = "cordoba"
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    target_loc = "jativa"   # Muslim (Independent) Town -> Enemy to Christian
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id=target_loc)
     s.lords["alfonso"].in_stronghold = False
     s.lords["alfonso"].assets = {}
-    # Clear any opposing-side lords from cordoba.
     for lid, l in s.lords.items():
         if (l.side == "muslim" and l.cylinder.kind == "locale"
                 and l.cylinder.locale_id == target_loc):
             l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
-    s.locales[target_loc].siege_yellow = 3  # high threshold for Surrender
+    s.locales[target_loc].siege_yellow = 4        # threshold = min(4,4) + ...
+    s.locales[target_loc].ravaged = "yellow"      # ... 1 (Christian Ravaged) = 5
     s.decks.this_levy_events["christian"] = ["C9"]
     s.meta.phase = "campaign"
     s.meta.campaign_step = "activation"
     s.meta.active_player = "christian"
     s.meta.active_lord_id = "alfonso"
     s.meta.actions_remaining = 1
-    jihad_locs_before = sum(loc.jihad_markers for loc in s.locales.values())
-    # Note: rng controls Surrender; force the test to use a high-prob
-    # threshold by giving Alfonso siege already at 3 (close to value=2
-    # for Town). Run cmd_siege which triggers Surrender check.
-    try:
-        result = apply_action(s, {"type": "cmd_siege", "side": "christian"})
-    except IllegalAction:
-        pytest.skip("cmd_siege rejected for setup reasons")
-    if result["surrender"] and result["surrender"]["succeeded"]:
-        # Verify C9 was consumed and Spoils doubled.
-        sh = load_strongholds()["strongholds"]["town"]
-        base = sh["spoils"]
-        spoils = result["surrender"]["spoils"]
-        assert spoils["coin"] == base["coin"] * 2
-        assert spoils["prov"] == base["prov"] * 2
-        assert result["surrender"]["c9_betrayal_used"] is True
-        assert "C9" in s.decks.discard
-        # Jihad added
-        jihad_locs_after = sum(loc.jihad_markers for loc in s.locales.values())
-        assert jihad_locs_after >= jihad_locs_before + 1
+    jihad_before = sum(loc.jihad_markers for loc in s.locales.values())
+    result = apply_action(s, {"type": "cmd_siege", "side": "christian"})
+    assert result["surrender"] is not None, "expected a Surrender roll"
+    assert result["surrender"]["succeeded"] is True, "Surrender should succeed"
+    base = load_strongholds()["strongholds"]["town"]["spoils"]
+    spoils = result["surrender"]["spoils"]
+    assert spoils["coin"] == base["coin"] * 2     # C9 doubles (as if Sack)
+    assert spoils["prov"] == base["prov"] * 2
+    assert result["surrender"]["c9_betrayal_used"] is True
+    assert "C9" in s.decks.discard
+    jihad_after = sum(loc.jihad_markers for loc in s.locales.values())
+    assert jihad_after >= jihad_before + 1        # Muslims add 1 Jihad
 
 
 # ---------------------------------------------------------------------------
@@ -201,44 +198,23 @@ def test_c6_surprise_places_two_siege_on_empty_stronghold_march() -> None:
     is empty → 2 Siege placed + surprise flag set."""
     from almoravid.map import neighbors_via
     s = load_scenario("scenario_a_toledo_beset", seed=11)
-    # Setup: place Alfonso at a road-neighbor of a Muslim Stronghold.
-    # Use 'toledo' (Muslim city) and a neighbor like 'talavera'.
-    if "toledo" in s.locales and "talavera" in s.locales:
-        target = "toledo"
-        from_loc = "talavera"
-        if from_loc not in neighbors_via(target, "road"):
-            pytest.skip("scenario map doesn't connect talavera-toledo by road")
-        # Park Alfonso at from_loc; ensure target is empty.
-        s.lords["alfonso"].cylinder = Cylinder(kind="locale",
-                                               locale_id=from_loc)
-        s.lords["alfonso"].in_stronghold = False
-        s.lords["alfonso"].assets = {}
-        # Clear any Lords at target.
-        for lid, l in s.lords.items():
-            if (l.cylinder.kind == "locale"
-                    and l.cylinder.locale_id == target):
-                l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
-        s.decks.this_levy_events["christian"] = ["C6"]
-        siege_before = s.locales[target].siege_yellow
-        # Drive to activation
-        from tests.test_phase6h_tier_a import _setup_active_lord
-        s2 = _setup_active_lord("scenario_a_toledo_beset", "alfonso",
-                                 from_loc)
-        s2.decks.this_levy_events["christian"] = ["C6"]
-        # Clear lords at toledo in this fresh state too.
-        for lid, l in s2.lords.items():
-            if (l.cylinder.kind == "locale"
-                    and l.cylinder.locale_id == "toledo"):
-                l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
-        before_siege = s2.locales["toledo"].siege_yellow
-        try:
-            apply_action(s2, {"type": "cmd_march", "side": "christian",
-                              "target_locale_id": "toledo",
-                              "way_type": "road"})
-        except IllegalAction:
-            pytest.skip("cmd_march rejected for setup reasons")
-        assert s2.locales["toledo"].siege_yellow == before_siege + 2
-        assert s2.meta.surprise_storm_pending_locale_id == "toledo"
-        assert "C6" in s2.decks.discard
-    else:
-        pytest.skip("toledo or talavera not in scenario")
+    # Alfonso Marches from talavera into the empty Muslim City of toledo.
+    target = "toledo"
+    from_loc = "talavera"
+    assert target in s.locales and from_loc in s.locales
+    assert from_loc in neighbors_via(target, "road"), \
+        "talavera-toledo must be a road Way"
+    # Drive to activation with Alfonso at from_loc holding C6.
+    from tests.test_phase6h_tier_a import _setup_active_lord
+    s2 = _setup_active_lord("scenario_a_toledo_beset", "alfonso", from_loc)
+    s2.decks.this_levy_events["christian"] = ["C6"]
+    # Ensure toledo is empty (no Lords) so C6 Surprise applies.
+    for lid, l in s2.lords.items():
+        if l.cylinder.kind == "locale" and l.cylinder.locale_id == "toledo":
+            l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
+    before_siege = s2.locales["toledo"].siege_yellow
+    apply_action(s2, {"type": "cmd_march", "side": "christian",
+                      "target_locale_id": "toledo", "way_type": "road"})
+    assert s2.locales["toledo"].siege_yellow == before_siege + 2
+    assert s2.meta.surprise_storm_pending_locale_id == "toledo"
+    assert "C6" in s2.decks.discard

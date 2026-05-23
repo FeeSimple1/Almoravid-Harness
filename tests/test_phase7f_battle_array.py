@@ -43,9 +43,7 @@ def test_retreat_without_concede_transfers_all_assets() -> None:
     result = _retreat_setup(s, conceded=False)
     summary = apply_retreat_aftermath(s, result)
     entry = summary["losers"][0]
-    if entry["fate"] != "retreat":
-        import pytest
-        pytest.skip("did not take the retreat branch on this seed/map")
+    assert entry["fate"] == "retreat", "expected the retreat branch on this seed/map"
     # All of Alfonso's Assets transferred to al-Mutamid.
     assert s.lords["alfonso"].assets == {}
     assert s.lords["al_mutamid"].assets.get("coin", 0) == 3
@@ -58,9 +56,7 @@ def test_concede_then_retreat_keeps_non_loot_non_excess_prov() -> None:
     result = _retreat_setup(s, conceded=True)
     summary = apply_retreat_aftermath(s, result)
     entry = summary["losers"][0]
-    if entry["fate"] != "retreat":
-        import pytest
-        pytest.skip("did not take the retreat branch")
+    assert entry["fate"] == "retreat", "expected the retreat branch"
     # Conceded: lose all Loot (2) + excess Prov (5 - 1 transport = 4).
     # Keep coin (3), mule (1), and 1 Prov (== transport capacity).
     assert s.lords["alfonso"].assets.get("loot", 0) == 0

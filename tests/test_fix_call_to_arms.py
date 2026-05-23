@@ -210,8 +210,7 @@ def test_call_emir_musters_taifa_lord():
     tl = next((l for l in s.lords.values()
                if l.is_taifa and l.seats and l.cylinder.kind == "calendar"),
               None)
-    if tl is None:
-        pytest.skip("no Calendar Taifa Lord with a Seat in this scenario")
+    assert tl is not None, "no Calendar Taifa Lord with a Seat in this scenario"
     seat = tl.seats[0]
     # Ensure the Seat is Muslim-Friendly + free of Siege.
     s.taifas[s.locales[seat].territory].status = "independent"
@@ -222,8 +221,7 @@ def test_call_emir_musters_taifa_lord():
     free = [seat] if not any(
         o.cylinder.kind == "locale" and o.cylinder.locale_id == seat
         and o.side != tl.side for o in s.lords.values()) else []
-    if not free:
-        pytest.skip("seat blocked by enemy presence")
+    assert free, "seat should be free of enemy presence"
     r = apply_action(s, {"type": "cta_call_emir", "side": "muslim",
                          "taifa_lord_id": tl.id, "mode": "muster",
                          "seat": seat})
@@ -266,8 +264,7 @@ def test_crusade_jihad_added_by_muslim():
     assert s.meta.active_player == "muslim"
     from almoravid.events import _jihad_eligible_locales
     elig = _jihad_eligible_locales(s)
-    if not elig:
-        pytest.skip("no Jihad-eligible Locale")
+    assert elig, "no Jihad-eligible Locale"
     tgt = elig[0]
     j0 = s.locales[tgt].jihad_markers
     apply_action(s, {"type": "cta_add_crusade_jihad", "side": "muslim",

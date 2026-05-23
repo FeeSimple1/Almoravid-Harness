@@ -90,8 +90,7 @@ def test_dinars_deposit_moves_coin_to_box() -> None:
     taifa_lord = next((lid for lid, l in s.lords.items()
                        if l.is_taifa and l.side == "muslim"
                        and lid not in ("yusuf", "sir")), None)
-    if taifa_lord is None:
-        pytest.skip("no eligible Taifa Lord")
+    assert taifa_lord is not None, "no eligible Taifa Lord"
     s.lords[taifa_lord].cylinder = Cylinder(kind="locale", locale_id="sevilla")
     s.lords[taifa_lord].in_stronghold = False
     s.lords[taifa_lord].assets = {"coin": 4}
@@ -130,8 +129,7 @@ def test_c10_includes_taifas_box_coin() -> None:
 
 def test_c25_taifas_box_vp_counts_for_muslim() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    if "rodrigo_al_sayyid" not in s.lords:
-        pytest.skip("rodrigo_al_sayyid not in scenario")
+    assert "rodrigo_al_sayyid" in s.lords
     s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
         kind="locale", locale_id="leon")
     s.lords["rodrigo_al_sayyid"].in_stronghold = False
