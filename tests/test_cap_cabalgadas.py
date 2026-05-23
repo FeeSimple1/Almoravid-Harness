@@ -93,3 +93,62 @@ def test_cabalgadas_shares_provender_from_same_locale_ally() -> None:
     r = apply_action(s, moves[0])
     assert r["prov_payer"] == "pedro_ansurez"   # only ally at toledo with Prov
     assert s.lords["pedro_ansurez"].assets.get("prov", 0) == 0  # ally's Prov spent
+
+
+# --- M24 Al-Garada: the Muslim Cabalgadas twin (Q-002) -------------------
+def test_m24_is_this_lord_and_eligible_to_seven_muslim_raiders() -> None:
+    from almoravid.static_data import load_cards
+    from almoravid.capabilities import (capability_eligible_lords,
+                                        MUSLIM_RAIDERS_SEVEN)
+    assert load_cards()["cards"]["M24"]["capability_scope"] == "this_lord"
+    assert capability_eligible_lords("M24") == MUSLIM_RAIDERS_SEVEN
+    assert MUSLIM_RAIDERS_SEVEN == {
+        "abd_allah", "abu_bakr", "al_mundir", "al_mustain", "al_mutamid",
+        "al_mutawakkil", "rodrigo_al_sayyid"}
+    # Yusuf and Sir are NOT Taifa Lords -> not eligible.
+    assert "yusuf" not in MUSLIM_RAIDERS_SEVEN
+    assert "sir" not in MUSLIM_RAIDERS_SEVEN
+
+
+def test_m24_levy_offered_to_taifa_muslims_not_yusuf() -> None:
+    from almoravid.legal_moves import legal_moves
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
+    s.meta.active_player = "muslim"
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale", locale_id="sevilla")
+    s.lords["yusuf"].in_stronghold = False
+    offered = {m["lord_id"] for m in legal_moves(s)
+               if m["type"] == "levy_take_capability" and m["card_id"] == "M24"}
+    assert offered, "M24 should be Levy-able by Taifa Muslims"
+    assert "yusuf" not in offered
+    assert all(s.lords[lid].is_taifa or lid == "rodrigo_al_sayyid"
+               for lid in offered)
+
+
+def test_m24_enables_cabalgadas_for_taifa_muslim_bearer() -> None:
+    from almoravid.legal_moves import legal_moves
+    from almoravid.campaign import _cabalgadas_capable
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    am = s.lords["al_mutamid"]
+    am.capabilities.append("M24")
+    s.decks.capabilities_in_play.append(CardInPlay(
+        card_id="M24", scope="this_lord", owner_side="muslim",
+        owner_lord_id="al_mutamid"))
+    am.cylinder = Cylinder(kind="locale", locale_id="sevilla")
+    am.in_stronghold = False
+    am.assets["prov"] = 1
+    for l in s.lords.values():
+        if l.side == "christian" and l.cylinder.kind == "locale":
+            l.cylinder = Cylinder(kind="locale", locale_id="jaca")
+    s.meta.phase = "campaign"
+    s.meta.campaign_step = "activation"
+    s.meta.active_player = "muslim"
+    s.meta.active_lord_id = "al_mutamid"
+    s.meta.actions_remaining = 2
+    assert _cabalgadas_capable(s, "al_mutamid")
+    moves = [m for m in legal_moves(s) if m["type"] == "cmd_cabalgadas"]
+    assert moves, "M24 bearer should be offered cmd_cabalgadas"
+    r = apply_action(s, moves[0])
+    assert s.locales[r["target"]].ravaged == "green"
+    assert s.meta.actions_remaining == 0

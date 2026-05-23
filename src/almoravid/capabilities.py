@@ -29,10 +29,21 @@ from almoravid.static_data import load_cards
 CHRISTIAN_CAPTAINS_FOUR = frozenset({
     "pedro_ansurez", "garcia_ordonez", "alvar_fanez", "rodrigo_campeador",
 })
+# M24 Al-Garada (Muslim long-range Ravage, the Cabalgadas twin) is held by
+# "Taifa Muslim or Rodrigo al-Sayyid" (Arts of War ref M24). "Taifa Muslim" =
+# the six Taifa Lords per the 1.5.1 design note (Yusuf/Sir/Rodrigo are NOT
+# Taifa Lords); Rodrigo al-Sayyid (green cylinder) is named separately. Yusuf
+# and Sir are NOT eligible. [Q-002 resolution]
+MUSLIM_RAIDERS_SEVEN = frozenset({
+    "abd_allah", "abu_bakr", "al_mundir", "al_mustain", "al_mutamid",
+    "al_mutawakkil",          # the six Taifa Muslim Lords
+    "rodrigo_al_sayyid",      # named separately on the card
+})
 _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
     "C24": CHRISTIAN_CAPTAINS_FOUR,   # Garcia Jimenez
+    "M24": MUSLIM_RAIDERS_SEVEN,      # Al-Garada (Muslim Cabalgadas) [Q-002]
 }
 
 

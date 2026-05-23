@@ -89,8 +89,9 @@ Marshal, target/bearer not already a Lower Lord). Tests: tests/test_q001_alferez
 
 ## Q-002 — M24 Al-Garada (Muslim long-range Ravage): capability scope
 
-**Status:** open
+**Status:** resolved
 **Filed:** 2026-05-23
+**Resolved:** 2026-05-23
 
 **Question:** M24 Al-Garada is the Muslim equivalent of Cabalgadas (Arts of War
 ref M24: "This Lord may pay 1 Prov to use entire card to Ravage across up to 2
@@ -113,8 +114,17 @@ its eligibility ("Taifa Muslim or Rodrigo al-Sayyid") is modeled. Not guessed.
 2. 3.4.4 capability scope + Q-001 precedent (the "This Lord" phrasing -> this_lord;
    side-wide caps carry an explicit "board edge" Tips line, which M24 lacks).
 
-**Resolution:** (pending user adjudication; cmd_cabalgadas already supports any
-this_lord Cabalgadas-family capability, so wiring M24 is a one-line capability
-check + eligibility set once scope/eligibility are confirmed.)
+**Resolution:** (user adjudication 2026-05-23) Same pattern as Q-001 — the
+cards-data "side_wide" was the bug. Scope = **this_lord** ("This Lord" text; the
+M24 Tips invoke the 3.4.4 same-title cap, confirming it is mat-bound; every
+genuine side-wide Muslim cap (M10/M12/M16/M19/M22) carries an explicit "board
+edge, not a mat" Tips line, which M24 lacks). Eligible bearers = the seven
+"Taifa Muslim or Rodrigo al-Sayyid": the six Taifa Lords (al-Mustain, Abu Bakr,
+Abd Allah, al-Mutawakkil, al-Mutamid, al-Mundir; 1.5.1 design note) plus Rodrigo
+al-Sayyid (green cylinder). Yusuf and Sir are NOT Taifa Lords -> NOT eligible.
+Implemented: cards.json M24 scope -> this_lord; capabilities.MUSLIM_RAIDERS_SEVEN
++ capability_eligible_lords("M24") (enforced at deploy/Levy + enumerators, same
+gates as Q-001); _cabalgadas_capable unified over CABALGADAS_CAPS={C14,C17,M24}
+so the existing cmd_cabalgadas handler covers M24. Tests: tests/test_cap_cabalgadas.py.
 **Affected code:** src/almoravid/data/static/cards.json (M24 scope);
 campaign._cabalgadas_capable (add M24 + Muslim eligibility).

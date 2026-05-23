@@ -601,3 +601,14 @@ three (their cards were deployable but the abilities never fired):
   family capability, so M24 is a one-line addition once Q-002 is adjudicated.
 Round-trip probe (random + combat) across scenarios with these in play: no
 over-enumeration. Suite 879 passed, 0 skipped.
+
+### Q-002 RESOLVED (2026-05-23) — M24 Al-Garada wired
+Same fix pattern as Q-001: cards.json M24 capability_scope this_lord (was
+side_wide); eligible bearers = capabilities.MUSLIM_RAIDERS_SEVEN = the six Taifa
+Muslim Lords (abd_allah, abu_bakr, al_mundir, al_mustain, al_mutamid,
+al_mutawakkil) + rodrigo_al_sayyid (Yusuf/Sir excluded — not Taifa Lords).
+Eligibility enforced at deploy (3.1.2) + Levy (3.4.4) and mirrored in both
+enumerators. _cabalgadas_capable now checks CABALGADAS_CAPS={C14,C17,M24}, so
+the existing cmd_cabalgadas long-range-Ravage handler/enumeration cover the
+Muslim twin with no new command. Tests: tests/test_cap_cabalgadas.py (3 M24
+cases). Round-trip probe: no over-enumeration. Suite 882 passed, 0 skipped.

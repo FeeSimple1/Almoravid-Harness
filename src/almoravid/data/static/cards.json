@@ -448,7 +448,7 @@
       "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Al-Garada",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "M25": {

@@ -4676,12 +4676,17 @@ def _has_unbesieged_enemy_lord(state, locale_id: str, side) -> bool:
     return False
 
 
+# The long-range-Ravage capability family: C14/C17 Cabalgadas (Christian) and
+# M24 Al-Garada (Muslim, "See Cabalgadas"). Same mechanics; one per Lord (3.4.4
+# same-title cap; C/M are different sides so no Lord can hold both anyway).
+CABALGADAS_CAPS = ("C14", "C17", "M24")
+
+
 def _cabalgadas_capable(state, lord_id: str) -> bool:
-    """The Lord holds a Cabalgadas long-range-Ravage capability (C14 or
-    C17, both titled 'Cabalgadas'; 3.4.4 limits a Lord to one)."""
+    """The Lord holds a Cabalgadas-family long-range-Ravage capability
+    (C14/C17 Cabalgadas or M24 Al-Garada)."""
     from almoravid.capabilities import lord_has_capability
-    return (lord_has_capability(state, lord_id, "C14")
-            or lord_has_capability(state, lord_id, "C17"))
+    return any(lord_has_capability(state, lord_id, c) for c in CABALGADAS_CAPS)
 
 
 def _cabalgadas_prov_holder(state, lord_id: str, side):
