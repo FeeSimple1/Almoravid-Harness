@@ -159,6 +159,7 @@ class Harness:
                                   "code": e.code, "detail": str(e),
                                   **self._where()})
             raise
+        self._last_menu = []   # state changed; require a fresh legal() before apply(index)
         errs = self.invariants()
         if errs:
             self.findings.append({"kind": "invariant_violation",
