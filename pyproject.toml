@@ -7,7 +7,7 @@ name = "almoravid-harness"
 version = "0.2.0"
 description = "Python harness for GMT's Almoravid: Reconquista and Crusade in Spain, 1085-1086."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "Proprietary" }
 authors = [{ name = "FeeSimple1" }]
 dependencies = [
