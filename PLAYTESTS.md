@@ -29,3 +29,26 @@ the documented lagging display tracker (F6) -- the verdict uses compute_final_vp
 
 A second, combat-seeking run ended earlier at box 4 by a CORRECT 5.2 ruling
 (a side reduced to no Mustered Lords loses), also clean through that point.
+
+## Independent playtest by ChatGPT (2026-05-23) — Scenario F, no bugs found
+A second model (ChatGPT) drove Scenario F via the model-agnostic harness
+(playtest_harness.py: validated palette + invariants) under four policies
+(greedy/strategic/random/sustain, seeds 1/2/99) plus the built-in 20-session
+sweep. RESULT: zero findings — no over-enumeration, invariant violations,
+zero-legal stalls, handler exceptions, or apply rejections. The sustain policy
+reached box 13, exercising the Curias/Winter path into the box-9 Spring Levy
+before ending. (Outcomes: greedy s1 -> box3 Christian 5.2; strategic s1 -> box4
+Christian 5.2; random s2 -> box5 Muslim 5.2; sustain s99 -> box13 Christian 5.2.)
+
+VERIFIED (trust-but-verify): independently replayed ChatGPT's greedy-seed-1
+action history (218 actions) through the engine with full-fanout over-enum
+probing + invariants at every step -> reproduced exactly (box 3, Christian win,
+0 over-enum / 0 invariant breaks / 0 rejections). The clean result is real, not
+a harness-misuse artifact.
+
+CONFIRMED CROSS-TESTER OBSERVATION (not a bug): naive automated policies tend to
+end early by Campaign Victory (5.2 — a side reduced to no Mustered Lords),
+because keeping both sides mustered+paid through the Calendar requires
+deliberate play. Both this project's survivalist run (reached box 15, natural VP
+end) and ChatGPT's sustain run (box 13) confirm the late game IS reachable; it
+just needs a non-greedy policy. Not a defect — 5.2 fires correctly.
