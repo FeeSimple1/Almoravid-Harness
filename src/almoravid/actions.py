@@ -450,9 +450,12 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
         _cap_ok = True
         if lord is not None:
             from almoravid.static_data import load_cards as _lc
+            from almoravid.capabilities import capability_eligible_lords as _cel
             _nm = _lc()["cards"].get(card_id, {}).get("capability_name")
+            _elig = _cel(card_id)   # 3.4.4 card-text eligible-Lord set [Q-001]
             _cap_ok = (_nm not in _this_lord_cap_titles(lord)
-                       and len(lord.capabilities) < 2)
+                       and len(lord.capabilities) < 2
+                       and (_elig is None or lord_id in _elig))
         if (lord is not None and lord.side == side
                 and lord.cylinder.kind == "locale" and _cap_ok):
             lord.capabilities.append(card_id)
@@ -1865,12 +1868,20 @@ def _this_lord_cap_titles(lord) -> list[str]:
 
 def _check_this_lord_cap_limits(lord, card_id: str) -> None:
     """3.4.4 This-Lord Capability restrictions: a Lord may hold at most
-    TWO This-Lord Capabilities, and may not hold two with the same title.
-    Enforced as a hard gate on adding a new one (rather than a forced
-    discard, which would require a separate player choice)."""
+    TWO This-Lord Capabilities, may not hold two with the same title, and
+    may only hold a capability whose card text lists him as eligible
+    (e.g. C8 Hueste / C15 Alferez / C24 Garcia Jimenez -> the four
+    Christian captains). [Q-001] Enforced as a hard gate on adding a new
+    one (rather than a forced discard, which would require a separate
+    player choice)."""
     from almoravid.static_data import load_cards
+    from almoravid.capabilities import capability_eligible_lords
     cards = load_cards()["cards"]
     new_title = cards.get(card_id, {}).get("capability_name")
+    _elig = capability_eligible_lords(card_id)
+    _require(_elig is None or lord.id in _elig,
+             f"{lord.id} is not eligible to hold Capability {card_id} "
+             f"(3.4.4 card-text Lords list)", code="lord_not_eligible")
     existing = _this_lord_cap_titles(lord)
     _require(new_title not in existing,
              f"{lord.id} already has a This-Lord Capability titled "

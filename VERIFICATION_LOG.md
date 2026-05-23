@@ -557,3 +557,20 @@ under-enumeration cross-check.
   unmodeled. Faithful wiring needs the scope + eligibility adjudicated
   (RULES_QUESTIONS.md Q-001). Left a documented no-op note at the enumeration
   site so the gap is visible.
+
+### Q-001 RESOLVED (2026-05-23) — Alférez (C15) wired
+User adjudication: the cards-data scope was the bug. C15 capability_scope
+this_lord (was side_wide); eligible bearers = fixed set
+capabilities.CHRISTIAN_CAPTAINS_FOUR {pedro_ansurez, garcia_ordonez,
+alvar_fanez, rodrigo_campeador} (printed card list; identical for C8 Hueste &
+C24 García Jiménez), NOT a Command-rating predicate, Rodrigo = Campeador only.
+Enforced eligibility at deploy (3.1.2 _h_aow_deploy_capability inline check)
+and Levy (3.4.4 _check_this_lord_cap_limits), mirrored in both enumerators so
+no over-/under-enumeration. With scope=this_lord the toggle_lieutenant handler
+gate (lord_has_capability C15) is now reachable; re-enumerated the Alférez
+(un)stack at activation (4.1.3 outside-Plan-step exception). Five tests in
+tests/test_q001_alferez.py (scope+eligibility set, levy-offers-only-captains,
+handler-rejects-non-captain, stack->unstack, Marshal-not-a-target). Five
+test_capabilities/test_fix_l13 cases that used C15 as a side_wide EXAMPLE were
+repointed to C22 Bishoprics (a genuine side_wide cap). Round-trip probe with
+C15 in play: no over-enumeration. Suite 868 passed, 0 skipped.

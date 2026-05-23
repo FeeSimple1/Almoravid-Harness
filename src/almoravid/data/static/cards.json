@@ -133,7 +133,7 @@
       "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Alférez",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "C16": {

@@ -21,11 +21,11 @@ def _arts_of_war(s, first_levy=True):
 def test_first_levy_deploys_side_wide_capability_to_edge() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _arts_of_war(s, first_levy=True)
-    s.decks.pending_draw["christian"] = ["C15"]   # side_wide
+    s.decks.pending_draw["christian"] = ["C22"]   # side_wide
     apply_action(s, {"type": "aow_deploy_capability", "side": "christian",
-                     "card_id": "C15"})
-    assert "C15" in s.decks.board_edge["christian"]
-    assert any(c.card_id == "C15" for c in s.decks.capabilities_in_play)
+                     "card_id": "C22"})
+    assert "C22" in s.decks.board_edge["christian"]
+    assert any(c.card_id == "C22" for c in s.decks.capabilities_in_play)
     assert s.decks.pending_draw["christian"] == []
 
 
@@ -45,12 +45,12 @@ def test_pass_step_blocked_until_pending_processed() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _arts_of_war(s, first_levy=True)
     s.meta.aow_draw_done["christian"] = True   # drew already; now process
-    s.decks.pending_draw["christian"] = ["C15"]
+    s.decks.pending_draw["christian"] = ["C22"]
     types = {m["type"] for m in legal_moves(s)}
     assert "pass_step" not in types
     assert any(m["type"] == "aow_deploy_capability" for m in legal_moves(s))
     apply_action(s, {"type": "aow_deploy_capability", "side": "christian",
-                     "card_id": "C15"})
+                     "card_id": "C22"})
     types2 = {m["type"] for m in legal_moves(s)}
     assert "pass_step" in types2
 

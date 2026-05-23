@@ -18,6 +18,31 @@ from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
 
 
+# Eligible-Lord sets for This-Lord capabilities whose card text restricts
+# WHO may hold them (Arts of War Reference "Lords." line; 3.4.4). The four
+# Christian "captains" share one list across C8 Hueste, C15 Alferez, and
+# C24 Garcia Jimenez (their card "Lords." lines are identical). Eligibility
+# is a fixed set printed on the card, NOT a rule-derived predicate, so it
+# does not recompute when Command ratings change (e.g. via Mesnada).
+# Rodrigo eligibility binds to Rodrigo Campeador (the Christian/yellow
+# cylinder), never Rodrigo al-Sayyid. [Q-001 resolution]
+CHRISTIAN_CAPTAINS_FOUR = frozenset({
+    "pedro_ansurez", "garcia_ordonez", "alvar_fanez", "rodrigo_campeador",
+})
+_CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
+    "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
+    "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
+    "C24": CHRISTIAN_CAPTAINS_FOUR,   # Garcia Jimenez
+}
+
+
+def capability_eligible_lords(card_id: str) -> frozenset[str] | None:
+    """The set of Lord ids that may hold This-Lord capability `card_id`,
+    or None if any Lord (of the right side) may hold it (3.4.4 + card
+    text). Used to gate both deploy (3.1.2) and Levy (3.4.4) assignment."""
+    return _CAPABILITY_ELIGIBLE_LORDS.get(card_id)
+
+
 def _scope_of(card_id: str) -> str | None:
     """Return 'this_lord' or 'side_wide' for the named card; None if no capability half."""
     cards = load_cards()["cards"]

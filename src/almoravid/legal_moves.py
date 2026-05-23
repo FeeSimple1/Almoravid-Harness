@@ -230,8 +230,13 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                                 "side": side, "card_id": cid})
                 else:  # this_lord: offer each eligible Mustered Lord (+ discard)
                     _nm = rec.get("capability_name")
+                    from almoravid.capabilities import (
+                        capability_eligible_lords as _cel_d)
+                    _elig_d = _cel_d(cid)   # 3.4.4 card-text eligibility [Q-001]
                     for lid, l in state.lords.items():
                         if l.side != side or l.cylinder.kind != "locale":
+                            continue
+                        if _elig_d is not None and lid not in _elig_d:
                             continue
                         held = [cards.get(c, {}).get("capability_name")
                                 for c in l.capabilities]
@@ -420,9 +425,15 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 for card_id in _unused_capability_cards(state, side):
                     _rec = _capcards.get(card_id, {})
                     if _rec.get("capability_scope") == "this_lord":
-                        # 3.4.4: max 2 This-Lord caps, no same title.
+                        # 3.4.4: max 2 This-Lord caps, no same title, and
+                        # card-text eligibility (e.g. C8/C15/C24). [Q-001]
+                        from almoravid.capabilities import (
+                            capability_eligible_lords as _cel_l)
+                        _elig_l = _cel_l(card_id)
                         if (len(lord.capabilities) >= 2
-                                or _rec.get("capability_name") in _held):
+                                or _rec.get("capability_name") in _held
+                                or (_elig_l is not None
+                                    and lid not in _elig_l)):
                             continue
                     out.append({"type": "levy_take_capability", "side": side,
                                 "lord_id": lid, "card_id": card_id})
@@ -730,15 +741,31 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 lord_id = state.meta.active_lord_id
                 lord = state.lords[lord_id]
                 out.append({"type": "cmd_pass", "side": active})
-                # NOTE: C15 Alferez (the Capability half of C15) lets an
-                # ELIGIBLE Christian Lord (Lords.txt: Alvar Fanez, Rodrigo)
-                # spend a Command action to stack/unstack as a Lieutenant
-                # (4.1.3; Arts of War ref C15). It is intentionally NOT
-                # enumerated yet: the capability's scope is recorded as
-                # side_wide but its handler (toggle_lieutenant) gates on a
-                # this_lord check, and the eligible-Lord set is unmodeled.
-                # Wiring it correctly is a Q-candidate (see RULES_QUESTIONS) —
-                # not guessed here. [Advisory #3 / known unwired capability]
+                # C15 Alferez (This-Lord capability): the bearer may spend
+                # 1 Command action to stack as a Lieutenant onto a same-Locale
+                # Christian Lord, or unstack -- the 4.1.3 exception allowing
+                # (un)stacking outside the Plan step, repeatable within a card.
+                # Q-001 resolved (scope=this_lord; eligible bearers = the four
+                # captains, enforced at Levy/deploy), so lord_has_capability is
+                # now reachable. Mirrors _h_toggle_lieutenant's 4.1.3 gates.
+                from almoravid.capabilities import lord_has_capability as _lhc_al
+                if _lhc_al(state, lord_id, "C15"):
+                    if lord.lieutenant_of is not None:
+                        out.append({"type": "toggle_lieutenant",
+                                    "side": active, "mode": "unstack"})
+                    else:
+                        from almoravid.campaign import _is_marshal as _ism_al
+                        _here_al = lord.cylinder.locale_id
+                        for _cid, _cl in state.lords.items():
+                            if (_cid != lord_id and _cl.side == active
+                                    and not _ism_al(_cid, active)
+                                    and _cl.cylinder.kind == "locale"
+                                    and _cl.cylinder.locale_id == _here_al
+                                    and not any(x.lieutenant_of == _cid
+                                                for x in state.lords.values())):
+                                out.append({"type": "toggle_lieutenant",
+                                            "side": active, "mode": "stack",
+                                            "commander_id": _cid})
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.

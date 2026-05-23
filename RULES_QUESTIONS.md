@@ -31,8 +31,9 @@ references checked and what each said.
 
 ## Q-001 — Alférez (C15 capability): scope and eligible Lords
 
-**Status:** open
+**Status:** resolved
 **Filed:** 2026-05-23
+**Resolved:** 2026-05-23
 
 **Question:** How should the Alférez capability (the Capability half of card
 C15; the Event half is Cluniacs) be wired? Two unknowns block a faithful
@@ -66,6 +67,22 @@ eligibility are settled, the move is intentionally NOT enumerated (no guess).
 3. Rules of Play 4.1.3 (Lieutenants) + 3.4.4 (capability scope): not yet
    mapped to a definitive scope for Alférez specifically.
 
-**Resolution:** (pending user adjudication)
+**Resolution:** (user adjudication 2026-05-23) The cards-data "side_wide"
+entry was the bug. Scope = **this_lord** (C15 reads "This Lord may use 1
+Command to become or stop being a Lieutenant"; per 3.4.4, capabilities WITHOUT
+an explicit "put X at the board edge" Tips line tuck under the bearer's mat —
+every genuinely side-wide cap (C16/C18/C19/C20/C21/C22/C23, M10/M12/M16/M19...)
+carries that line; C15 does not). Eligible bearers = a FIXED set of four
+captains: Pedro Ansúrez, García Ordóñez, Álvar Fáñez, Rodrigo Campeador
+(printed on the card; Background Book p.54). Identical to C8 Hueste and C24
+García Jiménez -> factored as capabilities.CHRISTIAN_CAPTAINS_FOUR. NOT a
+Command-rating predicate; does not recompute (e.g. via Mesnada). Rodrigo
+eligibility binds to Rodrigo Campeador (Christian/yellow cylinder) only.
+Implemented: cards.json C15 scope -> this_lord; eligibility enforced at deploy
+(3.1.2) and Levy (3.4.4) via capability_eligible_lords, mirrored in both
+enumerators; toggle_lieutenant (the 4.1.3 outside-Plan-step exception) is now
+reachable and enumerated (stack onto a legal same-Locale target / unstack),
+the standard 4.1.3 constraints applying (target Christian, same Locale, not the
+Marshal, target/bearer not already a Lower Lord). Tests: tests/test_q001_alferez.py.
 **Affected code:** campaign._h_toggle_lieutenant (gate); legal_moves enumeration
 (currently a documented no-op note where the toggle would be offered).
