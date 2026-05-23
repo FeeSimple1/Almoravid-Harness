@@ -391,10 +391,14 @@ def _h_aow_draw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not state.meta.aow_draw_done.get(side),
              f"{side} has already drawn Arts of War this Levy (3.1.2/3.1.3)",
              code="already_drawn")
-    # 3.1.1 then 3.1.2/3.1.3: if the deck is empty, collect+shuffle first.
-    if not state.decks.draw:
-        _rebuild_aow_deck(state, side)
-        state.decks.draw = shuffle(state, state.decks.draw)
+    # 3.1.1 + SoP (arts_of_war: shuffle THEN draw 2): each side draws from
+    # ITS OWN deck (1.9.1 "Each side has its own deck"). decks.draw is a
+    # single shared pile, so collect this side's unused cards and shuffle
+    # before EVERY draw -- not only when the pile is empty. Otherwise, after
+    # the Christian player draws, the Muslim player would draw the Christian
+    # cards still sitting on the shared pile (3.1.1, 3.1.2/3.1.3). [P-1 playtest]
+    _rebuild_aow_deck(state, side)
+    state.decks.draw = shuffle(state, state.decks.draw)
     # Each side draws exactly TWO cards (or fewer only if the deck is
     # short). The count is fixed by rule, not chosen.
     n = min(2, len(state.decks.draw))

@@ -332,3 +332,27 @@ findings (F1-F8). All verified against the rules and fixed (one was a misread):
   the shift is and was applied.
 - F6 (fixed, display): render now shows the AUTHORITATIVE board VP (compute_final_vp), not
   the lagging running state.score tracker, so mid-game VP is accurate.
+
+## Combat-focused playtest (2026-05-22) — findings P-N
+A live drive of Scenario A through the real legal_moves -> apply_action
+pipeline, steering toward joined combat (Toledo is besieged by Álvar Fáñez
+at setup). Findings prefixed P- to distinguish from the earlier F- playtest.
+
+- P-1 (CRITICAL, fixed): each side must draw Arts of War cards from ITS OWN
+  deck (1.9.1 "Each side has its own deck of Arts of War cards"; 3.1.1
+  "shuffle all unused Christian ... do the same for the Muslim player";
+  3.1.2/3.1.3 "draws two ... from the player's own deck"; SoP v2 arts_of_war
+  step = shuffle THEN draw 2, per actor). BUG: state.decks.draw is a single
+  shared pile and _h_aow_draw only collected+shuffled it when EMPTY. So in
+  the first Levy the Christian player drew first (leaving ~20 Christian cards
+  on the shared pile) and then the Muslim player's aow_draw pulled those
+  leftover CHRISTIAN cards (observed: Muslim drew C5/C8). The deploy handler
+  has no side check, so the Muslim side then deployed Christian Capabilities.
+  Not caught earlier because the shared test helper (_plan_helpers.step_levy)
+  only shuffles when the pile is empty (reproducing the bug) and no test
+  asserted the side of drawn cards; the deep-invariant sweep checks no
+  card-side invariant. FIX: _h_aow_draw now rebuilds (collects this side's
+  unused cards via _rebuild_aow_deck) and shuffles before EVERY draw, not
+  only when empty -- matching the per-Levy shuffle-then-draw of 3.1.1/SoP.
+  No test hard-codes a real draw outcome, so no existing assertion changed.
+  Tests: tests/test_fix_aow_per_side_deck_p1.py (2). Full suite green.
