@@ -484,3 +484,12 @@ Locale. Audited all three "doors" independently; the §1 co-location invariant
   Locale free of Siege), so the advisory's inside-placement case is N/A; the
   Crusaders/Bishops events add Forces to already-placed Lords, not new cylinders.
   Tests: tests/test_advisory2_doors_bc.py (C16 + M21 reject enemy Seat).
+
+  Door C follow-up (independent audit): the audit grep found TWO more
+  auto-Muster paths with the same seats[0] bug — C14 Pope Gregory and C15
+  Cluniacs (_h_play_pope_gregory / _h_play_cluniacs, mode=muster_from_calendar,
+  campaign.py). Both are named in 3.4.1 ARTS OF WAR and now require a free Seat
+  via _free_seats_for (reject with code no_free_seat if none; not enumerated in
+  legal_moves, so no Pattern-9 risk). Tests: test_advisory2_doors_bc.py
+  (C14 rejects an enemy-occupied Seat). Door B sweep does NOT rescue this — it
+  clears markers, not co-located cylinders; the §1 invariant is the catch.

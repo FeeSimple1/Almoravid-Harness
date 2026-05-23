@@ -3760,14 +3760,19 @@ def _h_play_pope_gregory(state, action):
                  f"{lord_id} not on Calendar", code="not_on_calendar")
         from almoravid.static_data import load_lords as _ll
         from almoravid.state import Cylinder
+        from almoravid.actions import _free_seats_for
         rec = _ll()["lords"].get(lord_id, {})
-        seats = list(rec.get("seats", []))
-        _require(seats, f"{lord_id} has no Seats", code="no_seat")
-        lord.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+        # 3.4.1: auto-Muster places only at a free Seat (neither Enemy nor
+        # with an Enemy Lord present); "must otherwise still Muster by the
+        # usual rules" (3.4.1 ARTS OF WAR). [Door C, Advisory #2]
+        free = _free_seats_for(state, lord_id)
+        _require(free, f"{lord_id} has no free Seat to Muster (3.4.1)",
+                 code="no_free_seat")
+        lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
         lord.forces = dict(rec.get("forces", {}))
         lord.assets = dict(rec.get("assets", {}))
         lord.just_arrived_this_levy = True
-        result["mustered_at"] = seats[0]
+        result["mustered_at"] = free[0]
     elif mode == "service_shift_right":
         sm = next((s for s in state.calendar.service_markers
                    if s.lord_id == lord_id), None)
@@ -3852,14 +3857,19 @@ def _h_play_cluniacs(state, action):
                  f"{lord_id} not on Calendar", code="not_on_calendar")
         from almoravid.static_data import load_lords as _ll
         from almoravid.state import Cylinder
+        from almoravid.actions import _free_seats_for
         rec = _ll()["lords"].get(lord_id, {})
-        seats = list(rec.get("seats", []))
-        _require(seats, f"{lord_id} has no Seats", code="no_seat")
-        lord.cylinder = Cylinder(kind="locale", locale_id=seats[0])
+        # 3.4.1: auto-Muster places only at a free Seat (neither Enemy nor
+        # with an Enemy Lord present); "must otherwise still Muster by the
+        # usual rules" (3.4.1 ARTS OF WAR). [Door C, Advisory #2]
+        free = _free_seats_for(state, lord_id)
+        _require(free, f"{lord_id} has no free Seat to Muster (3.4.1)",
+                 code="no_free_seat")
+        lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
         lord.forces = dict(rec.get("forces", {}))
         lord.assets = dict(rec.get("assets", {}))
         lord.just_arrived_this_levy = True
-        result["mustered_at"] = seats[0]
+        result["mustered_at"] = free[0]
     elif mode == "service_shift_right":
         sm = next((s for s in state.calendar.service_markers
                    if s.lord_id == lord_id), None)

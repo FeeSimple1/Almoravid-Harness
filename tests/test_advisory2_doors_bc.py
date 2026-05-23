@@ -103,3 +103,27 @@ def test_doorC_m21_does_not_muster_onto_enemy_seat() -> None:
     assert not (s.lords[tl.id].cylinder.kind == "locale"
                 and s.lords[tl.id].cylinder.locale_id == seat)
     assert seat not in _co_located(s)
+
+
+def test_doorC_c14_pope_gregory_rejects_enemy_occupied_seat() -> None:
+    """C14 Pope Gregory muster_from_calendar must reject an enemy-occupied
+    Seat (3.4.1) rather than place the Lord co-located. (Same class as
+    C16/M21/M22; surfaced by the Advisory #2 audit alongside C15 Cluniacs.)"""
+    import pytest
+    from almoravid.actions import IllegalAction
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    s.lords["sancho"].cylinder = Cylinder(kind="calendar",
+                                          box=s.calendar.current_box)
+    assert s.lords["sancho"].seats == ["jaca"]
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="jaca")
+    s.lords["al_mustain"].in_stronghold = False
+    s.decks.this_levy_events["christian"] = ["C14"]
+    s.meta.phase = "levy"
+    s.meta.levy_step = "call_to_arms"
+    s.meta.active_player = "christian"
+    with pytest.raises(IllegalAction) as ei:
+        apply_action(s, {"type": "play_pope_gregory", "side": "christian",
+                         "lord_id": "sancho", "mode": "muster_from_calendar"})
+    assert ei.value.code == "no_free_seat"
+    assert s.lords["sancho"].cylinder.kind == "calendar"   # not placed
+    assert "jaca" not in _co_located(s)
