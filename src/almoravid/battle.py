@@ -971,6 +971,12 @@ def apply_battle_losses(
     permanently removed (3.3.1)."""
     from almoravid.state import Cylinder
     out: dict[str, dict] = {}
+    # 4.5.4 (rule line "becomes free of Enemy Lords ... remove all Siege or
+    # Bypass markers there"): track Locales where a besieging Lord is
+    # eliminated in combat so orphaned Siege/Bypass markers are cleared.
+    # [P-2 playtest] -- combat is the elimination path the F7 Disband/March
+    # cleanup did not cover; doing it here covers Storm, Sally, Battle, relief.
+    _removed_locales: list[str] = []
     if result.winner is None:
         # Stalemate — both sides simply roll vs Protection.
         loser_side = None
@@ -1015,9 +1021,20 @@ def apply_battle_losses(
                         setattr(lord, fld, type(getattr(lord, fld))())
                     except Exception:
                         pass
+                _gone_locale = lord.cylinder.locale_id
                 lord.cylinder = Cylinder(kind="removed")
                 _ssl(state, lid, boxes=20)
                 out[lid]["permanently_removed"] = True
+                if _gone_locale is not None:
+                    _removed_locales.append(_gone_locale)
+    # 4.5.4: clear Siege/Bypass markers at any Locale whose besieging side
+    # has just lost its last Lord there to combat (becomes "free of Enemy
+    # Lords"). _remove_orphaned_siege_bypass is per-side, so it leaves the
+    # surviving side's markers intact. [P-2]
+    if _removed_locales:
+        from almoravid.campaign import _remove_orphaned_siege_bypass
+        for _loc in dict.fromkeys(_removed_locales):
+            _remove_orphaned_siege_bypass(state, _loc)
     return out
 
 

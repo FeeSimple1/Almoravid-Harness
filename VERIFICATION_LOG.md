@@ -356,3 +356,18 @@ at setup). Findings prefixed P- to distinguish from the earlier F- playtest.
   only when empty -- matching the per-Levy shuffle-then-draw of 3.1.1/SoP.
   No test hard-codes a real draw outcome, so no existing assertion changed.
   Tests: tests/test_fix_aow_per_side_deck_p1.py (2). Full suite green.
+
+- P-2 (fixed): orphaned Siege/Bypass markers when the SOLE besieging Lord is
+  eliminated in COMBAT. Rule 4.5.4 (Siege): "Whenever a Besieged or Bypassed
+  Stronghold becomes free of Enemy Lords in the Locale, remove all Siege or
+  Bypass markers there." Observed in the playtest: Álvar Fáñez (the only
+  Christian Lord besieging Toledo) Stormed the City (walls 1-4, 6-unit
+  garrison), lost, and was reduced to zero Forces -> permanently removed
+  (3.3.1) inside apply_battle_losses. Toledo kept siege_yellow=1 with no
+  besieging Lord present. The F7 fix cleared orphaned markers on the Disband
+  and March departure paths but NOT on combat elimination. FIX: apply_battle_losses
+  (the single chokepoint for Storm/Sally/Battle/relief Losses) now records the
+  Locale of every Lord it permanently removes and calls
+  campaign._remove_orphaned_siege_bypass on each afterward; that helper is
+  per-side, so the surviving side's markers are untouched. Tests:
+  tests/test_fix_siege_cleanup_combat_p2.py (2: live Scenario-A Storm + unit).
