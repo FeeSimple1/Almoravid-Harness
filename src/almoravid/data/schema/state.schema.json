@@ -697,7 +697,8 @@
             "C",
             "D",
             "E",
-            "F"
+            "F",
+            "S"
           ],
           "title": "Scenario Letter",
           "type": "string"
@@ -723,7 +724,8 @@
             "campaign",
             "curias",
             "winter",
-            "ended"
+            "ended",
+            "battle"
           ],
           "title": "Phase",
           "type": "string"
@@ -732,6 +734,18 @@
           "default": 0,
           "title": "Turn Index",
           "type": "integer"
+        },
+        "sagrajas_role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sagrajas Role"
         },
         "version": {
           "default": "0.2.0",

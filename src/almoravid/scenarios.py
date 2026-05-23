@@ -64,6 +64,20 @@ def list_scenarios() -> list[str]:
     return sorted(p.stem for p in SCENARIOS_DIR.glob("*.json"))
 
 
+def list_campaign_scenarios() -> list[str]:
+    """Scenario ids that run the full Levy/Campaign cycle (i.e. NOT the
+    battle-only minigames like Sagrajas). Campaign-flow tests iterate this."""
+    import json as _json
+    out = []
+    for p in sorted(SCENARIOS_DIR.glob("*.json")):
+        try:
+            if not _json.loads(p.read_text()).get("battle_minigame"):
+                out.append(p.stem)
+        except Exception:
+            out.append(p.stem)
+    return out
+
+
 def scenario_path(name: str) -> Path:
     p = SCENARIOS_DIR / f"{name}.json"
     if not p.exists():
@@ -89,6 +103,8 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
     is Phase 2+ work.
     """
     raw = load_scenario_raw(name)
+    if raw.get("battle_minigame") == "sagrajas":
+        return build_sagrajas(seed)
 
     # ---- Meta -----------------------------------------------------
     meta = Meta(
@@ -358,3 +374,163 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
         taifas_box_vp=taifas_box_vp,
     )
     return state
+
+
+# ---------------------------------------------------------------------------
+# Battle of Sagrajas minigame (Background Book pp.44-47)
+# ---------------------------------------------------------------------------
+
+# Battlefield Locale: the open plain near Badajoz where the army awaited
+# Alfonso (Background Book). Any real Locale works for a battle-only game.
+_SAGRAJAS_LOCALE = "badajoz"
+
+# Rosters (Background Book "Lords, Vassals, and Capabilities").
+_SAGRAJAS_CHRISTIANS = ["alfonso", "pedro_ansurez", "garcia_ordonez",
+                        "alvar_fanez", "sancho"]
+_SAGRAJAS_MUSLIMS = ["yusuf", "sir", "al_mutamid", "al_mutawakkil", "abd_allah"]
+
+
+def _add_units(lord, units: dict) -> None:
+    for ut, n in units.items():
+        lord.forces[ut] = lord.forces.get(ut, 0) + n
+
+
+def build_sagrajas(seed: int = 0) -> GameState:
+    """Build the Battle of Sagrajas minigame as a battle-only GameState
+    (Background Book pp.44-47). Deterministic setup (the seed only drives
+    the stochastic Battle resolution). The state begins in phase 'battle'
+    with a pending Christian 'Who Attacks?' decision; choosing attack
+    (historical) or defend adds that branch's forces/cards, then the
+    Battle is resolved (4.4) and whoever wins the Battle wins the game.
+
+    "Any N Lords" / "any Lord mat" assignments are made DETERMINISTICALLY
+    (documented inline), since the Background Book's array diagram is an
+    image; the seed is not used for setup.
+    """
+    from almoravid.state import CardInPlay, Cylinder, PendingDecision
+
+    # Reuse Scenario F's full static assembly (map / lords / ways / taifas)
+    # as a skeleton, then reset it to the battle-only configuration.
+    s = load_scenario("scenario_f_reconquista", seed=seed)
+    s.meta.scenario_id = "sagrajas_battle"
+    s.meta.scenario_letter = "S"
+    s.meta.phase = "battle"
+    s.meta.active_player = "christian"
+    s.meta.sagrajas_role = None
+    s.meta.turn_index = 0
+    s.score.christian = 0.0
+    s.score.muslim = 0.0
+    s.score.winner = None
+    s.score.victory_reason = None
+    s.calendar.service_markers = []
+    # Reset campaign clutter inherited from the Scenario F skeleton: a
+    # battle-only minigame has no Taifa politics / VP markers / Sieges.
+    s.taifas_box_vp = 0.0
+    s.taifas_box_coin = 0.0
+    for loc in s.locales.values():
+        loc.siege_yellow = 0
+        loc.siege_green = 0
+        loc.bypass_yellow = False
+        loc.bypass_green = False
+        loc.conquered_markers = 0
+        loc.jihad_markers = 0
+        loc.ravaged = "none"
+        loc.seat_marker_lord_ids = []
+    s.decks.this_levy_events = {}
+    s.decks.this_campaign_events = {}
+    s.decks.held = {}
+    s.decks.board_edge = {}
+    s.decks.capabilities_in_play = []
+    s.decks.draw = []
+    s.pending = None
+
+    lord_static = load_lords()["lords"]
+
+    # Everyone off the board first.
+    for lid, l in s.lords.items():
+        l.cylinder = Cylinder(kind="set_aside")
+        l.forces = {}
+        l.capabilities = []
+        l.in_stronghold = False
+        l.is_lieutenant = False
+        l.lieutenant_of = None
+        l.routed_units = {}
+
+    def muster(lid: str, include_vassals: bool = True,
+               exclude_vassal_names: tuple[str, ...] = ()) -> None:
+        l = s.lords[lid]
+        st = lord_static[lid]
+        l.cylinder = Cylinder(kind="locale", locale_id=_SAGRAJAS_LOCALE)
+        l.in_stronghold = False
+        l.forces = dict(st["forces"])
+        if include_vassals:
+            for v in st.get("vassals", []):
+                if v["name"] in exclude_vassal_names:
+                    continue
+                _add_units(l, v["forces"])
+
+    # --- Christians: all starting + all Vassal Forces (Sancho: no Vassals).
+    for lid in ("alfonso", "pedro_ansurez", "garcia_ordonez", "alvar_fanez"):
+        muster(lid, include_vassals=True)
+    muster("sancho", include_vassals=False)
+
+    # Bishoprics (C22): one Bishop Vassal to EACH of Alfonso, Pedro, Garcia
+    # (Lords.txt Bishop markers: Edenoro 1K+1Mi, Pedro-of-Leon 1K+1MaA,
+    # Vistuario 1K+1Mi). Card sits at the Christian board edge (side_wide).
+    _add_units(s.lords["alfonso"], {"knights": 1, "militia": 1})
+    _add_units(s.lords["pedro_ansurez"], {"knights": 1, "men_at_arms": 1})
+    _add_units(s.lords["garcia_ordonez"], {"knights": 1, "militia": 1})
+    s.decks.board_edge.setdefault("christian", []).append("C22")
+    s.decks.capabilities_in_play.append(CardInPlay(
+        card_id="C22", scope="side_wide", owner_side="christian",
+        owner_lord_id=None))
+
+    # Milites (C18, side_wide): any two Christian Lords add 4 Light Horse +
+    # 2 Militia total (3 units each). Deterministic: Pedro & Garcia.
+    _add_units(s.lords["pedro_ansurez"], {"light_horse": 2, "militia": 1})
+    _add_units(s.lords["garcia_ordonez"], {"light_horse": 2, "militia": 1})
+    s.decks.board_edge.setdefault("christian", []).append("C18")
+    s.decks.capabilities_in_play.append(CardInPlay(
+        card_id="C18", scope="side_wide", owner_side="christian",
+        owner_lord_id=None))
+
+    # Arqueros Bowmen (C4 and C5): one copy at each of any two Christian
+    # Lords. Deterministic: C4 -> Alfonso, C5 -> Sancho. (this_lord cap;
+    # the resolver gates Bowmen rows on these card_ids.)
+    s.lords["alfonso"].capabilities.append("C4")
+    s.lords["sancho"].capabilities.append("C5")
+    for lid, cid in (("alfonso", "C4"), ("sancho", "C5")):
+        s.decks.capabilities_in_play.append(CardInPlay(
+            card_id=cid, scope="this_lord", owner_side="christian",
+            owner_lord_id=lid))
+
+    # --- Muslims: all starting + all Vassal Forces, EXCEPT Abd Allah drops
+    # his Light Horse Vassal (Al-Mutasim, Emir of Almeria).
+    for lid in ("yusuf", "sir", "al_mutamid", "al_mutawakkil"):
+        muster(lid, include_vassals=True)
+    muster("abd_allah", include_vassals=True,
+           exclude_vassal_names=("Al-Mutasim, Emir of Almeria",))
+
+    # Alrama Bowmen (M4 and M5): one each at two Muslim Taifa Lords (not
+    # Yusuf/Sir). Deterministic: M4 -> al-Mutamid, M5 -> al-Mutawakkil.
+    s.lords["al_mutamid"].capabilities.append("M4")
+    s.lords["al_mutawakkil"].capabilities.append("M5")
+    for lid, cid in (("al_mutamid", "M4"), ("al_mutawakkil", "M5")):
+        s.decks.capabilities_in_play.append(CardInPlay(
+            card_id=cid, scope="this_lord", owner_side="muslim",
+            owner_lord_id=lid))
+
+    # Muslims hold M7 Spear Wall to play at the outset of Battle.
+    s.decks.this_levy_events.setdefault("muslim", []).append("M7")
+
+    # NOTE (documented limitation): the Background Book also gives Yusuf and
+    # Sir a Javelins marker for their AFRICAN HORSE. The harness models
+    # Javelins (C7/M3/M6) for Unarmored Foot/Light Horse only (forces.json
+    # has no African-Horse Javelin row), so the African-Horse Javelins
+    # marker is not represented. Recorded in RULES_QUESTIONS (Sagrajas note).
+
+    # Pending: the Christian player decides Attack (historical) or Defend.
+    s.meta.active_player = "christian"
+    s.pending = PendingDecision(kind="sagrajas_who_attacks",
+                                waiting_on="christian", payload={})
+    return s

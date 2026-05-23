@@ -93,7 +93,65 @@ def _locale_markers_short(loc: Locale) -> str:
 # Summary view — LLM-budget-friendly
 # ---------------------------------------------------------------------------
 
+def render_sagrajas(state: GameState) -> str:
+    """Battle-only Sagrajas minigame view (Background Book pp.44-47): role,
+    Attacker/Defender, each side's Lords + Forces + Capabilities, the held
+    Battle Events, and the pending decision -- so an agent never inspects
+    raw objects to understand the battle."""
+    role = state.meta.sagrajas_role
+    lines = ["=== Battle of Sagrajas — battle-only minigame "
+             "(Almoravid Background Book) ===",
+             f"Scenario {state.meta.scenario_letter}  |  Active: "
+             f"{state.meta.active_player}",
+             "A single self-contained Battle (Rules 4.4). Whoever wins the "
+             "Battle wins the game."]
+    if role is None:
+        lines.append("DECISION: the Christian player chooses to ATTACK "
+                     "(historical) or DEFEND. Legal actions: sagrajas_attack, "
+                     "sagrajas_defend.")
+        atk_side = None
+    else:
+        atk_side = "christian" if role == "attack" else "muslim"
+        def_side = "muslim" if role == "attack" else "christian"
+        marshal = "alfonso" if role == "attack" else "yusuf"
+        if state.meta.phase == "ended":
+            lines.append(f"RESULT: winner={state.score.winner} "
+                         f"({state.score.victory_reason}).")
+        else:
+            lines.append(f"ROLE: Christians {role.upper()}  ->  ATTACKER = "
+                         f"{atk_side} (Marshal {marshal} at Front center, "
+                         f"4.4.1), DEFENDER = {def_side}. "
+                         f"Legal action: resolve_battle.")
+    held = state.decks.this_levy_events
+    sidewide = [c.card_id for c in state.decks.capabilities_in_play
+                if c.scope == "side_wide"]
+    for sd in ("christian", "muslim"):
+        on_map = [(lid, l) for lid, l in state.lords.items()
+                  if l.side == sd and l.cylinder.kind == "locale"]
+        tag = ""
+        if atk_side is not None:
+            tag = " (ATTACKER)" if sd == atk_side else " (DEFENDER)"
+        lines.append(f"\n{sd.capitalize()} army{tag}:")
+        for lid, l in on_map:
+            caps = ",".join(l.capabilities) if l.capabilities else "-"
+            lines.append(f"  {l.name} [{lid}]  forces=[{_forces_short(l.forces)}]"
+                         f"  caps={caps}")
+        h = held.get(sd, [])
+        if h:
+            lines.append(f"  Held Battle Events: {', '.join(h)}")
+    if sidewide:
+        lines.append(f"\nSide-wide capabilities in play: {', '.join(sorted(sidewide))}")
+    lines.append("\nCard key: C4/C5 Arqueros & M4/M5 Alrama = Bowmen; "
+                 "C7 Jabalinas & M3 Harbah = Javelins (up to 4 Unarmored, "
+                 "1 Round); C8 Cantador (+1 Melee R1, up to 4 K/S); C9 Slingers; "
+                 "C18 Milites & C22 Bishoprics = added units; M6 Feigned Retreat; "
+                 "M7 Spear Wall; M10 Andalusians (Light Horse Evade); M15 Saqalibah.")
+    return "\n".join(lines)
+
+
 def render_summary(state: GameState) -> str:
+    if state.meta.phase == "battle" or state.meta.scenario_letter == "S":
+        return render_sagrajas(state)
     box = state.calendar.current_box
     season = state.calendar.boxes[box - 1].season
     turn_type = state.calendar.boxes[box - 1].turn_type
@@ -204,6 +262,8 @@ def render_summary(state: GameState) -> str:
 # ---------------------------------------------------------------------------
 
 def render_verbose(state: GameState) -> str:
+    if state.meta.phase == "battle" or state.meta.scenario_letter == "S":
+        return render_sagrajas(state)
     out = [render_summary(state), "", "=== Full state ===", ""]
 
     # Calendar full

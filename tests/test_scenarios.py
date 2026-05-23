@@ -20,7 +20,7 @@ def test_load_scenario_returns_valid_gamestate(name: str) -> None:
     state = load_scenario(name)
     assert isinstance(state, GameState)
     assert state.meta.scenario_id
-    assert state.meta.scenario_letter in {"A", "B", "C", "D", "E", "F"}
+    assert state.meta.scenario_letter in {"A", "B", "C", "D", "E", "F", "S"}
     # Round-trip through pydantic to catch validation issues
     GameState.model_validate(state.model_dump())
 

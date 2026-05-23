@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from almoravid.scenarios import load_scenario, list_scenarios
+from almoravid.scenarios import load_scenario, list_campaign_scenarios
 from almoravid.campaign import compute_final_vp
 
 _DATA = Path(__file__).resolve().parent.parent / "src/almoravid/data/scenarios"
 
 
-@pytest.mark.parametrize("name", list_scenarios())
+@pytest.mark.parametrize("name", list_campaign_scenarios())
 def test_taifas_box_vp_matches_scenario_json(name: str) -> None:
     raw = json.loads((_DATA / f"{name}.json").read_text())
     expected = float((raw.get("taifas_box") or {}).get("conquered_green_1vp", 0))

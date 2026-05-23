@@ -612,3 +612,32 @@ enumerators. _cabalgadas_capable now checks CABALGADAS_CAPS={C14,C17,M24}, so
 the existing cmd_cabalgadas long-range-Ravage handler/enumeration cover the
 Muslim twin with no new command. Tests: tests/test_cap_cabalgadas.py (3 M24
 cases). Round-trip probe: no over-enumeration. Suite 882 passed, 0 skipped.
+
+## Battle of Sagrajas battle-only minigame (2026-05-23) — Background Book pp.44-47
+First-class, LLM-playable through the standard interface (list_scenarios /
+load_scenario / Harness), no manual battle-state construction.
+- Registered: sagrajas.json (battle_minigame flag) -> list_scenarios includes
+  "sagrajas"; load_scenario routes to build_sagrajas(seed). list_campaign_
+  scenarios() excludes it so campaign-flow tests skip it. Harness.start/show
+  work.
+- Setup (deterministic; seed only drives resolution): musters the Background
+  Book rosters with all Vassal Forces (Sancho none; Abd Allah drops his Almeria
+  Light Horse Vassal); Bishoprics (C22, +Bishop units to Alfonso/Pedro/Garcia),
+  Milites (C18, +4 LH +2 Mi), Arqueros (C4/C5) on two Christians; Alrama (M4/M5)
+  on two Taifa Lords; Muslims hold Spear Wall (M7). Enters phase 'battle' with a
+  pending Christian "Who Attacks?" decision.
+- Branches (req): sagrajas_attack (historical) adds Crusaders (+4 Knights),
+  Jabalinas (C7) + Slingers (C9) + Cantador (C8 Held) -> Christians Attack
+  (Marshal Alfonso Front center, 4.4.1). sagrajas_defend adds Saqalibah (M15,
+  +2 MaA), Harbah (M3), Andalusians (M10 side-wide Evade), Feigned Retreat (M6
+  Held) -> Yusuf Attacks. Then resolve_battle runs Battle 4.4; winner wins the
+  game (loser's Lords leave the field so no post-game co-location). Recorded in
+  score.winner / victory_reason; phase -> ended.
+- render_sagrajas: a clear battle view (role, Attacker/Defender + Marshal, each
+  side's Lords/Forces/Capabilities, Held Events, side-wide caps, a card key) so
+  an agent never inspects raw objects. legal()/apply() expose the role choice
+  and resolve_battle; the validated palette never offers a rejected action.
+- Deep-invariant sweep + round-trip probe now drive "sagrajas" automatically
+  (clean). Tests: tests/test_sagrajas_minigame.py (17). Limitation logged:
+  Yusuf/Sir African-Horse Javelins marker not modeled (RULES_QUESTIONS). Card
+  metadata gap C4/C5/M4/M5/M3/M6 logged as Q-003 (minigame unaffected).

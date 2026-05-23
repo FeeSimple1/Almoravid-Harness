@@ -128,3 +128,47 @@ gates as Q-001); _cabalgadas_capable unified over CABALGADAS_CAPS={C14,C17,M24}
 so the existing cmd_cabalgadas handler covers M24. Tests: tests/test_cap_cabalgadas.py.
 **Affected code:** src/almoravid/data/static/cards.json (M24 scope);
 campaign._cabalgadas_capable (add M24 + Muslim eligibility).
+
+## Q-003 — Bowmen/Javelin capability metadata missing for dual-half cards
+
+**Status:** open
+**Filed:** 2026-05-23 (surfaced building the Sagrajas minigame)
+
+**Question:** cards.json records capability_name=None / capability_scope=None
+for C4, C5 (Arqueros), M4, M5 (Alrama), M3, M6 (Harbah) — but the Arts of War
+Reference lists these as real Capability halves: "C4 & C5. Arqueros – Bowmen",
+"M4 & M5. Alrama – Bowmen", "M3 & M6. Harbah – Javelins" (dual-half cards, like
+C7 Baggage Parapet / Jabalinas). The RESOLVER applies their effects correctly
+(forces.json strikes_by_capability gates Bowmen on [C4,C5,M4,M5] and Javelins
+on [C7,M3,M6] via capabilities_in_play), so combat is faithful when the card is
+in play. But because the cards-data capability_scope is None, these capabilities
+cannot be Levied/deployed in normal CAMPAIGN play (levy_take_capability /
+aow_deploy_capability gate on capability_scope) — i.e. Arqueros/Alrama/Harbah
+are unreachable as Levy Capabilities. Should cards.json carry
+capability_name/scope=this_lord for C4/C5/M4/M5/M3/M6 (with the one-per-title
+3.4.4 cap the AoW Tips cite: "A Lord may have only one Arqueros/Alrama/Harbah
+card")? This is the same scope-data class as Q-001 (C15) and Q-002 (M24).
+
+**Why it matters:** an LLM in a full scenario cannot Levy Bowmen/Javelin
+capabilities. The Sagrajas minigame is unaffected (it deploys the cards
+directly), so this is logged, not blocking.
+
+**Consultation chain:**
+1. Arts of War Reference: "C4 & C5. Arqueros – Bowmen", "M4 & M5. Alrama –
+   Bowmen", "M3 & M6. Harbah – Javelins" — all this_lord-style ("this Lord's"
+   units; one-per-title cap), no "board edge" line.
+2. forces.json already gates the effects on these card_ids (resolver correct).
+3. cards.json: capability_name/scope = None for these six (the bug).
+
+**Resolution:** (pending user adjudication; likely set capability_name +
+this_lord scope for C4/C5/M4/M5/M3/M6, then verify deploy/Levy + eligibility.)
+**Affected code:** src/almoravid/data/static/cards.json.
+
+## Sagrajas minigame — documented modeling limitation (not a Q)
+The Background Book gives Yusuf and Sir a Javelins marker for their AFRICAN
+HORSE. The harness models Javelins (C7/M3/M6) for Unarmored Foot + Light Horse
+only (forces.json has no African-Horse Javelin row, and the Javelins MARKER's
+owner-declared round-of-use is not modeled — see resolver-fix (a) TODO). So in
+the minigame Yusuf/Sir's African Horse do not gain the Javelin Missile bonus.
+All other Sagrajas setup is faithful. Wiring African-Horse Javelins + the
+owner round-choice is broader resolver work (the Javelins-marker subsystem).

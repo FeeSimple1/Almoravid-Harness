@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from almoravid.render import render_focus, render_summary, render_verbose
-from almoravid.scenarios import list_scenarios, load_scenario
+from almoravid.scenarios import (list_scenarios, load_scenario,
+                                  list_campaign_scenarios)
 
 
 @pytest.mark.parametrize("name", list_scenarios())
@@ -19,7 +20,7 @@ def test_summary_renders(name: str) -> None:
     assert state.meta.active_player in out
 
 
-@pytest.mark.parametrize("name", list_scenarios())
+@pytest.mark.parametrize("name", list_campaign_scenarios())
 def test_verbose_is_superset_of_summary(name: str) -> None:
     state = load_scenario(name)
     summary = render_summary(state)

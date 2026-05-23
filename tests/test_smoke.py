@@ -56,9 +56,10 @@ def test_cli_version_subcommand_runs() -> None:
 def test_scenarios_inventory() -> None:
     """All 6 scenarios (A-F) are bundled."""
     names = list_scenarios()
-    assert len(names) == 6, names
+    # Six campaign scenarios (A-F) plus the Sagrajas battle-only minigame.
     letters = {load_scenario_raw(n)["scenario_letter"] for n in names}
-    assert letters == {"A", "B", "C", "D", "E", "F"}
+    assert {"A", "B", "C", "D", "E", "F"} <= letters
+    assert "sagrajas" in names
 
 
 @pytest.mark.parametrize("name", list_scenarios())
@@ -66,7 +67,7 @@ def test_each_scenario_parses(name: str) -> None:
     """Every bundled scenario JSON is well-formed."""
     data = load_scenario_raw(name)
     assert "scenario_id" in data
-    assert data["scenario_letter"] in {"A", "B", "C", "D", "E", "F"}
+    assert data["scenario_letter"] in {"A", "B", "C", "D", "E", "F", "S"}
     assert "starting_vp" in data
     assert "christian" in data["starting_vp"]
     assert "muslim" in data["starting_vp"]

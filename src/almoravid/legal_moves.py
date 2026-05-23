@@ -26,6 +26,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Return the list of currently-legal action dicts."""
     moves: list[dict[str, Any]] = []
 
+    # Battle of Sagrajas minigame (Background Book pp.44-47). The Christian
+    # chooses Attack/Defend, then the Attacker resolves the Battle.
+    if (state.pending is not None
+            and state.pending.kind == "sagrajas_who_attacks"):
+        return [{"type": "sagrajas_attack", "side": "christian"},
+                {"type": "sagrajas_defend", "side": "christian"}]
+    if (state.pending is not None
+            and state.pending.kind == "sagrajas_resolve"):
+        return [{"type": "resolve_battle", "side": state.pending.waiting_on}]
+
     # Phase 6b: when a march_arrival_response decision is pending, the
     # responder owes one of Avoid Battle / Withdraw / Stand & Fight
     # before any other action can proceed. Pattern 11: only the

@@ -17,9 +17,13 @@ it offers, or illegal board states it produces. You are NOT expected to win.
 from playtest_harness import Harness, selfplay_smoke
 
 print(Harness.scenarios())
-# ['scenario_a_toledo_beset', 'scenario_b_quelling_of_tajo',
+# ['sagrajas', 'scenario_a_toledo_beset', 'scenario_b_quelling_of_tajo',
 #  'scenario_c_parias_wars', 'scenario_d_arrival',
 #  'scenario_e_alfonso', 'scenario_f_reconquista']
+# 'sagrajas' is the battle-only Battle of Sagrajas minigame: it starts in a
+# 'battle' phase, the Christian chooses sagrajas_attack/sagrajas_defend, then
+# resolve_battle resolves a single Battle (whoever wins wins). h.start(...) and
+# h.show() also work.
 
 # A quick sanity run (random policy, validated palette + invariants active):
 print(selfplay_smoke("scenario_a_toledo_beset", seed=1, steps=300))

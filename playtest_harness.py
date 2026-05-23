@@ -98,6 +98,17 @@ class Harness:
                              f"forces={dict(l.forces)} caps={l.capabilities}")
         return "\n".join(lines)
 
+    def show(self, mode: str = "verbose") -> str:
+        """Alias for briefing() — the readable per-side battle/board view."""
+        return self.briefing(mode=mode)
+
+    def start(self, scenario: str, seed: int = 0) -> "Harness":
+        """(Re)start this harness on `scenario` (any id from scenarios(),
+        including 'sagrajas'). Mutates and returns self so both
+        `h.start('sagrajas', seed=1)` and `Harness.start(...)` styles work."""
+        self.__init__(scenario, seed=seed)
+        return self
+
     def pending(self) -> dict | None:
         return self.state.pending.model_dump() if self.state.pending else None
 
@@ -226,3 +237,8 @@ def selfplay_smoke(scenario: str = "scenario_a_toledo_beset", seed: int = 1,
 if __name__ == "__main__":
     print("Scenarios:", Harness.scenarios())
     print(json.dumps(selfplay_smoke(steps=120), indent=2, default=str)[:1500])
+
+
+def start(scenario: str, seed: int = 0) -> "Harness":
+    """Module-level convenience: `start("sagrajas", seed=1)` -> Harness."""
+    return Harness(scenario, seed=seed)

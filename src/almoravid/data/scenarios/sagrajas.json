@@ -1,0 +1,11 @@
+{
+  "scenario_id": "sagrajas_battle",
+  "scenario_letter": "S",
+  "name": "Battle of Sagrajas (battle-only minigame)",
+  "battle_minigame": "sagrajas",
+  "source": "Almoravid Background Book pp.44-47 (Battle of Sagrajas Minigame)",
+  "starting_vp": {
+    "christian": 0,
+    "muslim": 0
+  }
+}

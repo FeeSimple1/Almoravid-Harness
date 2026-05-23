@@ -12,7 +12,8 @@ import pytest
 
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
-from almoravid.scenarios import list_scenarios, load_scenario
+from almoravid.scenarios import (list_scenarios, load_scenario,
+                                  list_campaign_scenarios)
 from tests._plan_helpers import step_levy
 
 
@@ -62,7 +63,7 @@ def test_muster_step_enumerates_calendar_lords() -> None:
         assert "pedro_ansurez" in lord_ids or "garcia_ordonez" in lord_ids
 
 
-@pytest.mark.parametrize("name", list_scenarios())
+@pytest.mark.parametrize("name", list_campaign_scenarios())
 def test_self_play_reaches_campaign(name: str) -> None:
     """Pattern 1: greedy first-legal-move agent reaches campaign phase
     via Levy without any zero-moves stall."""
@@ -93,7 +94,8 @@ def test_every_legal_move_apply_succeeds(name: str) -> None:
     accepted by apply_action without IllegalAction (in a fresh state)."""
     import copy
     s = load_scenario(name, seed=7)
-    apply_action(s, {"type": "begin_levy"})
+    if s.meta.phase == "setup":
+        apply_action(s, {"type": "begin_levy"})
     moves = legal_moves(s)
     for m in moves:
         s_copy = copy.deepcopy(s)

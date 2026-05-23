@@ -82,11 +82,15 @@ class Meta(StrictModel):
     """
 
     scenario_id: str
-    scenario_letter: Literal["A", "B", "C", "D", "E", "F"]
+    scenario_letter: Literal["A", "B", "C", "D", "E", "F", "S"]
     seed: int = 0
     active_player: Side
-    phase: Literal["setup", "levy", "campaign", "curias", "winter", "ended"] = "setup"
+    phase: Literal["setup", "levy", "campaign", "curias", "winter", "ended",
+                   "battle"] = "setup"
     turn_index: int = 0
+    # Battle of Sagrajas minigame: "attack" (Christians attack, historical)
+    # or "defend" (Christians defend); None until the Christian chooses.
+    sagrajas_role: str | None = None
     version: str = "0.2.0"
 
     # Levy sub-phase tracking (Pattern 1: state-set-but-unreachable —

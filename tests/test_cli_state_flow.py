@@ -165,7 +165,9 @@ def test_multi_step_playthrough_via_cli(tmp_path) -> None:
 def test_scenarios_command_lists_all_six(tmp_path) -> None:
     r = _run("scenarios")
     lines = r.stdout.strip().splitlines()
-    assert len(lines) == 6
+    # Six campaign scenarios + the Sagrajas battle-only minigame.
+    assert len(lines) == 7
+    assert any("sagrajas" in ln for ln in lines)
 
 
 def test_new_with_unknown_scenario_exits_with_code_1(tmp_path) -> None:

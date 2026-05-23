@@ -4781,6 +4781,147 @@ def _h_cmd_cabalgadas(state, action):
             "enforcing_parias": res["enforcing_parias"],
             "actions_consumed": consumed}
 
+# ---------------------------------------------------------------------------
+# Battle of Sagrajas minigame handlers (Background Book pp.44-47)
+# ---------------------------------------------------------------------------
+
+def _h_sagrajas_attack(state, action):
+    """Christians Attack (historical). Add: two French Crusaders Vassal
+    markers (4 Knights total), Jabalinas (C7) + Slingers (C9), and
+    Cantador (C8) as a Held Event. Then the Christians are the Attacker."""
+    from almoravid.state import CardInPlay, PendingDecision
+    _require(state.meta.phase == "battle"
+             and state.pending is not None
+             and state.pending.kind == "sagrajas_who_attacks",
+             "no Sagrajas Who-Attacks decision pending", code="wrong_phase")
+    side = _require_side(action)
+    _require(side == "christian", "only the Christian chooses (Background Book)",
+             code="wrong_side")
+    # Two French Crusaders (4 Knights total): 2 to Alfonso, 2 to Alvar Fanez.
+    state.lords["alfonso"].forces["knights"] = \
+        state.lords["alfonso"].forces.get("knights", 0) + 2
+    state.lords["alvar_fanez"].forces["knights"] = \
+        state.lords["alvar_fanez"].forces.get("knights", 0) + 2
+    # Jabalinas (C7) -> Alfonso; Slingers (C9) -> Alvar Fanez (this_lord caps).
+    state.lords["alfonso"].capabilities.append("C7")
+    state.lords["alvar_fanez"].capabilities.append("C9")
+    for lid, cid in (("alfonso", "C7"), ("alvar_fanez", "C9")):
+        state.decks.capabilities_in_play.append(CardInPlay(
+            card_id=cid, scope="this_lord", owner_side="christian",
+            owner_lord_id=lid))
+    # Cantador (C8) as a Held Event, played at the outset of Battle.
+    state.decks.this_levy_events.setdefault("christian", []).append("C8")
+    state.meta.sagrajas_role = "attack"
+    state.meta.active_player = "christian"        # Christians Attack
+    state.pending = PendingDecision(kind="sagrajas_resolve",
+                                    waiting_on="christian", payload={})
+    _record(state, action, "Sagrajas: Christians choose to ATTACK (historical)")
+    return {"role": "attack", "attacker": "christian"}
+
+
+def _h_sagrajas_defend(state, action):
+    """Christians Defend (Yusuf attacks). Muslims add: Saqalibah (M15) at
+    al-Mutamid (+2 Men-at-Arms), Harbah (M3) at a Taifa Lord, Andalusians
+    (M10, side-wide Light-Horse Evade), and hold Feigned Retreat (M6)."""
+    from almoravid.state import CardInPlay, PendingDecision
+    _require(state.meta.phase == "battle"
+             and state.pending is not None
+             and state.pending.kind == "sagrajas_who_attacks",
+             "no Sagrajas Who-Attacks decision pending", code="wrong_phase")
+    side = _require_side(action)
+    _require(side == "christian", "only the Christian chooses (Background Book)",
+             code="wrong_side")
+    # Saqalibah (M15) at al-Mutamid's mat, adding 2 Men-at-Arms.
+    state.lords["al_mutamid"].forces["men_at_arms"] = \
+        state.lords["al_mutamid"].forces.get("men_at_arms", 0) + 2
+    state.lords["al_mutamid"].capabilities.append("M15")
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id="M15", scope="side_wide", owner_side="muslim",
+        owner_lord_id=None))
+    state.decks.board_edge.setdefault("muslim", []).append("M15")
+    # Harbah (M3) at a Taifa Lord (not Yusuf/Sir): al-Mutawakkil.
+    state.lords["al_mutawakkil"].capabilities.append("M3")
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id="M3", scope="this_lord", owner_side="muslim",
+        owner_lord_id="al_mutawakkil"))
+    # Andalusians (M10) in play, side-wide: all Muslim Light Horse Evade.
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id="M10", scope="side_wide", owner_side="muslim",
+        owner_lord_id=None))
+    state.decks.board_edge.setdefault("muslim", []).append("M10")
+    # Hold Feigned Retreat (M6), in addition to Spear Wall.
+    state.decks.this_levy_events.setdefault("muslim", []).append("M6")
+    state.meta.sagrajas_role = "defend"
+    state.meta.active_player = "muslim"           # Yusuf Attacks
+    state.pending = PendingDecision(kind="sagrajas_resolve",
+                                    waiting_on="muslim", payload={})
+    _record(state, action, "Sagrajas: Christians choose to DEFEND (Yusuf attacks)")
+    return {"role": "defend", "attacker": "muslim"}
+
+
+def _h_resolve_battle(state, action):
+    """Resolve the Sagrajas Battle (4.4) once the role is chosen. The
+    Attacker's Marshal (Alfonso or Yusuf) is at Front center; whoever wins
+    the Battle wins the game (Background Book). Supports an optional
+    per-combat absorption_policy (4.4.2)."""
+    from almoravid.battle import (battleside_for_lords, resolve_battle,
+                                  commit_forces_after_battle, _front_lord_count)
+    from almoravid.state import Cylinder
+    _require(state.meta.phase == "battle"
+             and state.pending is not None
+             and state.pending.kind == "sagrajas_resolve",
+             "no Sagrajas Battle ready to resolve", code="wrong_phase")
+    side = _require_side(action)
+    _require(side == state.pending.waiting_on,
+             f"{side} is not the Attacker", code="wrong_side")
+    role = state.meta.sagrajas_role
+    if role == "attack":
+        atk_side, def_side, marshal = "christian", "muslim", "alfonso"
+    else:
+        atk_side, def_side, marshal = "muslim", "christian", "yusuf"
+    from almoravid.scenarios import _SAGRAJAS_LOCALE
+    here = _SAGRAJAS_LOCALE
+    atk_lords = [lid for lid, l in state.lords.items()
+                 if l.side == atk_side and l.cylinder.kind == "locale"
+                 and l.cylinder.locale_id == here]
+    def_lords = [lid for lid, l in state.lords.items()
+                 if l.side == def_side and l.cylinder.kind == "locale"
+                 and l.cylinder.locale_id == here]
+    _apply_absorption_policy(state, atk_side, action)
+    _apply_absorption_policy(state, def_side, action)
+    atk = battleside_for_lords(state, atk_lords, atk_side, "attacker",
+                               active_lord_id=marshal)
+    dfd = battleside_for_lords(state, def_lords, def_side, "defender",
+                               front_limit=_front_lord_count(atk))
+    result = resolve_battle(state, atk, dfd)
+    commit_forces_after_battle(state, atk)
+    commit_forces_after_battle(state, dfd)
+    winner = result.winner
+    # "Whoever wins the Battle wins the game." End the minigame: the losing
+    # side's Lords leave the field (so no post-game co-location), the winner
+    # holds the field at the battlefield Locale.
+    loser = (def_side if winner == atk_side else atk_side) if winner else None
+    if loser is not None:
+        for lid, l in state.lords.items():
+            if l.side == loser:
+                l.cylinder = Cylinder(kind="removed")
+                l.in_stronghold = False
+    state.score.winner = winner
+    state.score.victory_reason = (
+        f"Battle of Sagrajas: {winner} wins the Battle" if winner
+        else "Battle of Sagrajas: no decision")
+    if winner == "christian":
+        state.score.christian += 1.0
+    elif winner == "muslim":
+        state.score.muslim += 1.0
+    state.meta.phase = "ended"
+    state.pending = None
+    _record(state, action,
+            f"Sagrajas Battle resolved over {len(result.rounds)} rounds: "
+            f"winner={winner}")
+    return {"winner": winner, "rounds": len(result.rounds),
+            "attacker": atk_side, "defender": def_side}
+
 CAMPAIGN_HANDLERS = {
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
@@ -4819,5 +4960,8 @@ CAMPAIGN_HANDLERS = {
     "dinars_deposit": _h_dinars_deposit,
     "cmd_emir_jihad": _h_cmd_emir_jihad,
     "cmd_cabalgadas": _h_cmd_cabalgadas,
+    "sagrajas_attack": _h_sagrajas_attack,
+    "sagrajas_defend": _h_sagrajas_defend,
+    "resolve_battle": _h_resolve_battle,
     "set_absorption_policy": _h_set_absorption_policy,
 }
