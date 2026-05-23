@@ -766,6 +766,14 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 out.append({"type": "toggle_lieutenant",
                                             "side": active, "mode": "stack",
                                             "commander_id": _cid})
+                # M9 Emir al-Muslimin: Yusuf, if closer than any Christian
+                # to a Jihad-eligible Locale (1.4.4), may use his entire
+                # Command card to add 1 Jihad there (Arts of War ref M9).
+                if lord_id == "yusuf":
+                    from almoravid.campaign import _emir_jihad_targets
+                    for _tgt in _emir_jihad_targets(state):
+                        out.append({"type": "cmd_emir_jihad", "side": active,
+                                    "jihad_locale": _tgt})
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.

@@ -108,6 +108,23 @@ def is_region(locale_id: str) -> bool:
     return bool(loc and loc.get("base_type") == "region")
 
 
+def hop_distances(origin: str) -> dict[str, int]:
+    """BFS shortest-path distances (in number of adjacent-space hops, any
+    Way type) from `origin` to every reachable Locale, including origin=0.
+    Used for "closer than any Christian" tests (e.g. M9 Emir al-Muslimin:
+    "Closer means by the shortest chain of adjacent spaces away")."""
+    from collections import deque
+    dist: dict[str, int] = {origin: 0}
+    q = deque([origin])
+    while q:
+        cur = q.popleft()
+        for nbr in all_neighbors(cur):
+            if nbr not in dist:
+                dist[nbr] = dist[cur] + 1
+                q.append(nbr)
+    return dist
+
+
 def all_neighbors(locale_id: str) -> list[str]:
     """All Locales adjacent to `locale_id` via ANY Way type.
 

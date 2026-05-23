@@ -4619,6 +4619,68 @@ def _h_respond_neutrality_choice(state, action):
     return {"applied": applied, "more_pending": next_pending}
 
 
+def _emir_jihad_targets(state) -> list[str]:
+    """M9 Emir al-Muslimin: the Jihad-eligible Locales (1.4.4) to which
+    Yusuf -- holding the M9 capability and on the map -- is STRICTLY closer
+    than every Christian Lord on the map (shortest chain of adjacent
+    spaces; co-location with a Christian counts as NOT closer). Empty
+    unless Yusuf is on map and holds M9. Shared by the handler and the
+    enumerator so they stay in lockstep."""
+    from almoravid.capabilities import lord_has_capability
+    from almoravid.map import hop_distances
+    yusuf = state.lords.get("yusuf")
+    if (yusuf is None or yusuf.cylinder.kind != "locale"
+            or not lord_has_capability(state, "yusuf", "M9")):
+        return []
+    from almoravid.events import _jihad_eligible_locales
+    eligible = _jihad_eligible_locales(state)
+    if not eligible:
+        return []
+    christian_locs = [l.cylinder.locale_id for l in state.lords.values()
+                      if l.side == "christian" and l.cylinder.kind == "locale"]
+    out: list[str] = []
+    for tgt in eligible:
+        dist = hop_distances(tgt)
+        y = dist.get(yusuf.cylinder.locale_id)
+        if y is None:
+            continue
+        # Strictly closer than EVERY Christian (None = unreachable = farther;
+        # equal distance, e.g. co-location, is NOT closer).
+        if all(dist.get(cl) is None or y < dist[cl] for cl in christian_locs):
+            out.append(tgt)
+    return out
+
+
+def _h_cmd_emir_jihad(state, action):
+    """M9 Emir al-Muslimin (Arts of War ref M9): Yusuf, if closer than any
+    Christian to a Jihad-eligible Locale (1.4.4), may use his ENTIRE
+    Command card to add 1 Jihad there."""
+    side = _require_side(action)
+    _require(side == "muslim", "Emir al-Muslimin is a Muslim ability (M9)",
+             code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id == "yusuf",
+             "M9 Emir al-Muslimin is Yusuf's ability", code="not_yusuf")
+    from almoravid.capabilities import lord_has_capability
+    _require(lord_has_capability(state, "yusuf", "M9"),
+             "Yusuf lacks Emir al-Muslimin (M9)", code="no_capability")
+    _require(state.meta.actions_remaining >= 1,
+             "needs an unspent Command card", code="not_enough_actions")
+    target = action.get("jihad_locale")
+    _require(target in state.locales, "jihad_locale required", code="bad_arg")
+    _require(target in _emir_jihad_targets(state),
+             f"{target} is not a Jihad-eligible Locale Yusuf is closer to "
+             f"than any Christian (M9)", code="not_eligible")
+    from almoravid.events import _add_jihad
+    placement = _add_jihad(state, 1, {"jihad_targets": [target]})
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0   # uses Yusuf's ENTIRE Command card
+    _record(state, action,
+            f"muslim Yusuf (M9 Emir al-Muslimin) adds 1 Jihad at {target}")
+    return {"jihad_locale": target, "placement": placement,
+            "actions_consumed": consumed}
+
 CAMPAIGN_HANDLERS = {
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
@@ -4655,5 +4717,6 @@ CAMPAIGN_HANDLERS = {
     "winter_siege_action": _h_winter_siege_action,
     "winter_siege_pay": _h_winter_siege_pay,
     "dinars_deposit": _h_dinars_deposit,
+    "cmd_emir_jihad": _h_cmd_emir_jihad,
     "set_absorption_policy": _h_set_absorption_policy,
 }
