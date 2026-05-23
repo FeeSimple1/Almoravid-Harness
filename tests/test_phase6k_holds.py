@@ -144,19 +144,33 @@ def test_c15_cluniacs_rejects_muslim_lord() -> None:
 
 
 def test_c21_mozarabes_auto_succeeds_surrender() -> None:
-    """When Christian holds C21 + the besieged Locale is in a
-    Reconquista Taifa, the Surrender roll auto-succeeds."""
+    """When Christian holds C21 + the besieged Stronghold is in a
+    Reconquista Taifa, the Surrender roll auto-succeeds (card text:
+    "Play for a Surrender roll in a Reconquista Taifa to succeed
+    automatically").
+
+    A Christian only makes a Surrender roll at an ENEMY Stronghold, so
+    the besieged Locale must be Enemy-to-Christian even though its Taifa
+    is Reconquista (Christian Territory). The coherent case is a Muslim
+    re-conquered (Jihad-marked) Stronghold inside the Taifa: the Jihad
+    marker makes the Locale Muslim-Friendly per 1.3.1, overriding the
+    Reconquista territory, so it is besiegeable. (The earlier version of
+    this test besieged a *city* and silently skipped because a city in a
+    Reconquista Taifa is Christian-Friendly and cannot be Sieged.)
+    """
     from almoravid.actions import apply_action
+    from almoravid.effective import is_friendly_locale
     s = load_scenario("scenario_a_toledo_beset", seed=99)
     target_loc = "cordoba"
-    if target_loc not in s.locales:
-        pytest.skip("cordoba not in scenario")
-    # Force the Taifa of cordoba into Reconquista.
+    assert target_loc in s.locales
     taifa = s.taifas.get(s.locales[target_loc].territory)
-    if taifa is None:
-        pytest.skip("cordoba has no Taifa")
+    assert taifa is not None
     taifa.status = "reconquista"
-    # Set up Alfonso as besieger, alone.
+    # Jihad marker -> Enemy-to-Christian Stronghold inside the Reconquista
+    # Taifa, so the Christian may Siege it and make a Surrender roll.
+    s.locales[target_loc].jihad_markers = 1
+    assert not is_friendly_locale(s, target_loc, "christian")
+    # Set up Alfonso as besieger, alone (bare Garrison defends).
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id=target_loc)
     s.lords["alfonso"].in_stronghold = False
     s.lords["alfonso"].assets = {}
@@ -171,14 +185,14 @@ def test_c21_mozarabes_auto_succeeds_surrender() -> None:
     s.meta.active_player = "christian"
     s.meta.active_lord_id = "alfonso"
     s.meta.actions_remaining = 1
-    try:
-        r = apply_action(s, {"type": "cmd_siege", "side": "christian"})
-    except IllegalAction:
-        pytest.skip("cmd_siege rejected for setup reasons")
-    if r["surrender"]:
-        assert r["surrender"]["succeeded"] is True
-        assert r["surrender"]["threshold"] == "auto_mozarabes"
-    assert "C21" in s.decks.discard
+    r = apply_action(s, {"type": "cmd_siege", "side": "christian"})
+    assert r["surrender"] is not None, "expected a Surrender roll"
+    assert r["surrender"]["succeeded"] is True
+    assert r["surrender"]["threshold"] == "auto_mozarabes"
+    assert r["surrender"]["dice"] == []          # no dice rolled — auto
+    # Auto-success Conquers the Stronghold (Jihad removed, Conquered placed).
+    assert r["surrender"]["conquest"] is not None
+    assert "C21" in s.decks.discard              # Hold event consumed
 
 
 # ---------------------------------------------------------------------------
