@@ -1788,10 +1788,24 @@ def _h_cmd_march(state, action):
     from almoravid.effective import is_besieged as _isb_grp
     group_req = list(action.get("group_lord_ids", []) or [])
     if group_req:
-        _require(_is_marshal(lord_id, side),
-                 f"only a Marshal may lead a Group March (4.3.1); "
-                 f"{lord_id} is not a Marshal", code="not_marshal")
+        # 4.3.1 + C8 Hueste: a Marshal, or a Hueste bearer on a March
+        # with a Taifa endpoint, may lead a Group March.
+        _require(_counts_as_marshal_for_march(state, lord_id, side,
+                                              from_loc, target),
+                 f"only a Marshal (or a Hueste bearer on a Taifa March) "
+                 f"may lead a Group March (4.3.1); {lord_id} cannot",
+                 code="not_marshal")
+        # C8 Hueste: the bearer "may not use that ability to take Alfonso
+        # along in his Marching Group" (only the true Marshal can lead the
+        # Marshal). So when leading via Hueste (not the side's Marshal),
+        # Alfonso may not be a group member.
+        _hueste_lead = not _is_marshal(lord_id, side)
         for gid in group_req:
+            if _hueste_lead:
+                _require(gid != "alfonso",
+                         "Hueste may not take Alfonso (the Marshal) along "
+                         "in the Marching Group (Arts of War ref C8)",
+                         code="hueste_no_alfonso")
             _require(gid in state.lords and gid != lord_id,
                      f"bad group member {gid!r}", code="bad_group")
             g = state.lords[gid]
@@ -4088,6 +4102,32 @@ _MARSHALS = {"christian": "alfonso", "muslim": "yusuf"}
 
 def _is_marshal(lord_id: str, side: Side) -> bool:
     return _MARSHALS.get(side) == lord_id
+
+
+def _is_taifa_locale(state, locale_id: str) -> bool:
+    """A Locale in Muslim Taifa territory (not a Christian Kingdom)."""
+    loc = state.locales.get(locale_id)
+    return loc is not None and loc.territory in state.taifas
+
+
+def _counts_as_marshal_for_march(state, lord_id: str, side: Side,
+                                 from_loc: str, target: str) -> bool:
+    """4.3.1 Group March leader test. True for the side's actual Marshal,
+    OR a Lord with C8 Hueste for a March to/from any Taifa Locale (not
+    Kingdom->Kingdom), provided he is not himself a Lower Lord (Arts of
+    War ref C8: 'A Lord with Hueste counts as a Marshal when he undertakes
+    March actions to or from any Locales in any Taifas ... If he is a Lower
+    Lord, he ... cannot make use of Hueste')."""
+    if _is_marshal(lord_id, side):
+        return True
+    from almoravid.capabilities import lord_has_capability
+    lord = state.lords.get(lord_id)
+    if (lord is not None and lord.lieutenant_of is None
+            and lord_has_capability(state, lord_id, "C8")
+            and (_is_taifa_locale(state, from_loc)
+                 or _is_taifa_locale(state, target))):
+        return True
+    return False
 
 
 def _h_designate_lieutenant(state, action):
