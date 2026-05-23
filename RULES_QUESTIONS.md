@@ -86,3 +86,35 @@ the standard 4.1.3 constraints applying (target Christian, same Locale, not the
 Marshal, target/bearer not already a Lower Lord). Tests: tests/test_q001_alferez.py.
 **Affected code:** campaign._h_toggle_lieutenant (gate); legal_moves enumeration
 (currently a documented no-op note where the toggle would be offered).
+
+## Q-002 — M24 Al-Garada (Muslim long-range Ravage): capability scope
+
+**Status:** open
+**Filed:** 2026-05-23
+
+**Question:** M24 Al-Garada is the Muslim equivalent of Cabalgadas (Arts of War
+ref M24: "This Lord may pay 1 Prov to use entire card to Ravage across up to 2
+Ways, not at or past any Unbesieged Enemy Lord ... See ... Cabalgadas"). Its
+card text says "This Lord", but cards.json records capability_scope =
+"side_wide" — the same scope mismatch resolved for C15 Alférez in Q-001. Should
+M24 be this_lord? And what is its eligible-Lord set (card "Lords." line: "Taifa
+Muslim or Rodrigo al-Sayyid" — a CATEGORY, not a fixed name list like the four
+captains)?
+
+**Why it matters:** the long-range-Ravage command (cmd_cabalgadas) is wired and
+keyed on this_lord Cabalgadas capabilities (C14/C17), so it covers the Christian
+side now. The Muslim twin M24 will not trigger until its scope is this_lord and
+its eligibility ("Taifa Muslim or Rodrigo al-Sayyid") is modeled. Not guessed.
+
+**Consultation chain:**
+1. Arts of War Reference M24 Al-Garada: "This Lord may pay 1 Prov to use entire
+   card to Ravage across up to 2 Ways ... See Christian Capability #C14/C17
+   Cabalgadas." Lords. "Taifa Muslim or Rodrigo al-Sayyid."
+2. 3.4.4 capability scope + Q-001 precedent (the "This Lord" phrasing -> this_lord;
+   side-wide caps carry an explicit "board edge" Tips line, which M24 lacks).
+
+**Resolution:** (pending user adjudication; cmd_cabalgadas already supports any
+this_lord Cabalgadas-family capability, so wiring M24 is a one-line capability
+check + eligibility set once scope/eligibility are confirmed.)
+**Affected code:** src/almoravid/data/static/cards.json (M24 scope);
+campaign._cabalgadas_capable (add M24 + Muslim eligibility).

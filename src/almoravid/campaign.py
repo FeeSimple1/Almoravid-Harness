@@ -2393,24 +2393,30 @@ def _h_cmd_ravage(state, action):
              f"{here} already Ravaged by {side} (color {color})",
              code="already_ravaged_by_us")
 
-    # Place Ravaged marker; rule 4.7.2: each side has at most one
-    # Ravaged marker per Locale. The other side's marker is overwritten
-    # only per Adjust-Status (1.4.3); for now if the locale has the
-    # opposite-color marker, the rule says we still place ours (the
-    # Locale ends up with one of each — represented here by overwriting
-    # with our color since the model only stores one). Q-001 candidate.
-    loc.ravaged = color  # type: ignore[assignment]
+    res = _apply_ravage_effect(state, lord, side, here)
+    state.meta.actions_remaining -= 1
+    _record(state, action,
+            f"{side} {lord_id} Ravages {here}: {res['rustling']}, "
+            f"+0.5 VP{', Enforcing Parias triggered' if res['enforcing_parias'] else ''}")
+    return {"locale": here, "color": res["color"], "rustling": res["rustling"],
+            "enforcing_parias": res["enforcing_parias"],
+            "actions_remaining": state.meta.actions_remaining}
 
-    # War Drums (M22, Muslim side_wide, Phase 7a): Yusuf, Sir, and
-    # Muslim Lieutenants Ravage for 1 extra Prov.
+
+def _apply_ravage_effect(state, lord, side, target_id: str) -> dict:
+    """Shared 4.7.2 Ravage EFFECT applied to `target_id` (which may differ
+    from the Lord's Locale for long-range Ravage / Cabalgadas): place the
+    side's Ravaged marker, Rustling (Loot/Prov to the Ravaging Lord, War
+    Drums M22 bonus), +1/2 VP, and the Enforcing-Parias odd-marker Taifa
+    Service shift. Does NOT spend actions/Provender (the caller does)."""
+    loc = state.locales[target_id]
+    color = "yellow" if side == "christian" else "green"
+    loc.ravaged = color  # type: ignore[assignment]
     from almoravid.capabilities import side_has_capability
     war_drums_bonus = 0
-    if (side == "muslim"
-            and side_has_capability(state, "muslim", "M22")
-            and (lord_id in ("yusuf", "sir") or lord.is_lieutenant)):
+    if (side == "muslim" and side_has_capability(state, "muslim", "M22")
+            and (lord.id in ("yusuf", "sir") or lord.is_lieutenant)):
         war_drums_bonus = 1
-
-    # Rustling: assets to the Ravaging Lord.
     if loc.base_type == "region":
         new_loot = min(8, lord.assets.get("loot", 0) + 1)
         lord.assets["loot"] = new_loot
@@ -2424,53 +2430,28 @@ def _h_cmd_ravage(state, action):
         new_prov = min(8, lord.assets.get("prov", 0) + 1 + war_drums_bonus)
         lord.assets["loot"] = new_loot
         lord.assets["prov"] = new_prov
-        rustling_note = (f"+1 Loot -> {new_loot}, "
-                         f"+{1 + war_drums_bonus} Prov -> {new_prov} "
-                         f"(Stronghold{'/War Drums' if war_drums_bonus else ''})")
-
-    # VP: 1/2 per Ravaged marker (5.1)
+        rustling_note = (f"+1 Loot -> {new_loot}, +{1 + war_drums_bonus} "
+                         f"Prov -> {new_prov} (Stronghold"
+                         f"{'/War Drums' if war_drums_bonus else ''})")
     if side == "christian":
         state.score.christian += 0.5
     else:
         state.score.muslim += 0.5
-
-    # Enforcing Parias trigger check: count Christian Ravage markers in
-    # this Taifa AFTER placing the new one. If the count is odd, the
-    # Service-shift hook fires.
     enforcing_parias = False
     if side == "christian" and loc.territory in state.taifas:
-        taifa_ravage_count = sum(
-            1 for lid in state.taifas[loc.territory].locale_ids
-            if state.locales[lid].ravaged == "yellow"
-        )
-        if taifa_ravage_count % 2 == 1:
+        cnt = sum(1 for lid in state.taifas[loc.territory].locale_ids
+                  if state.locales[lid].ravaged == "yellow")
+        if cnt % 2 == 1:
             enforcing_parias = True
-            # Deferred fix: rule 4.7.2 — shift the Taifa Lord's Service
-            # 1 box left (NOT Yusuf / Sir / either Rodrigo per AoW
-            # reference text). Vassal Service markers also shift if
-            # advanced Vassal Service rule (3.4.2) is in use; that
-            # rule isn't yet active in this harness, so we shift the
-            # Lord's marker only.
             from almoravid.actions import _shift_service_left
             for tlid, tlord in state.lords.items():
-                # 4.7.2: shift "if the Lord is Mustered" — only a Taifa
-                # Lord on the map (cylinder at a Locale) has a Service
-                # marker to shift; a Disbanded/Calendar Lord is skipped.
-                if (tlord.is_taifa
-                        and tlord.home_taifa == loc.territory
+                if (tlord.is_taifa and tlord.home_taifa == loc.territory
                         and tlord.cylinder.kind == "locale"
-                        and tlid not in ("yusuf", "sir",
-                                         "rodrigo_campeador",
+                        and tlid not in ("yusuf", "sir", "rodrigo_campeador",
                                          "rodrigo_al_sayyid")):
                     _shift_service_left(state, tlid, 1)
-
-    state.meta.actions_remaining -= 1
-    _record(state, action,
-            f"{side} {lord_id} Ravages {here}: {rustling_note}, "
-            f"+0.5 VP{', Enforcing Parias triggered (Taifa Lord Service shifted left 1)' if enforcing_parias else ''}")
-    return {"locale": here, "color": color, "rustling": rustling_note,
-            "enforcing_parias": enforcing_parias,
-            "actions_remaining": state.meta.actions_remaining}
+    return {"color": color, "rustling": rustling_note,
+            "enforcing_parias": enforcing_parias}
 
 
 
@@ -4681,6 +4662,120 @@ def _h_cmd_emir_jihad(state, action):
     return {"jihad_locale": target, "placement": placement,
             "actions_consumed": consumed}
 
+def _has_unbesieged_enemy_lord(state, locale_id: str, side) -> bool:
+    """Any Enemy (other-side) Lord at `locale_id` who is NOT Besieged
+    (a Bypassed Lord still counts as Unbesieged). Blocks Cabalgadas
+    path/target (Arts of War ref C14/C17 / M24: "not at or past any
+    Unbesieged Enemy Lord, even if Bypassed")."""
+    from almoravid.effective import is_besieged
+    for l in state.lords.values():
+        if (l.side != side and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == locale_id
+                and not is_besieged(state, l.id)):
+            return True
+    return False
+
+
+def _cabalgadas_capable(state, lord_id: str) -> bool:
+    """The Lord holds a Cabalgadas long-range-Ravage capability (C14 or
+    C17, both titled 'Cabalgadas'; 3.4.4 limits a Lord to one)."""
+    from almoravid.capabilities import lord_has_capability
+    return (lord_has_capability(state, lord_id, "C14")
+            or lord_has_capability(state, lord_id, "C17"))
+
+
+def _cabalgadas_prov_holder(state, lord_id: str, side):
+    """Who pays the 1 Provender (1.5.2 Share): the Lord himself if he has
+    Provender, else a same-Locale same-side ally with Provender. Returns
+    the paying lord_id or None."""
+    lord = state.lords[lord_id]
+    if lord.assets.get("prov", 0) >= 1:
+        return lord_id
+    here = lord.cylinder.locale_id
+    for lid, l in state.lords.items():
+        if (lid != lord_id and l.side == side and l.cylinder.kind == "locale"
+                and l.cylinder.locale_id == here and l.assets.get("prov", 0) >= 1):
+            return lid
+    return None
+
+
+def _cabalgadas_targets(state, lord_id: str, side) -> list[str]:
+    """Valid Cabalgadas targets for the Lord at his Locale: a Locale up to
+    two Ways distant whose path's intervening Locale (if any) and target
+    both have NO Unbesieged Enemy Lord, and the target is a legal Ravage
+    target (Enemy Locale not already Ravaged by this side). 4.7.2 + C14/C17."""
+    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.map import all_neighbors
+    lord = state.lords.get(lord_id)
+    if lord is None or lord.cylinder.kind != "locale" or is_besieged(state, lord_id):
+        return []
+    here = lord.cylinder.locale_id
+    color = "yellow" if side == "christian" else "green"
+
+    def ravageable(t: str) -> bool:
+        loc = state.locales.get(t)
+        return (loc is not None and t != here
+                and not is_friendly_locale(state, t, side)
+                and loc.ravaged != color
+                and not _has_unbesieged_enemy_lord(state, t, side))
+
+    targets: set[str] = set()
+    for n1 in all_neighbors(here):                 # 1 Way
+        if ravageable(n1):
+            targets.add(n1)
+        # 2 Ways: traverse n1 only if it is free of Unbesieged Enemy Lords
+        if _has_unbesieged_enemy_lord(state, n1, side):
+            continue
+        for n2 in all_neighbors(n1):
+            if ravageable(n2):
+                targets.add(n2)
+    return sorted(targets)
+
+
+def _h_cmd_cabalgadas(state, action):
+    """C14/C17 Cabalgadas long-range Ravage (Arts of War ref): the bearer
+    must have or Share (1.5.2) one Provender and use ALL actions on his
+    Command card; expend the Provender and Ravage a Locale up to two
+    Locales distant (no Unbesieged Enemy Lord on the intervening or target
+    Locale). Effect = normal Ravage (4.7.2)."""
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.active_lord_id is not None,
+             "no active Lord", code="no_active_lord")
+    lord_id = state.meta.active_lord_id
+    lord = state.lords[lord_id]
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
+    _require(_cabalgadas_capable(state, lord_id),
+             f"{lord_id} lacks a Cabalgadas capability (C14/C17)",
+             code="no_capability")
+    _require(state.meta.actions_remaining >= 1,
+             "Cabalgadas uses the entire Command card", code="not_enough_actions")
+    payer = _cabalgadas_prov_holder(state, lord_id, side)
+    _require(payer is not None,
+             "Cabalgadas needs 1 Provender (own or Shared, 1.5.2)",
+             code="no_provender")
+    target = action.get("target_locale")
+    _require(target in state.locales, "target_locale required", code="bad_arg")
+    _require(target in _cabalgadas_targets(state, lord_id, side),
+             f"{target} is not a legal Cabalgadas target (<=2 Ways, no "
+             f"Unbesieged Enemy Lord on path/target, Ravageable)",
+             code="not_eligible")
+    # Expend 1 Provender (from the payer) and Ravage the target.
+    state.lords[payer].assets["prov"] = state.lords[payer].assets.get("prov", 0) - 1
+    res = _apply_ravage_effect(state, lord, side, target)
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0   # uses ALL actions on the card
+    _record(state, action,
+            f"{side} {lord_id} Cabalgadas-Ravages {target} (prov from {payer}): "
+            f"{res['rustling']}"
+            f"{', Enforcing Parias' if res['enforcing_parias'] else ''}")
+    return {"target": target, "color": res["color"], "prov_payer": payer,
+            "rustling": res["rustling"],
+            "enforcing_parias": res["enforcing_parias"],
+            "actions_consumed": consumed}
+
 CAMPAIGN_HANDLERS = {
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
@@ -4718,5 +4813,6 @@ CAMPAIGN_HANDLERS = {
     "winter_siege_pay": _h_winter_siege_pay,
     "dinars_deposit": _h_dinars_deposit,
     "cmd_emir_jihad": _h_cmd_emir_jihad,
+    "cmd_cabalgadas": _h_cmd_cabalgadas,
     "set_absorption_policy": _h_set_absorption_policy,
 }

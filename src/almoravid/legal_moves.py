@@ -774,6 +774,19 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _tgt in _emir_jihad_targets(state):
                         out.append({"type": "cmd_emir_jihad", "side": active,
                                     "jihad_locale": _tgt})
+                # C14/C17 Cabalgadas long-range Ravage: the bearer (with 1
+                # Provender, own or Shared) may Ravage a Locale up to two
+                # Ways away with no Unbesieged Enemy Lord on the path/target,
+                # using his entire Command card (Arts of War ref C14/C17).
+                from almoravid.campaign import (_cabalgadas_capable,
+                                                _cabalgadas_prov_holder,
+                                                _cabalgadas_targets)
+                if (_cabalgadas_capable(state, lord_id)
+                        and _cabalgadas_prov_holder(state, lord_id, active)
+                        is not None):
+                    for _ct in _cabalgadas_targets(state, lord_id, active):
+                        out.append({"type": "cmd_cabalgadas", "side": active,
+                                    "target_locale": _ct})
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.

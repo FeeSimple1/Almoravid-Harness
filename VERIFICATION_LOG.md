@@ -574,3 +574,30 @@ handler-rejects-non-captain, stack->unstack, Marshal-not-a-target). Five
 test_capabilities/test_fix_l13 cases that used C15 as a side_wide EXAMPLE were
 repointed to C22 Bishoprics (a genuine side_wide cap). Round-trip probe with
 C15 in play: no over-enumeration. Suite 868 passed, 0 skipped.
+
+## Capability EFFECTS wired (2026-05-23) — Hueste, Emir al-Muslimin, Cabalgadas
+The original handoff flagged data-only-but-unwired capability effects. Wired
+three (their cards were deployable but the abilities never fired):
+- C8 Hueste (Arts of War ref C8) — the bearer counts as a Marshal for a Group
+  March (4.3.1) with a Taifa endpoint (not Kingdom->Kingdom); may not take
+  Alfonso (the Marshal) in the group; cannot use it as a Lower Lord. Extended
+  the group-march gate via _counts_as_marshal_for_march; the group is a
+  player-supplied param (not enumerated). Tests: tests/test_cap_hueste_c8.py (4).
+- M9 Emir al-Muslimin (Arts of War ref M9) — Yusuf, if STRICTLY closer than any
+  Christian (shortest chain of adjacent spaces; co-location = not closer) to a
+  Jihad-eligible Locale (1.4.4), uses his entire Command card to add 1 Jihad
+  there. New cmd_emir_jihad + _emir_jihad_targets helper + map.hop_distances
+  BFS; enumerated for Yusuf. Tests: tests/test_cap_emir_m9.py (3).
+- C14/C17 Cabalgadas (Arts of War ref) — long-range Ravage: pay 1 Provender
+  (own or Shared 1.5.2) + the entire Command card to Ravage a Locale up to two
+  Ways distant with NO Unbesieged Enemy Lord on the intervening or target
+  Locale (even if Bypassed). New cmd_cabalgadas + _cabalgadas_targets/
+  _cabalgadas_prov_holder/_has_unbesieged_enemy_lord helpers; the 4.7.2 Ravage
+  effect was factored into _apply_ravage_effect (shared by cmd_ravage and
+  cmd_cabalgadas). Enumerated per legal target. Tests: tests/test_cap_cabalgadas.py
+  (4). NOTE: the Muslim twin M24 Al-Garada ("See Cabalgadas") is NOT yet wired —
+  its data scope is side_wide despite "This Lord" text (same mismatch as C15);
+  logged as Q-002. cmd_cabalgadas already supports any this_lord Cabalgadas-
+  family capability, so M24 is a one-line addition once Q-002 is adjudicated.
+Round-trip probe (random + combat) across scenarios with these in play: no
+over-enumeration. Suite 879 passed, 0 skipped.
