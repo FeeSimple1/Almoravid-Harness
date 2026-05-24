@@ -418,6 +418,11 @@ def build_sagrajas(seed: int = 0) -> GameState:
     s.meta.active_player = "christian"
     s.meta.sagrajas_role = None
     s.meta.turn_index = 0
+    # Replace the inherited "Loaded scenario F" history line (build reuses
+    # the Scenario F skeleton) so logs/repros read as Sagrajas.
+    if s.history:
+        s.history[0].summary = "Loaded scenario S: Battle of Sagrajas (minigame)"
+        s.history[0].action = "load_sagrajas"
     s.score.christian = 0.0
     s.score.muslim = 0.0
     s.score.winner = None

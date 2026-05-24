@@ -4893,19 +4893,38 @@ def _h_resolve_battle(state, action):
                                active_lord_id=marshal)
     dfd = battleside_for_lords(state, def_lords, def_side, "defender",
                                front_limit=_front_lord_count(atk))
-    result = resolve_battle(state, atk, dfd)
+    # The 6-Round default is only a programming safety guard; Battle (4.4)
+    # continues until a side Concedes or all its Lords Rout, with no rules
+    # round limit. Sagrajas is a large 5-vs-5 Battle that can run >6 Rounds,
+    # so use a generous cap that the natural termination reaches first --
+    # the cap must NOT decide the result. [Sagrajas cap fix]
+    result = resolve_battle(state, atk, dfd, max_rounds=24)
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     winner = result.winner
+    # Defensive fallback: if the (generous) cap was somehow reached with no
+    # side fully Routed, the cap must still not determine the outcome --
+    # decide by remaining (unrouted) strength; a true tie is a no-decision.
+    if winner is None:
+        def _strength(sd: str) -> int:
+            return sum(sum(l.forces.values()) for l in state.lords.values()
+                       if l.side == sd and l.cylinder.kind == "locale")
+        a_str, d_str = _strength(atk_side), _strength(def_side)
+        if a_str > d_str:
+            winner = atk_side
+        elif d_str > a_str:
+            winner = def_side
     # "Whoever wins the Battle wins the game." End the minigame: the losing
-    # side's Lords leave the field (so no post-game co-location), the winner
-    # holds the field at the battlefield Locale.
-    loser = (def_side if winner == atk_side else atk_side) if winner else None
-    if loser is not None:
-        for lid, l in state.lords.items():
-            if l.side == loser:
-                l.cylinder = Cylinder(kind="removed")
-                l.in_stronghold = False
+    # side's Lords leave the field (so no post-game co-location); the winner
+    # holds the field. A genuine tie (winner None) removes BOTH armies.
+    if winner is not None:
+        losers = [(def_side if winner == atk_side else atk_side)]
+    else:
+        losers = [atk_side, def_side]   # no decision: clear the field
+    for lid, l in state.lords.items():
+        if l.side in losers:
+            l.cylinder = Cylinder(kind="removed")
+            l.in_stronghold = False
     state.score.winner = winner
     state.score.victory_reason = (
         f"Battle of Sagrajas: {winner} wins the Battle" if winner

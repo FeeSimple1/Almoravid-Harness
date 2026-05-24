@@ -101,3 +101,46 @@ def test_defend_branch_makes_muslims_attacker():
     assert s.meta.active_player == "muslim"       # Yusuf attacks
     r = apply_action(s, {"type": "resolve_battle", "side": "muslim"})
     assert r["attacker"] == "muslim"
+
+
+# --- Regression: 6-round safety cap must not decide the result -----------
+@pytest.mark.parametrize("seed", [57, 96])
+def test_defend_branch_resolves_past_six_rounds_no_colocation(seed):
+    """ChatGPT-found bug: the defend branch could hit the resolver's 6-Round
+    safety cap with winner=None, leaving Christian+Muslim Lords co-located at
+    Badajoz. The Battle must resolve naturally (these run 7 Rounds) and never
+    end in an illegal co-located state."""
+    s = load_scenario("sagrajas", seed=seed)
+    apply_action(s, {"type": "sagrajas_defend", "side": "christian"})
+    r = apply_action(s, {"type": "resolve_battle", "side": "muslim"})
+    assert r["winner"] in ("christian", "muslim"), r   # not None
+    assert r["rounds"] > 6                              # ran past the old cap
+    by: dict[str, set] = {}
+    for lid, l in s.lords.items():
+        if l.cylinder.kind == "locale" and not l.in_stronghold:
+            by.setdefault(l.cylinder.locale_id, set()).add(l.side)
+    assert not [loc for loc, sd in by.items()
+                if "christian" in sd and "muslim" in sd]
+
+
+@pytest.mark.parametrize("seed", list(range(1, 41)))
+@pytest.mark.parametrize("role", ["sagrajas_attack", "sagrajas_defend"])
+def test_sagrajas_never_ends_co_located(seed, role):
+    """Seed sweep: every Sagrajas battle ends decisively (or, defensively,
+    clears the field) with no opposing field Lords co-located."""
+    s = load_scenario("sagrajas", seed=seed)
+    apply_action(s, {"type": role, "side": "christian"})
+    apply_action(s, {"type": "resolve_battle", "side": s.pending.waiting_on})
+    assert s.meta.phase == "ended"
+    by: dict[str, set] = {}
+    for lid, l in s.lords.items():
+        if l.cylinder.kind == "locale" and not l.in_stronghold:
+            by.setdefault(l.cylinder.locale_id, set()).add(l.side)
+    assert not [loc for loc, sd in by.items()
+                if "christian" in sd and "muslim" in sd]
+
+
+def test_sagrajas_history_labels_as_scenario_s():
+    s = load_scenario("sagrajas", seed=1)
+    assert s.history and "Battle of Sagrajas" in s.history[0].summary
+    assert "Scenario F" not in s.history[0].summary

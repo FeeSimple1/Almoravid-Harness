@@ -641,3 +641,18 @@ load_scenario / Harness), no manual battle-state construction.
   (clean). Tests: tests/test_sagrajas_minigame.py (17). Limitation logged:
   Yusuf/Sir African-Horse Javelins marker not modeled (RULES_QUESTIONS). Card
   metadata gap C4/C5/M4/M5/M3/M6 logged as Q-003 (minigame unaffected).
+
+### Sagrajas fix (2026-05-23) — 6-Round safety cap must not decide the result
+Independent ChatGPT playtest found: defend-branch seeds 57 & 96 hit
+resolve_battle's default 6-Round safety cap with winner=None, so the minigame
+ended with no loser removed -> Christian+Muslim Lords co-located at Badajoz
+(invariant violation). Battle (4.4) has no rules round limit; the cap is only a
+runaway guard. FIX: _h_resolve_battle resolves with max_rounds=24 (natural
+termination reaches first -- both reported seeds resolve in 7 Rounds as
+Christian wins, matching the reporter's higher-cap rerun); and a defensive
+fallback decides any residual winner=None by remaining unrouted strength, with a
+genuine tie clearing BOTH armies so there is never post-game co-location. Also
+fixed the cosmetic history line (build_sagrajas reused the Scenario F skeleton):
+history[0] now reads "Loaded scenario S: Battle of Sagrajas (minigame)". Sweep:
+seeds 1-150 x both branches -> 0 winner=None, 0 co-location, max 7 Rounds. Tests:
+tests/test_sagrajas_minigame.py (seeds 57/96 + 1-40 x 2 sweep + history label).
