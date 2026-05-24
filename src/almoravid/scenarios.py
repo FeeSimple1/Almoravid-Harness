@@ -380,9 +380,11 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
 # Battle of Sagrajas minigame (Background Book pp.44-47)
 # ---------------------------------------------------------------------------
 
-# Battlefield Locale: the open plain near Badajoz where the army awaited
-# Alfonso (Background Book). Any real Locale works for a battle-only game.
-_SAGRAJAS_LOCALE = "badajoz"
+# Battlefield Locale: the Sagrajas region, the open plain near Badajoz where
+# the army awaited Alfonso (Background Book). "sagrajas" is a real map Locale
+# (base_type "region", territory "badajoz"); using it keeps the minigame
+# thematically accurate. Capacity is irrelevant for a battle-only game.
+_SAGRAJAS_LOCALE = "sagrajas"
 
 # Rosters (Background Book "Lords, Vassals, and Capabilities").
 _SAGRAJAS_CHRISTIANS = ["alfonso", "pedro_ansurez", "garcia_ordonez",
