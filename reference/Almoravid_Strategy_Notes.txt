@@ -25,6 +25,99 @@ Sources cited in [brackets]:
             (Correia/Campbell/Ruhnke, InsideGMT)
   [REV]  = Player reviews (TWBG, Ellis-Gorman, etc.)
   [PLAY] = Direct play observations from this project
+  [LLM]  = LLM-driven harness playthroughs (Sagrajas minigame,
+            Scenario D, full Scenario F). These are playtest-
+            DERIVED IMPRESSIONS, not solved doctrine: the play
+            was conducted by an LLM using the harness for legal
+            move generation, state tracking, and resolution, so
+            the play level is below repeated expert human play.
+            Useful for pressure points, tempo patterns, and
+            common traps; weight accordingly.
+
+================================================================
+SECTION 0 — STRATEGIC OVERVIEW & SIDE IDENTITIES
+================================================================
+
+These notes frame the whole game. The granular heuristics in
+Sections 1-9 serve the picture sketched here. [LLM]
+
+0.1  THE GAME IS A CONTEST BETWEEN CONVERSION AND ABSORPTION.
+     [LLM]
+     Consider: Almoravid is less about winning a single glorious
+     battle than about converting campaign tempo into lasting
+     political and logistical advantage before service, pay,
+     supply, and seasonal structure dissolve the army that
+     created the opportunity. The Christians must make the war
+     happen faster than Muslim politics and endurance can absorb
+     it; the Muslims must make Christian aggression expire before
+     it becomes conquest. The side that wins is usually the one
+     that better turns crises into durable score, control, or
+     survival -- not the one that fights the best battle. See 9.3.
+
+0.2  THE CENTRAL TENSION: CHRISTIAN TEMPO vs MUSLIM RESILIENCE.
+     [LLM]
+     Consider: The Christian side is initiative, pressure, and
+     conversion -- it can threaten multiple regions and force
+     responses, and wants the board to feel unstable before the
+     Muslim position coheres. The Muslim side is resilience,
+     political preservation, and delayed consolidation -- it often
+     wins by refusing to panic, keeping Taifa Lords in play, and
+     waiting for Christian pressure to overextend or decay. The
+     Muslims frequently do not need to destroy the Christian army;
+     they need to keep it from turning activity into conquest.
+
+0.3  TRACK TWO SCOREBOARDS AT ALL TIMES. [LLM]
+     Consider: (1) the printed VP race, and (2) the "can I keep
+     an army in the field?" race (Campaign Victory pressure; see
+     1.4 on permanent removal). Raw VP can mislead: a side ahead
+     or competitive on VP can still LOSE if it has no Mustered
+     Lords left, and a side behind on VP can win by stripping the
+     opponent of effective field presence. The second scoreboard
+     often decides the game before the first reaches a clean
+     resolution. The Muslim danger here is becoming "Taifas with
+     no army" -- a VP cushion does not save you if the Christians
+     can win by eliminating Mustered Muslim presence.
+
+0.4  ACTIVITY IS NOT PROGRESS -- ASK WHAT SURVIVES THE NEXT LEVY.
+     [LLM]
+     Consider: A turn can look impressive -- Lords marching, Siege
+     markers appearing, raids and threatened battles -- and still
+     be a losing turn if it ends with hungry Lords, expiring
+     service, no major conquest, and Muslim political scoring
+     intact. Before committing actions, ask: "What will still be
+     TRUE after the next Levy?" If the only honest answer is "I
+     made the opponent nervous," that is usually not enough. This
+     cuts both ways but bites the Christian side hardest (see 0.5)
+     because its broader action menu makes busywork tempting.
+
+0.5  SIDE FAILURE MODES. [LLM]
+     Consider: The Christian failure mode is SUSTAINED BUT
+     INSUFFICIENT PRESSURE -- taking some targets but not enough,
+     burning service without decisive payoff, losing useful Lords,
+     letting Muslim scoring continue. Christian power is real but
+     BRITTLE: the army can create major pressure and then suddenly
+     evaporate if the feudal clock is neglected. The Muslim failure
+     mode is PANIC -- bad Sallies, overlong marches, exposed relief
+     forces, abandoned political scoring. Muslim panic is exactly
+     what Christian pressure is trying to provoke; patience
+     (forage, pay, preserve) is usually the antidote. See 9.1, 9.2.
+
+0.6  SIDE-BY-SIDE SUMMARY (PLAYTEST IMPRESSION). [LLM]
+
+       Category          Christians            Muslims
+       ----------------  --------------------  ----------------------
+       Primary strength  Tempo and pressure    Resilience, political
+                                                structure
+       Main danger       Overextension and     Panic and premature
+                         service decay         battle
+       Best scoring      Ravage, conquest,     Taifa/Jihad scoring,
+                         Siege pressure        preservation
+       Key question      Can pressure become   Can pressure be
+                         durable gains?        absorbed w/o collapse?
+       Common trap       Obsessive Siege or    Bad Sally or
+                         bad Storm             overreaction
+       Winning posture   Multiple credible     Layered defense,
+                         threats               delayed consolidation
 
 ================================================================
 SECTION 1 — TIMING & CALENDAR
@@ -428,6 +521,66 @@ SECTION 6 — SCENARIO-SPECIFIC OBSERVATIONS
      Marriage through a quiet stretch lets it cover the
      critical late-Autumn Service crunch.
 
+6.8  SCENARIO D (ARRIVAL OF THE AFRICANS) IS A RACE BETWEEN
+     CHRISTIAN CONVERSION AND MUSLIM STABILIZATION. [LLM]
+     Consider: D is long enough for service/logistics to matter
+     but short enough that the picture stays legible. If the
+     Christians turn early pressure into VP and conquest BEFORE
+     Yusuf/Sir become relevant, they are in good shape; if the
+     Muslims slow the Siege and keep political structure intact,
+     the Christian advantage decays. Christian play: pay key Lords
+     early, make the Zaragoza Siege credible, AVOID premature
+     Storming, use the pressure there as cover for wider VP, and
+     return to Zaragoza when odds improve (see 6.8a). Muslim play:
+     keep al-Mustain alive and avoid bad Sallies -- a premature
+     Sally can hand the Christians exactly the decisive result
+     they need; patient defense, foraging, preservation, and timed
+     relief beat it. An LLM Scenario-D game won for the Christians
+     precisely by treating Zaragoza as lever, not obsession.
+
+6.8a ZARAGOZA IS THE CANONICAL SIEGE-TEMPTATION TRAP. [LLM]
+     Consider: Zaragoza is an obvious, high-value target, so
+     pressure there matters -- but overbuilding the Siege and then
+     failing to finish it efficiently is a documented losing
+     pattern. Treat it as BOTH target and lever: pressure it,
+     reinforce enough to make the threat credible, do not Storm
+     prematurely, and exploit the Muslim NEED to defend it as
+     cover for action elsewhere. This is a concrete instance of
+     the general rule that Sieges are threats before they are
+     victories (see 4.2, 4.7, 9.4): the existence of Siege markers
+     is not inevitability.
+
+6.9  SCENARIO F (RECONQUISTA AND RIPOSTE): THE LONG GAME REWARDS
+     RESILIENCE OVER SPECTACLE. [LLM]
+     Consider: F shows the full strategic identity most clearly,
+     and it tilts toward endurance. In one full LLM playthrough
+     the Muslims won 25.5 to 12.0: the Christians took real places
+     (Huesca, Tudela, Lerida) but the gains were too late and too
+     narrow, while the Muslim side preserved political structure
+     and scoring momentum so the Christian operational successes
+     never became strategic victory. Christian lesson: maintain
+     pressure ACROSS turns and convert it -- looking busy while
+     falling behind is the failure mode (see 0.5, 5.6 "all is for
+     naught"). Muslim lesson: the strongest weapon is endurance --
+     in the winning Muslim game Yusuf and Sir mattered more as
+     part of the strategic structure (deterrence, forcing the
+     Christians to respect relief) than as single-handed battle
+     winners (see 7.6, 0.3).
+
+6.10 THE SAGRAJAS BATTLE-ONLY MINIGAME IS A TACTICAL LAB, NOT A
+     STRATEGIC MODEL. [LLM]
+     Consider: Sagrajas is useful for exercising the battle
+     resolver but is NOT representative of campaign strategy. It
+     is highly sensitive to array choices: under one historical-
+     looking/default array the Christians dominate, while
+     Muslim-forward arrays improve Muslim results dramatically --
+     i.e. it behaves like a fragile standalone battle puzzle. A
+     battle-only scenario strips out service consequences, multi-
+     turn supply, political scoring, opportunity cost, and long-
+     term attrition -- the very things that carry Almoravid's
+     strategic logic. Do not infer overall strategy from Sagrajas;
+     use it to test combat mechanics only.
+
 ================================================================
 SECTION 7 — LORD-SPECIFIC NOTES
 ================================================================
@@ -570,6 +723,43 @@ SECTION 9 — META-OBSERVATIONS ON PLAY STYLE
      change strategy substantially — Service shifts hit
      Vassals as well, and opponent Capabilities become hidden
      until used. Advanced play is more historically textured.
+
+9.7  PAY BEFORE GLORY. [LLM]
+     Consider: If a Lord's service is at risk, Pay can be the best
+     "attack" available -- a brilliant operation that evaporates
+     the army next Levy is not brilliant. Across harness play,
+     service pressure decided games more often than battle losses
+     did. Reinforces 1.5 (late shifts are near-permanent) and 2.5
+     (Pay cannot bridge Locales -- position Coin in advance).
+
+9.8  LORDS ARE STRATEGIC ASSETS, NOT JUST COMBAT STACKS. [LLM]
+     Consider: A Lord's location, service clock, ability to Feed,
+     Seat, command role, and political significance often matter
+     more than raw combat power. Do not treat strong Lords as
+     disposable: losing Pedro permanently, or letting Alfonso/
+     Sancho fall out of service at the wrong moment, can cripple a
+     Christian campaign (see 7.4); throwing Taifa Lords into
+     premature fights collapses the Muslim political skeleton
+     before Yusuf/Sir matter (see 7.1, 0.3).
+
+9.9  THREATS HAVE VALUE EVEN WHEN NOT EXECUTED. [LLM]
+     Consider: A Siege threat, relief threat, or battle threat can
+     force the opponent to spend actions without you pulling the
+     trigger. The Christian side is strongest when the Muslim
+     player cannot tell whether the immediate danger is Siege,
+     Ravage, battle, or redeployment; the Muslim side buys time by
+     making every Christian Siege cost food, time, and service.
+     This is the operational engine behind 0.2 and 6.8a, and the
+     reason Ravage (a threat-and-score tool, see 4.8) is a primary
+     plan, not a consolation prize.
+
+9.10 THE LEGAL-MOVE MENU IS NOT GUARANTEED EXHAUSTIVE. [LLM]
+     Consider: The harness reliably prevents ILLEGAL moves and
+     tracks state, but it cannot prove that every LEGAL move was
+     offered (under-enumeration). Keep independent rules awareness
+     for options the menu may omit. Guiding posture: the harness
+     should tell you what is true, what is legal, and what will
+     mechanically follow -- it does not tell you what is wise.
 
 ================================================================
 END OF FILE
