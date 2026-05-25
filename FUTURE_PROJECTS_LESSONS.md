@@ -1,3 +1,8 @@
+> **Superseded.** This document has been combined into the shared
+> `LEVY_COMMAND_BUG_GUIDE.md` (Parts I–VI + appendices), which carries the
+> Almoravid/Plantagenet contributions and the per-game ledger. Edit that
+> file going forward; this one is kept for history.
+
 # Levy & Command Harness Development: Bug-Pattern Catalog
 
 **Status:** Lessons learned from building a Python rules harness for
