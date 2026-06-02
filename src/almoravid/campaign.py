@@ -574,16 +574,29 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Feed (a Battle/Storm or Group March marks several), with Sharing
     # among same-Locale same-side Lords.
     feed_result = _feed_all_moved_fought(state)
-    # 4.8.3 auto-Disband at service limit (deferred fix landed here).
-    # Check every Lord that Moved/Fought (and the active Lord) since the
-    # Feed Unfed penalty may have pushed a Lord to its Service limit.
-    disband_result = _auto_disband_at_service_limit(state, lord_id)
+    # 4.8.2/4.8.3 auto-Disband at Service limit: "any Christian then Muslim
+    # Lords whose Service markers are at their limit must Disband." Sweep
+    # ALL on-map Lords (both sides), not only the active one, since the Feed
+    # Unfed penalty (or other Service shifts this card) can push a different
+    # Lord to its limit. _auto_disband_at_service_limit no-ops when a Lord
+    # is not at its limit.
+    disbanded_now: list[dict[str, Any]] = []
+    _sides_order: tuple[Side, Side] = ("christian", "muslim")
+    for _sd in _sides_order:
+        for _lid in [lo.id for lo in state.lords.values()
+                     if lo.side == _sd and lo.cylinder.kind == "locale"]:
+            _res = _auto_disband_at_service_limit(state, _lid)
+            if _res.get("disbanded"):
+                disbanded_now.append(_res)
+    disband_result: dict[str, Any] = (
+        {"disbanded_lords": [d["disbanded"] for d in disbanded_now]}
+        if disbanded_now else {"no_op": True})
     # 3.4.2 advanced Vassal Service: at the 4.8.2 Disband step the
     # Mustered Vassals at/beyond Service limit also Disband (Christian
     # then Muslim), with the no-Forces Lord cascade (1.6).
     if state.meta.advanced_vassal_service:
         from almoravid.actions import _disband_vassals_for_side
-        for _sd in ("christian", "muslim"):
+        for _sd in _sides_order:
             _disband_vassals_for_side(state, _sd)
     # Bookkeeping
     state.meta.active_lord_id = None
@@ -606,7 +619,7 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             f"shared={len(feed_result.get('shared', []))} "
             f"unfed={feed_result.get('unfed', [])}"
             + (f"; auto-disband {disband_result}"
-               if disband_result.get('disbanded') else "")
+               if disband_result.get('disbanded_lords') else "")
             + (f" -> campaign_step={state.meta.campaign_step}"
                if state.meta.campaign_step != "activation" else ""))
     return {"ended": lord_id, "feed": feed_result,
@@ -2037,9 +2050,16 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
 
 def _own_seats(state: GameState, lord_id: str) -> list[str]:
-    """Locale ids that are printed Seats for this Lord (from static data)."""
+    """Locale ids that are Seats for this Lord. Per the 4.6 NOTE, this is
+    the printed Pennant Seats (static data) PLUS any movable Seat markers
+    on the map — Rodrigo/Yusuf/Sir's Seat markers and (via Cathedrals)
+    Alfonso's — which all live in Locale.seat_marker_lord_ids."""
     from almoravid.static_data import load_lords
-    return list(load_lords()["lords"][lord_id].get("seats", []))
+    seats = set(load_lords()["lords"][lord_id].get("seats", []))
+    for lid, loc in state.locales.items():
+        if lord_id in loc.seat_marker_lord_ids:
+            seats.add(lid)
+    return sorted(seats)
 
 
 def _route_blocked_by_enemy(state: GameState, route: list[str],
@@ -2337,31 +2357,38 @@ def _h_cmd_forage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     here = lord.cylinder.locale_id
     assert here is not None
     loc = state.locales[here]
-    gardens_path = (has_gardens(state, here)
-                    and is_friendly_locale(state, here, side))
+    friendly = is_friendly_locale(state, here, side)
+    is_stronghold = loc.base_type != "region"
     besieged = is_besieged(state, lord_id)
+    # 4.7.1 PROCEDURE: "Forage in a Friendly Stronghold adds one Provender
+    # automatically. For Forage anywhere else, roll a die." GARDENS (City
+    # or Fortress only) auto-add even if the Locale is Ravaged or the Lord
+    # is Besieged.
+    gardens_path = has_gardens(state, here) and friendly
+    friendly_strong_auto = (friendly and is_stronghold and not besieged
+                            and loc.ravaged == "none")
+    auto = gardens_path or friendly_strong_auto
     if besieged:
-        # Besieged Lord may Forage only via the Gardens path.
+        # The Lord may not be Besieged (4.7.1) — EXCEPTION: Gardens.
         _require(gardens_path,
-                 "Besieged Lord may Forage only at Friendly City/Fortress "
+                 "Besieged Lord may Forage only at his Friendly City/Fortress "
                  "Gardens (4.7.1)",
                  code="besieged_no_gardens")
-    elif gardens_path:
-        pass  # Friendly Stronghold: auto path
-    else:
-        # Open Forage requires Unravaged
+    if not auto:
+        # Forage "anywhere else": the Locale may not be Ravaged; roll a die.
         _require(loc.ravaged == "none",
                  f"Cannot Forage Ravaged Locale {here}",
                  code="ravaged")
 
-    if gardens_path:
+    if auto:
         new_prov = min(8, lord.assets.get("prov", 0) + 1)
         lord.assets["prov"] = new_prov
+        path = "gardens" if gardens_path else "friendly_stronghold"
         _record(state, action,
-                f"{side} {lord_id} Forages Gardens at {here} (+1 Prov -> "
+                f"{side} {lord_id} Forages ({path}) at {here} (+1 Prov -> "
                 f"{new_prov})")
         state.meta.actions_remaining -= 1
-        return {"path": "gardens", "prov_after": new_prov, "roll": None,
+        return {"path": path, "prov_after": new_prov, "roll": None,
                 "actions_remaining": state.meta.actions_remaining}
 
     # Open Forage: 1d6 roll.
@@ -2425,11 +2452,11 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Enemy Locale: not Friendly to active side (rule 4.7.2 "locale_is_enemy")
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Ravage Friendly Locale {here}", code="friendly_locale")
-    # Already Ravaged by this side check.
-    color = "yellow" if side == "christian" else "green"
-    _require(loc.ravaged != color,
-             f"{here} already Ravaged by {side} (color {color})",
-             code="already_ravaged_by_us")
+    # 4.7.2: Ravage may only target a Locale "not yet Ravaged" — neither
+    # color. (Markers flip to Enemy color only via Conquest, 1.3.1.)
+    _require(loc.ravaged == "none",
+             f"{here} is already Ravaged (4.7.2 targets an un-Ravaged Locale)",
+             code="already_ravaged")
 
     res = _apply_ravage_effect(state, lord, side, here)
     state.meta.actions_remaining -= 1
@@ -5242,13 +5269,12 @@ def _cabalgadas_targets(state: GameState, lord_id: str,
         return []
     here = lord.cylinder.locale_id
     assert here is not None
-    color = "yellow" if side == "christian" else "green"
 
     def ravageable(t: str) -> bool:
         loc = state.locales.get(t)
         return (loc is not None and t != here
                 and not is_friendly_locale(state, t, side)
-                and loc.ravaged != color
+                and loc.ravaged == "none"
                 and not _has_unbesieged_enemy_lord(state, t, side))
 
     targets: set[str] = set()

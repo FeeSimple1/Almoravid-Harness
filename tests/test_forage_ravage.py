@@ -168,14 +168,29 @@ def test_ravage_rejects_friendly_locale() -> None:
 
 
 def test_ravage_rejects_already_ravaged_by_us() -> None:
-    """Cannot Ravage Locale already showing our color."""
+    """Cannot Ravage a Locale already showing our color (4.7.2)."""
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
     # Toledo has yellow Ravaged in Scenario A
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="toledo")
     assert s.locales["toledo"].ravaged == "yellow"
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "cmd_ravage", "side": "christian"})
-    assert ei.value.code == "already_ravaged_by_us"
+    assert ei.value.code == "already_ravaged"
+
+
+def test_ravage_rejects_already_ravaged_enemy_color() -> None:
+    """4.7.2: Ravage targets a Locale NOT YET Ravaged (either color). A
+    Locale Ravaged in the Enemy color cannot be re-Ravaged (and flipped)
+    via a Ravage action — markers flip only via Conquest (1.3.1)."""
+    s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="toledo")
+    s.locales["toledo"].ravaged = "green"   # enemy (Muslim) color
+    before = (s.score.christian, s.score.muslim)
+    with pytest.raises(IllegalAction) as ei:
+        apply_action(s, {"type": "cmd_ravage", "side": "christian"})
+    assert ei.value.code == "already_ravaged"
+    assert s.locales["toledo"].ravaged == "green"   # not flipped
+    assert (s.score.christian, s.score.muslim) == before  # no VP gained
 
 
 def test_ravage_rejects_besieged() -> None:
@@ -213,3 +228,20 @@ def test_legal_moves_offers_ravage_at_enemy_locale() -> None:
     moves = legal_moves(s)
     ravage_moves = [m for m in moves if m["type"] == "cmd_ravage"]
     assert ravage_moves
+
+
+def test_forage_friendly_town_auto_succeeds() -> None:
+    """4.7.1 PROCEDURE: Forage in ANY Friendly Stronghold (not just
+    Gardens City/Fortress) adds one Provender automatically — a Town or
+    Castle counts too."""
+    from almoravid.effective import has_gardens
+    s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale",
+                                               locale_id="coria")  # Town
+    assert s.locales["coria"].base_type == "town"
+    assert not has_gardens(s, "coria")          # not a Gardens Stronghold
+    prov0 = s.lords["alvar_fanez"].assets.get("prov", 0)
+    r = apply_action(s, {"type": "cmd_forage", "side": "christian"})
+    assert r["roll"] is None                    # auto, no die rolled
+    assert r["path"] == "friendly_stronghold"
+    assert s.lords["alvar_fanez"].assets.get("prov", 0) == prov0 + 1

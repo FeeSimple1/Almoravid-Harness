@@ -950,10 +950,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         # Ravage: not Besieged, Enemy Locale, not already
                         # Ravaged by us. Pattern 9 mirror against handler.
                         if not besieged:
-                            color = ("yellow" if active == "christian"
-                                     else "green")
                             if (not is_friendly_locale(state, here, active)
-                                    and loc.ravaged != color):
+                                    and loc.ravaged == "none"):
                                 out.append({"type": "cmd_ravage",
                                             "side": active})
                             # Siege: enemy Stronghold, marker cap not

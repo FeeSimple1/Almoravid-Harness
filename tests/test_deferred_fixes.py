@@ -134,7 +134,7 @@ def test_fpd_auto_disband_at_service_limit() -> None:
     _replace_service(s, "alfonso", s.calendar.current_box)
     # end_card should auto-disband Alfonso
     r = apply_action(s, {"type": "end_card", "side": "christian"})
-    assert r["auto_disband"].get("disbanded") == "alfonso"
+    assert "alfonso" in r["auto_disband"].get("disbanded_lords", [])
     assert s.lords["alfonso"].cylinder.kind == "calendar"
 
 
