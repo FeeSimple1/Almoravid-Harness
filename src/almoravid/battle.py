@@ -817,6 +817,63 @@ def _battle_over(attacker: BattleSide, defender: BattleSide) -> bool:
             or _side_all_lords_routed(defender))
 
 
+def _battle_one_round(
+    state: GameState,
+    attacker: BattleSide,
+    defender: BattleSide,
+    round_idx: int,
+    *,
+    defender_walls_range: tuple[int, int] | None = None,
+) -> BattleRound:
+    """Resolve a single open-field Battle Round: Reposition (Round 2+),
+    the Strike steps (M6 Feigned-Retreat reorder on Round 2), and the
+    end-of-Round Hold-event discards. Mutates both sides in place.
+
+    The Concede declaration, the end-of-Battle break, and the winner
+    determination are the CALLER's responsibility -- shared by the
+    synchronous resolve_battle (pre-declared concede) and the interactive
+    round-stepped driver (reactive per-Round concede, 4.4.2)."""
+    rnd = BattleRound(index=round_idx)
+    # Phase 6e Reposition (Round 2+ only -- rule 4.4.2 skipped_round_1).
+    if round_idx > 1:
+        _reposition_array(attacker)
+        _reposition_array(defender)
+    # Phase 6i: M6 Feigned Retreat reorders Round 2 melee steps -- all
+    # Muslim Melee Strikes before all Christian Melee, regardless of who
+    # is Attacker.
+    if (round_idx == 2
+            and "M6" in state.decks.this_levy_events.get("muslim", [])):
+        muslim_side: Role = ("attacker" if attacker.side == "muslim"
+                             else "defender")
+        christian_side: Role = ("attacker" if attacker.side == "christian"
+                                else "defender")
+        steps_this_round: list[tuple[str, Role, str, UnitClass | None]] = [
+            ("1.a", "defender", "missile", None),
+            ("1.b", "attacker", "missile", None),
+            ("2.a", muslim_side, "melee", "horse"),
+            ("2.b", muslim_side, "melee", "foot"),
+            ("2.c", christian_side, "melee", "horse"),
+            ("2.d", christian_side, "melee", "foot"),
+        ]
+    else:
+        steps_this_round = _BATTLE_STEPS
+    for step_id, actor_role, step_type, unit_class in steps_this_round:
+        step_res = _resolve_step(state, step_id, actor_role, step_type,
+                                  unit_class, attacker, defender,
+                                  round_index=round_idx,
+                                  walls_range=defender_walls_range)
+        rnd.steps.append(step_res)
+        if _battle_over(attacker, defender):
+            break
+    # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills C1/M1).
+    if round_idx == 1:
+        _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+    # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
+    if round_idx == 2:
+        _discard_round1_events(state, ["M6"])
+    return rnd
+
+
 def resolve_battle(
     state: GameState,
     attacker: BattleSide,
@@ -847,62 +904,20 @@ def resolve_battle(
     # C7 Baggage Parapet on the Christian side cancels Muslim M2.
     _consume_camp_attack(state, attacker, defender, result)
     for round_idx in range(1, max_rounds + 1):
-        rnd = BattleRound(index=round_idx)
-        # 4.4.2 CONCEDE THE FIELD? At the start of each Round the Attacker
-        # then the Defender may Concede (unlike the Storm, EITHER side may,
-        # and from Round 1). Pre-declared per side via *_concede_round
-        # (mirrors the Storm's concede_after_round). Setting the flag here,
-        # before Strikes, makes _resolve_step halve the conceding side's
-        # Hits this Round (pursuit) and ends the Battle at Round end with
-        # that side as the loser (winner logic after the loop).
+        # 4.4.2 CONCEDE THE FIELD? Pre-declared per side via *_concede_round
+        # here (the interactive driver sets these flags reactively instead).
+        # Setting the flag before Strikes makes _resolve_step halve the
+        # conceding side's Hits this Round (pursuit) and ends the Battle at
+        # Round end with that side as the loser (winner logic below).
         if (attacker_concede_round is not None
                 and round_idx >= attacker_concede_round):
             attacker.conceded = True
         if (defender_concede_round is not None
                 and round_idx >= defender_concede_round):
             defender.conceded = True
-        # Phase 6e Reposition (Round 2+ only — rule 4.4.2 skipped_round_1).
-        if round_idx > 1:
-            _reposition_array(attacker)
-            _reposition_array(defender)
-        # Phase 6i: M6 Feigned Retreat reorders Round 2 melee steps:
-        # all Muslim Melee Strikes before all Christian Melee, regardless
-        # of who is Attacker (rule: "On Round 2, all Muslim Melee Strikes
-        # before all Christian Melee").
-        if (round_idx == 2
-                and "M6" in state.decks.this_levy_events.get("muslim", [])):
-            muslim_side: Role = ("attacker" if attacker.side == "muslim"
-                                 else "defender")
-            christian_side: Role = ("attacker" if attacker.side == "christian"
-                                    else "defender")
-            steps_this_round: list[tuple[str, Role, str, UnitClass | None]] = [
-                ("1.a", "defender", "missile", None),
-                ("1.b", "attacker", "missile", None),
-                # Muslim Melee first (both horse + foot), then Christian.
-                ("2.a", muslim_side, "melee", "horse"),
-                ("2.b", muslim_side, "melee", "foot"),
-                ("2.c", christian_side, "melee", "horse"),
-                ("2.d", christian_side, "melee", "foot"),
-            ]
-        else:
-            steps_this_round = _BATTLE_STEPS
-        for step_id, actor_role, step_type, unit_class in steps_this_round:
-            step_res = _resolve_step(state, step_id, actor_role, step_type,
-                                      unit_class, attacker, defender,
-                                      round_index=round_idx,
-                                      walls_range=defender_walls_range)
-            rnd.steps.append(step_res)
-            if _battle_over(attacker, defender):
-                break
+        rnd = _battle_one_round(state, attacker, defender, round_idx,
+                                defender_walls_range=defender_walls_range)
         result.rounds.append(rnd)
-        # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills).
-        if round_idx == 1:
-            _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
-        # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
-        if round_idx == 2:
-            _discard_round1_events(state, ["M6"])
-        # Phase 6e: if either side Conceded this Round, end Battle now
-        # (rule 4.4.2 new_round_check end_battle_when).
         if attacker.conceded or defender.conceded:
             result.notes.append(
                 f"Round {round_idx} ended with Concede; Battle ends"
