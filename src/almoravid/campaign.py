@@ -53,6 +53,23 @@ def _other(side: Side) -> Side:
     return "muslim" if side == "christian" else "christian"
 
 
+def _concede_round_arg(action: dict[str, Any], key: str) -> int | None:
+    """Read an optional pre-declared Concede-the-Field Round (4.4.2).
+
+    None = that side never Concedes; otherwise the 1-based Round at the
+    start of which that side Concedes (Attacker or Defender; either may,
+    from Round 1 — unlike the Storm, where only the Attacker may, Round
+    2+). Mirrors the Storm's pre-declared concede_after_round."""
+    val = action.get(key)
+    if val is None:
+        return None
+    _require(isinstance(val, int) and val >= 1,
+             f"{key} must be a positive int (Round number) or omitted",
+             code="bad_arg")
+    assert isinstance(val, int)
+    return val
+
+
 def _current_season(state: GameState) -> str:
     box = state.calendar.current_box
     return state.calendar.boxes[box - 1].season
@@ -2849,7 +2866,12 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # at the Attacker's populated Front-Lord count.
     dfd = battleside_for_lords(state, enemy_lord_ids, other, "defender",
                                front_limit=_front_lord_count(atk))
-    result = resolve_battle(state, atk, dfd)
+    result = resolve_battle(
+        state, atk, dfd,
+        attacker_concede_round=_concede_round_arg(
+            action, "attacker_concede_round"),
+        defender_concede_round=_concede_round_arg(
+            action, "defender_concede_round"))
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
@@ -3723,7 +3745,12 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
         dfd = battleside_for_lords(state, defender_lord_ids, other,
                                    "defender",
                                    front_limit=_front_lord_count(atk))
-        result = resolve_battle(state, atk, dfd)
+        result = resolve_battle(
+            state, atk, dfd,
+            attacker_concede_round=_concede_round_arg(
+                action, "attacker_concede_round"),
+            defender_concede_round=_concede_round_arg(
+                action, "defender_concede_round"))
         commit_forces_after_battle(state, atk)
         commit_forces_after_battle(state, dfd)
         # Bug P fix: Retreat aftermath FIRST so it can consult Hold events
@@ -4969,7 +4996,12 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     # round limit. Sagrajas is a large 5-vs-5 Battle that can run >6 Rounds,
     # so use a generous cap that the natural termination reaches first --
     # the cap must NOT decide the result. [Sagrajas cap fix]
-    result = resolve_battle(state, atk, dfd, max_rounds=24)
+    result = resolve_battle(
+        state, atk, dfd, max_rounds=24,
+        attacker_concede_round=_concede_round_arg(
+            action, "attacker_concede_round"),
+        defender_concede_round=_concede_round_arg(
+            action, "defender_concede_round"))
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     winner = result.winner

@@ -824,6 +824,8 @@ def resolve_battle(
     *,
     max_rounds: int = 6,
     defender_walls_range: tuple[int, int] | None = None,
+    attacker_concede_round: int | None = None,
+    defender_concede_round: int | None = None,
 ) -> BattleResult:
     """Full Battle resolution per rule 4.4 (Phase 5e: single-Lord case).
 
@@ -846,6 +848,19 @@ def resolve_battle(
     _consume_camp_attack(state, attacker, defender, result)
     for round_idx in range(1, max_rounds + 1):
         rnd = BattleRound(index=round_idx)
+        # 4.4.2 CONCEDE THE FIELD? At the start of each Round the Attacker
+        # then the Defender may Concede (unlike the Storm, EITHER side may,
+        # and from Round 1). Pre-declared per side via *_concede_round
+        # (mirrors the Storm's concede_after_round). Setting the flag here,
+        # before Strikes, makes _resolve_step halve the conceding side's
+        # Hits this Round (pursuit) and ends the Battle at Round end with
+        # that side as the loser (winner logic after the loop).
+        if (attacker_concede_round is not None
+                and round_idx >= attacker_concede_round):
+            attacker.conceded = True
+        if (defender_concede_round is not None
+                and round_idx >= defender_concede_round):
+            defender.conceded = True
         # Phase 6e Reposition (Round 2+ only — rule 4.4.2 skipped_round_1).
         if round_idx > 1:
             _reposition_array(attacker)
