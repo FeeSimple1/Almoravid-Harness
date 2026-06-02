@@ -138,6 +138,7 @@ def is_besieged(state: GameState, lord_id: str) -> bool:
         return False
     if not lord.in_stronghold:
         return False
+    assert lord.cylinder.locale_id is not None
     loc = state.locales[lord.cylinder.locale_id]
     if lord.side == "muslim":
         return loc.siege_yellow > 0  # Christian-placed Siege
@@ -157,6 +158,7 @@ def is_bypassed(state: GameState, lord_id: str) -> bool:
         return False
     if not lord.in_stronghold:
         return False
+    assert lord.cylinder.locale_id is not None
     loc = state.locales[lord.cylinder.locale_id]
     if lord.side == "muslim":
         return loc.bypass_yellow

@@ -28,6 +28,7 @@ from typing import Any, cast
 
 from almoravid.rng import roll_d6, shuffle
 from almoravid.state import (
+    AssetType,
     GameState,
     HistoryEntry,
     LevyStep,
@@ -75,7 +76,7 @@ def _other(side: Side) -> Side:
     return "muslim" if side == "christian" else "christian"
 
 
-def _require(condition: bool, message: str, code: str) -> None:
+def _require(condition: object, message: str, code: str) -> None:
     if not condition:
         raise IllegalAction(message, code=code)
 
@@ -229,6 +230,7 @@ def _h_bid_for_sides(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(isinstance(b1, int) and isinstance(b2, int)
              and b1 >= 0 and b2 >= 0,
              "bid1 and bid2 must be non-negative ints", code="bad_arg")
+    assert isinstance(b1, int) and isinstance(b2, int)
     min_bid = 2 if state.meta.scenario_letter == "F" else 0
     _require(b1 >= min_bid and b2 >= min_bid,
              f"Scenario {state.meta.scenario_letter}: minimum bid is "
@@ -357,7 +359,7 @@ def _h_aow_shuffle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"deck_size": len(state.decks.draw)}
 
 
-def _rebuild_aow_deck(state: GameState, side: str) -> int:
+def _rebuild_aow_deck(state: GameState, side: Side) -> int:
     """3.1.1: rebuild this side's draw deck = all of its cards EXCEPT
     Held Events, in-play Capabilities (board edge / mats), and cards
     pending implementation. Returns the excluded count. Recycles used
@@ -431,6 +433,7 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
     pend = state.decks.pending_draw.get(side, [])
     _require(card_id in pend, f"{card_id} not in {side} pending draw",
              code="not_pending")
+    card_id = cast(str, card_id)
     rec = load_cards()["cards"].get(card_id, {})
     scope = rec.get("capability_scope")
     deployed = None
@@ -520,7 +523,7 @@ def _free_seats_for(state: GameState, lord_id: str) -> list[str]:
     """
     from almoravid.effective import is_friendly_locale
     lord = state.lords[lord_id]
-    other = "muslim" if lord.side == "christian" else "christian"
+    other: Side = "muslim" if lord.side == "christian" else "christian"
     out = []
     for seat in lord.seats:
         if seat not in state.locales:
@@ -578,6 +581,7 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(levying_lord_id in state.lords,
              "levying_lord_id required — a Lord must spend Lordship to "
              "Muster another (3.4.1)", code="bad_arg")
+    levying_lord_id = cast(str, levying_lord_id)
     levier = state.lords[levying_lord_id]
     _require(levier.side == side,
              f"{levying_lord_id} is not on {side}'s side", code="wrong_side")
@@ -666,7 +670,7 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 _STRONGHOLD_TYPES = ("city", "fortress", "town", "castle")
 
 
-def _cta_is_ready(state: GameState, lord) -> bool:
+def _cta_is_ready(state: GameState, lord: Lord) -> bool:
     """3.4.1 Ready: cylinder on the Calendar at or LEFT of the Levy
     marker (box <= current_box). Off-left (box None) also counts."""
     return (lord.cylinder.kind == "calendar"
@@ -763,7 +767,8 @@ def _cta_move_seat_marker(state: GameState, lord_id: str, seat: str) -> None:
         state.locales[seat].seat_marker_lord_ids.append(lord_id)
 
 
-def _cta_collect_payment(state: GameState, side: Side, payments: list,
+def _cta_collect_payment(state: GameState, side: Side,
+                         payments: list[dict[str, Any]],
                          required: int, *, allow_taifa_box: bool) -> None:
     """Validate and remove a total of `required` Coin per a list of
     explicit payment entries (no greedy auto-pick).
@@ -778,7 +783,7 @@ def _cta_collect_payment(state: GameState, side: Side, payments: list,
              "payments list required (explicit Coin sources, 3.5)",
              code="bad_arg")
     total = 0
-    plan: list[tuple] = []  # (kind, lord_id_or_None, amount)
+    plan: list[tuple[str, str | None, int]] = []  # (kind, lord, amount)
     taifa_amt = 0
     for entry in payments:
         _require(isinstance(entry, dict), "payment entry must be a dict",
@@ -796,6 +801,7 @@ def _cta_collect_payment(state: GameState, side: Side, payments: list,
             plid = entry.get("lord_id")
             _require(plid in state.lords, "payment lord_id required (str)",
                      code="bad_arg")
+            plid = cast(str, plid)
             amt = int(entry.get("coin", 0))
             _require(amt >= 1, "coin amount must be >= 1", code="bad_arg")
             payer = state.lords[plid]
@@ -822,6 +828,7 @@ def _cta_collect_payment(state: GameState, side: Side, payments: list,
         if kind == "taifa":
             state.taifas_box_coin -= amt
         else:
+            assert plid is not None
             payer = state.lords[plid]
             payer.assets["coin"] = payer.assets.get("coin", 0) - amt
             if payer.assets["coin"] == 0:
@@ -917,6 +924,7 @@ def _h_cta_employ_rodrigo(state: GameState, action: dict[str, Any]) -> dict[str,
     from almoravid.effective import is_friendly_locale
     seat = action.get("seat")
     _require(seat in state.locales, "seat (locale_id) required", code="bad_arg")
+    seat = cast(str, seat)
     loc = state.locales[seat]
     _require(loc.base_type in _STRONGHOLD_TYPES,
              f"{seat} is not a Stronghold (3.5)", code="not_stronghold")
@@ -996,6 +1004,7 @@ def _h_cta_invite_almoravids(state: GameState, action: dict[str, Any]) -> dict[s
     lord_id = action.get("lord_id")
     _require(lord_id in ("yusuf", "sir"),
              "lord_id must be 'yusuf' or 'sir' (3.5.2)", code="bad_arg")
+    lord_id = cast(str, lord_id)
     lord = state.lords[lord_id]
     _require(_cta_is_ready(state, lord),
              f"{lord_id} is not Ready (3.4.1) — cannot Invite", code="not_ready")
@@ -1019,6 +1028,7 @@ def _h_cta_invite_almoravids(state: GameState, action: dict[str, Any]) -> dict[s
     _require(seat is not None,
              "no Muslim-Friendly Port free of Siege to Invite at (3.5.2)",
              code="no_port")
+    seat = cast(str, seat)
     _cta_move_seat_marker(state, lord_id, seat)
     muster = _cta_auto_muster(state, lord_id, seat)
     # Place Eudes onto the Calendar two boxes ahead if not already on
@@ -1079,6 +1089,7 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
         _require(jihad_locale in eligible,
                  f"jihad_locale must be a Jihad-eligible Locale "
                  f"{eligible} (3.5.2/1.4.4)", code="bad_jihad_target")
+        jihad_locale = cast(str, jihad_locale)
         state.locales[jihad_locale].jihad_markers += 1
         placed = jihad_locale
     _record(state, action,
@@ -1110,10 +1121,12 @@ def _h_cta_call_emir(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(yusuf.cylinder.kind == "locale",
              "Yusuf is not on the map (3.5.2)", code="not_on_map")
     here = yusuf.cylinder.locale_id
+    assert here is not None
     # Yusuf must be at a Taifa Lord's (printed) Seat.
     taifa_lord_id = action.get("taifa_lord_id")
     _require(taifa_lord_id in state.lords, "taifa_lord_id required",
              code="bad_arg")
+    taifa_lord_id = cast(str, taifa_lord_id)
     tlord = state.lords[taifa_lord_id]
     _require(tlord.is_taifa, f"{taifa_lord_id} is not a Taifa Lord (3.5.2)",
              code="not_taifa_lord")
@@ -1137,6 +1150,7 @@ def _h_cta_call_emir(state: GameState, action: dict[str, Any]) -> dict[str, Any]
         _require(seat in free,
                  f"seat must be a free Seat of {taifa_lord_id}: {free}",
                  code="bad_seat")
+        seat = cast(str, seat)
         muster = _cta_auto_muster(state, taifa_lord_id, seat)
         _record(state, action,
                 f"Muslim Calls upon Emir {taifa_lord_id}: auto-Mustered at "
@@ -1182,6 +1196,7 @@ def _h_cta_add_crusade_jihad(state: GameState, action: dict[str, Any]) -> dict[s
     _require(jihad_locale in eligible,
              f"jihad_locale must be eligible {eligible} (1.4.4)",
              code="bad_jihad_target")
+    jihad_locale = cast(str, jihad_locale)
     state.locales[jihad_locale].jihad_markers += 1
     state.meta.cta_crusade_jihad_pending = False
     _record(state, action,
@@ -1270,7 +1285,8 @@ def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
     return sm.box
 
 
-def _disband_vassals_for_side(state: GameState, side: str) -> list[dict]:
+def _disband_vassals_for_side(state: GameState,
+                              side: Side) -> list[dict[str, Any]]:
     """3.4.2 advanced Vassal Service — Disband step (3.3 / 4.8.2): for
     every Mustered Vassal (one with a Calendar Service marker) of `side`:
       - marker LEFT of the marker box -> permanently removed (3.3.1):
@@ -1285,7 +1301,7 @@ def _disband_vassals_for_side(state: GameState, side: str) -> list[dict]:
     if not state.meta.advanced_vassal_service:
         return []
     cur = state.calendar.current_box
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     no_force_lords: list[str] = []
     for lid, lord in state.lords.items():
         if lord.side != side or lord.cylinder.kind != "locale":
@@ -1416,6 +1432,7 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     target_lord_id = action.get("target_lord_id")
     _require(target_lord_id in state.lords,
              "target_lord_id required (str)", code="bad_arg")
+    target_lord_id = cast(str, target_lord_id)
     target = state.lords[target_lord_id]
 
     if resource == "taifa_coin":
@@ -1434,6 +1451,7 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         payer_lord_id = action.get("payer_lord_id")
         _require(payer_lord_id in state.lords,
                  "payer_lord_id required (str)", code="bad_arg")
+        payer_lord_id = cast(str, payer_lord_id)
         payer = state.lords[payer_lord_id]
         _require(payer.side == side, f"{payer_lord_id} not on {side}'s side",
                  code="wrong_side")
@@ -1451,6 +1469,7 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      f"{payer_lord_id} (3.2)", code="not_same_locale")
         if resource == "loot":
             here = payer.cylinder.locale_id
+            assert here is not None
             _require(is_friendly_locale(state, here, side),
                      f"Pay-with-Loot requires a Friendly Locale (3.2.2); "
                      f"{here} is not Friendly to {side}",
@@ -1476,7 +1495,8 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _award_parias_coin(state: GameState, amount: int, targets) -> dict[str, Any]:
+def _award_parias_coin(state: GameState, amount: int,
+                       targets: list[dict[str, Any]] | None) -> dict[str, Any]:
     """1.4.3 PARIAS COIN: when an Independent Taifa Lord Disbands, the
     Christians add `amount` Coin (= the Disbanding Taifa Lord's Service
     rating: six if al-Mutamid, four otherwise) from the pool among any
@@ -1507,6 +1527,7 @@ def _award_parias_coin(state: GameState, amount: int, targets) -> dict[str, Any]
         _require(plid in eligible,
                  f"{plid} is not an Unbesieged Christian Lord for Parias "
                  f"Coin (1.4.3)", code="bad_parias_target")
+        plid = cast(str, plid)
         c = int(entry.get("coin", 0))
         _require(c >= 1, "Parias Coin amount must be >= 1", code="bad_arg")
         placed[plid] = placed.get(plid, 0) + c
@@ -1700,7 +1721,8 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _require_levy_actor_eligible(state: GameState, lord, lord_id: str) -> None:
+def _require_levy_actor_eligible(state: GameState, lord: Lord,
+                                 lord_id: str) -> None:
     """3.4 Muster intro: a Lord taking Levy actions must be on the map
     at a Friendly Locale with no Siege there (he may be Bypassed,
     4.3.5). Applies to all Lordship-spending Levy actions (Levy Lord
@@ -1709,6 +1731,7 @@ def _require_levy_actor_eligible(state: GameState, lord, lord_id: str) -> None:
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not on the map (3.4)", code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
     _require(is_friendly_locale(state, here, lord.side),
              f"{lord_id} is not at a Friendly Locale ({here}); cannot take "
              f"Levy actions (3.4)", code="not_friendly_locale")
@@ -1743,6 +1766,7 @@ def _h_levy_transport(state: GameState, action: dict[str, Any]) -> dict[str, Any
     transport = action.get("transport")
     _require(transport in ("cart", "mule"),
              "transport must be 'cart' or 'mule' (3.4.3)", code="bad_arg")
+    transport = cast("AssetType", transport)
     lord.assets[transport] = lord.assets.get(transport, 0) + 1
     lord.lordship_used += 1
     # Return one lost Serf (required) — compare to the Lord's starting
@@ -1827,7 +1851,7 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
             "lordship_used": lord.lordship_used}
 
 
-def _unused_capability_cards(state: GameState, side: str) -> list[str]:
+def _unused_capability_cards(state: GameState, side: Side) -> list[str]:
     """3.4.4 source pool: the side's currently UNUSED Arts of War cards
     that carry a Capability half.
 
@@ -1858,7 +1882,7 @@ def _unused_capability_cards(state: GameState, side: str) -> list[str]:
             and c.get("capability_scope") is not None]
 
 
-def _this_lord_cap_titles(lord) -> list[str]:
+def _this_lord_cap_titles(lord: Lord) -> list[str]:
     """capability_name (title) of each This-Lord Capability on this Lord."""
     from almoravid.static_data import load_cards
     cards = load_cards()["cards"]
@@ -1866,7 +1890,7 @@ def _this_lord_cap_titles(lord) -> list[str]:
             for cid in lord.capabilities]
 
 
-def _check_this_lord_cap_limits(lord, card_id: str) -> None:
+def _check_this_lord_cap_limits(lord: Lord, card_id: str) -> None:
     """3.4.4 This-Lord Capability restrictions: a Lord may hold at most
     TWO This-Lord Capabilities, may not hold two with the same title, and
     may only hold a capability whose card text lists him as eligible

@@ -13,7 +13,15 @@ This module is the canonical "what does the state look like" view.
 
 from __future__ import annotations
 
-from almoravid.state import GameState, Locale, Lord
+from collections.abc import Mapping
+
+from almoravid.state import (
+    AssetType,
+    GameState,
+    Locale,
+    Lord,
+    UnitType,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -28,7 +36,7 @@ def _year_for_box(box: int) -> int:
     return 1085 if box <= 8 else 1086
 
 
-def _forces_short(forces: dict) -> str:
+def _forces_short(forces: Mapping[UnitType, int]) -> str:
     """Compact force-count string like '1K 1S 2L 1M 1Sf'."""
     if not forces:
         return "—"
@@ -44,7 +52,7 @@ def _forces_short(forces: dict) -> str:
     return " ".join(parts) if parts else "—"
 
 
-def _assets_short(assets: dict) -> str:
+def _assets_short(assets: Mapping[AssetType, int]) -> str:
     if not assets:
         return "—"
     short = {"coin": "Co", "loot": "Lt", "prov": "Pv", "cart": "Ct", "mule": "Mu"}

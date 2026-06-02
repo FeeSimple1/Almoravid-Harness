@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from almoravid.state import GameState, Side
+from almoravid.state import GameState, Lord, Side
 
 
 def legal_moves(state: GameState) -> list[dict[str, Any]]:
@@ -89,6 +89,7 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                 if lord is not None and lord.cylinder.kind == "locale":
                     seats = _own_seats(state, lord_id)
                     here = lord.cylinder.locale_id
+                    assert here is not None
                     cart = lord.assets.get("cart", 0)
                     mule = lord.assets.get("mule", 0)
                     routes = _find_supply_routes(state, here, seats,
@@ -296,6 +297,7 @@ def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         if lord.assets.get("loot", 0) >= 1:
             try:
                 here = lord.cylinder.locale_id
+                assert here is not None
                 if (is_friendly_locale(state, here, side)
                         and not is_besieged(state, lid)):
                     out.append({"type": "pay_lord", "side": side,
@@ -382,7 +384,10 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 and not cl.just_arrived_this_levy
                 and cl.lordship_used < cl.lordship_rating):
             try:
-                if (is_friendly_locale(state, cl.cylinder.locale_id, side)
+                cl_here = cl.cylinder.locale_id
+                assert cl_here is not None
+                assert cl_here is not None
+                if (is_friendly_locale(state, cl_here, side)
                         and not is_besieged(state, clid)):
                     leviers.append(clid)
             except Exception:
@@ -412,6 +417,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 and lord.lordship_used < lord.lordship_rating):
             from almoravid.effective import is_besieged, is_friendly_locale
             here = lord.cylinder.locale_id
+            assert here is not None
             try:
                 eligible = (is_friendly_locale(state, here, side)
                             and not is_besieged(state, lid))
@@ -476,12 +482,13 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             and lord.side != side
             for lord in state.lords.values())
 
-    def ready(lord) -> bool:
+    def ready(lord: Lord) -> bool:
         return (lord.cylinder.kind == "calendar"
                 and (lord.cylinder.box is None
                      or lord.cylinder.box <= state.calendar.current_box))
 
-    def build_payment(payer_side, required, allow_taifa):
+    def build_payment(payer_side: Side, required: int,
+                      allow_taifa: bool) -> list[dict[str, Any]] | None:
         remaining = required
         plan: list[dict[str, Any]] = []
         if allow_taifa and state.taifas_box_coin > 0:
@@ -584,7 +591,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 out.append({"type": "cta_invite_almoravids", "side": "muslim",
                             "lord_id": cand})
 
-    def on_cal_ready(lord) -> bool:
+    def on_cal_ready(lord: Lord) -> bool:
         return (lord.cylinder.kind == "calendar"
                 and lord.cylinder.box is not None
                 and lord.cylinder.box <= state.calendar.current_box)
@@ -600,6 +607,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             out.append({"type": "cta_uphold_dynasties", "side": "muslim"})
     if yusuf.cylinder.kind == "locale":
         here = yusuf.cylinder.locale_id
+        assert here is not None
         if is_friendly_locale(state, here, "muslim") and free_of_siege(here):
             marker_lords = {sm.lord_id for sm in state.calendar.service_markers
                             if sm.vassal_id is None}
@@ -726,9 +734,10 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             # C16 Cathedrals: Alfonso at a Christian-Conquered City with
             # the capability may place a Cathedral Seat (free, optional).
             if (state.meta.active_lord_id == "alfonso"
-                    and "C16" in state.lords.get("alfonso").capabilities
+                    and "C16" in state.lords["alfonso"].capabilities
                     and state.lords["alfonso"].cylinder.kind == "locale"):
                 _al = state.lords["alfonso"]
+                assert _al.cylinder.locale_id is not None
                 _loc = state.locales.get(_al.cylinder.locale_id)
                 _gate = (state.meta.scenario_letter != "F"
                          or any(state.lords.get(x) is not None
@@ -763,6 +772,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     else:
                         from almoravid.campaign import _is_marshal as _ism_al
                         _here_al = lord.cylinder.locale_id
+                        assert _here_al is not None
                         for _cid, _cl in state.lords.items():
                             if (_cid != lord_id and _cl.side == active
                                     and not _ism_al(_cid, active)
@@ -817,6 +827,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         cost = 2 if _is_laden(lord) else 1
                         if state.meta.actions_remaining >= cost:
                             from_loc = lord.cylinder.locale_id
+                            assert from_loc is not None
                             for way_type in ("road", "pass"):
                                 for nbr in neighbors_via(from_loc, way_type):
                                     # Pattern 9 mirror: pre-check
@@ -851,6 +862,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             and state.meta.actions_remaining >= 1):
                         seats = _own_seats(state, lord_id)
                         here = lord.cylinder.locale_id
+                        assert here is not None
                         # Multi-hop Supply (4.6.1): enumerate every reachable
                         # Seat. Handler-mirror filter:
                         #   - at-Seat is always offered (no Transport).
@@ -887,6 +899,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     if (lord.cylinder.kind == "locale"
                             and state.meta.actions_remaining >= 1):
                         here = lord.cylinder.locale_id
+                        assert here is not None
                         loc = state.locales[here]
                         besieged = _ib(state, lord_id)
                         gardens_path = (has_gardens(state, here)
@@ -951,6 +964,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     # Sally: Besieged Lord with besiegers outside.
                     if _ib(state, lord_id):
                         here = lord.cylinder.locale_id
+                        assert here is not None
                         besiegers = [
                             lord_obj.id for lord_obj in state.lords.values()
                             if lord_obj.side != active
@@ -966,6 +980,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     if (lord.cylinder.kind == "locale"
                             and state.meta.actions_remaining >= 1):
                         here = lord.cylinder.locale_id
+                        assert here is not None
                         loc = state.locales[here]
                         our_bypass = (loc.bypass_yellow if active == "christian"
                                       else loc.bypass_green)
@@ -978,6 +993,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             and lord.in_stronghold
                             and state.meta.actions_remaining >= 1):
                         here = lord.cylinder.locale_id
+                        assert here is not None
                         loc = state.locales[here]
                         enemy_bypass = (loc.bypass_green if active == "christian"
                                         else loc.bypass_yellow)

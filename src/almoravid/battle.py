@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from almoravid.rng import roll_d6
-from almoravid.state import GameState, Side, UnitType
+from almoravid.state import AssetType, GameState, Lord, Side, UnitType
 from almoravid.static_data import load_forces
 
 Role = Literal["attacker", "defender"]
@@ -196,10 +196,10 @@ class BattleResult:
     notes: list[str] = field(default_factory=list)
     # S11b: per-Lord post-Storm forces (multi-besieger Storms) so the
     # caller can commit each Lord exactly. Empty for non-Storm results.
-    attacker_lord_forces: dict[str, dict] = field(default_factory=dict)
-    defender_lord_forces: dict[str, dict] = field(default_factory=dict)
-    attacker_lord_routed: dict[str, dict] = field(default_factory=dict)
-    defender_lord_routed: dict[str, dict] = field(default_factory=dict)
+    attacker_lord_forces: dict[str, Any] = field(default_factory=dict)
+    defender_lord_forces: dict[str, Any] = field(default_factory=dict)
+    attacker_lord_routed: dict[str, Any] = field(default_factory=dict)
+    defender_lord_routed: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -445,12 +445,12 @@ def _resolve_protection_roll(
     # Bug M (Pattern 7 audit) — Storm: drain Garrison units BEFORE
     # Lord units. We try the garrison_forces pool first; only when
     # garrison is empty do we fall through to forces.
-    pools: list[tuple[str, dict]] = []
+    pools: list[tuple[str, dict[UnitType, int]]] = []
     if context == "storm" and target_side.garrison_forces:
         pools.append(("garrison", target_side.garrison_forces))
     pools.append(("forces", target_side.forces))
 
-    def _build_candidates(pool: dict) -> list[tuple[int, UnitType]]:
+    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, UnitType]]:
         cs: list[tuple[int, UnitType]] = []
         for unit_type, count in pool.items():
             if count <= 0:
@@ -497,6 +497,7 @@ def _resolve_protection_roll(
             break
     if chosen is None:
         return (False, None)
+    assert chosen_pool is not None
     unit = None
     for cat in ("horse", "foot"):
         if chosen in forces_data[cat]:
@@ -936,16 +937,16 @@ def _losses_keep_threshold(utype: UnitType) -> int:
     if rec is None:
         return 0
     if utype == "african_horse":
-        return rec["protection"]["evade"]["range"][1]
+        return int(rec["protection"]["evade"]["range"][1])
     ptype = rec["protection"]["type"]
     if ptype == "armored":
-        return rec["protection"]["range"][1]
+        return int(rec["protection"]["range"][1])
     if ptype == "unarmored":
         return 1
     return 0  # auto_remove (Serfs)
 
 
-def apply_losses_rolls(state: GameState, lord_id: str, loser_state: str) -> dict:
+def apply_losses_rolls(state: GameState, lord_id: str, loser_state: str) -> dict[str, Any]:
     """4.4.4 Losses: roll 1d6 for each of a Lord's Routed units.
 
     Threshold by loser_state:
@@ -983,10 +984,10 @@ def apply_losses_rolls(state: GameState, lord_id: str, loser_state: str) -> dict
 def apply_battle_losses(
     state: GameState,
     result: BattleResult,
-    retreat_summary: dict,
+    retreat_summary: dict[str, Any],
     *,
     storm: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     """Drive 4.4.4 Losses for BOTH sides after a Battle/Storm.
 
     Winner-side Lords roll vs Protection ("winner"). Loser-side Lords
@@ -997,7 +998,7 @@ def apply_battle_losses(
     1 ("storm_attacker", 4.5.2). Any Lord left with zero Forces is
     permanently removed (3.3.1)."""
     from almoravid.state import Cylinder
-    out: dict[str, dict] = {}
+    out: dict[str, Any] = {}
     # 4.5.4 (rule line "becomes free of Enemy Lords ... remove all Siege or
     # Bypass markers there"): track Locales where a besieging Lord is
     # eliminated in combat so orphaned Siege/Bypass markers are cleared.
@@ -1190,7 +1191,8 @@ def battleside_for_lords(
     # Phase 6e: populate per-Lord Array for multi-Lord Battles.
     if len(lord_ids) > 1:
         array: list[LordPosition] = []
-        positions_order = ["front_center", "front_left", "front_right"]
+        positions_order: list[ArrayPosition] = [
+            "front_center", "front_left", "front_right"]
         # Number of Front positions this side may fill (1..3). B4: the
         # Defender is capped at the Attacker's Front-Lord count so each
         # extra Lord goes to Reserve.
@@ -1198,7 +1200,7 @@ def battleside_for_lords(
         # Active Lord (or the first lord_id) occupies Front center.
         center_lid = active_lord_id if (active_lord_id in lord_ids)             else lord_ids[0]
         others = [lid for lid in lord_ids if lid != center_lid]
-        slots = [(center_lid, "front_center")]
+        slots: list[tuple[str, ArrayPosition]] = [(center_lid, "front_center")]
         for i, lid in enumerate(others):
             # center already filled position 0; remaining Front slots
             # are positions_order[1 .. front_n-1].
@@ -1352,7 +1354,7 @@ def commit_forces_after_battle(state: GameState, side: BattleSide) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _garrison_for_locale(state: GameState, locale_id: str) -> dict:
+def _garrison_for_locale(state: GameState, locale_id: str) -> dict[UnitType, int]:
     """Build a Garrison BattleSide partial (forces + cap modifiers) from
     strongholds.json. Returns dict suitable for BattleSide(forces=...).
     """
@@ -1362,7 +1364,7 @@ def _garrison_for_locale(state: GameState, locale_id: str) -> dict:
         return {}
     sh = load_strongholds()["strongholds"][loc.base_type]
     g = sh["garrison"]
-    out = {}
+    out: dict[UnitType, int] = {}
     if g.get("men_at_arms", 0):
         out["men_at_arms"] = g["men_at_arms"]
     if g.get("militia", 0):
@@ -1372,10 +1374,10 @@ def _garrison_for_locale(state: GameState, locale_id: str) -> dict:
 
 def _combined_melee_raw(
     state: GameState,
-    forces: dict,
+    forces: dict[UnitType, int],
     caps: list[str],
     *,
-    garrison: dict | None = None,
+    garrison: dict[UnitType, int] | None = None,
 ) -> float:
     """Raw Melee Hits (in halves, horse + foot combined) for a Storm
     striker built from `forces` (+ optional garrison)."""
@@ -1388,7 +1390,7 @@ def _combined_melee_raw(
     return raw_h + raw_f
 
 
-def _c8_bonus_for_forces(forces: dict) -> int:
+def _c8_bonus_for_forces(forces: dict[UnitType, int]) -> int:
     """C8 Cantador eligible units (Knights + Sergeants) in a force dict."""
     return forces.get("knights", 0) + forces.get("sergeants", 0)
 
@@ -1474,7 +1476,7 @@ def resolve_storm(
     # Attacker is the single Active Lord (Front), no Reserves.
     d_lord_forces = {lid: dict(state.lords[lid].forces)
                      for lid in defender.lord_ids}
-    d_lord_routed: dict = {lid: {} for lid in defender.lord_ids}
+    d_lord_routed: dict[str, Any] = {lid: {} for lid in defender.lord_ids}
     d_front = [defender.lord_ids[0]] if defender.lord_ids else []
     d_reserve = list(defender.lord_ids[1:])
     d_caps = list(defender.capabilities_in_play)
@@ -1496,17 +1498,17 @@ def resolve_storm(
                          for lid in attacker.lord_ids}
     a_front = [attacker.lord_ids[0]] if attacker.lord_ids else []
     a_reserve = list(attacker.lord_ids[1:])
-    a_lord_routed: dict = {lid: {} for lid in attacker.lord_ids}
+    a_lord_routed: dict[str, Any] = {lid: {} for lid in attacker.lord_ids}
 
-    def _a_front_agg() -> dict:
-        agg: dict = {}
+    def _a_front_agg() -> dict[UnitType, int]:
+        agg: dict[UnitType, int] = {}
         for lid in a_front:
             for ut, n in a_lord_forces[lid].items():
                 if n > 0:
                     agg[ut] = agg.get(ut, 0) + n
         return agg
 
-    def _push_attacker_losses(before: dict) -> None:
+    def _push_attacker_losses(before: dict[UnitType, int]) -> None:
         """Distribute Front-Attacker losses (before - now) back to the
         per-Lord force dicts (greedy across Front Lords)."""
         now = attacker.forces
@@ -1532,15 +1534,15 @@ def resolve_storm(
         return (_attacker_front_alive()
                 or any(a_lord_forces[lid] for lid in a_reserve))
 
-    def _d_front_agg() -> dict:
-        agg: dict = {}
+    def _d_front_agg() -> dict[UnitType, int]:
+        agg: dict[UnitType, int] = {}
         for lid in d_front:
             for ut, n in d_lord_forces[lid].items():
                 if n > 0:
                     agg[ut] = agg.get(ut, 0) + n
         return agg
 
-    def _push_defender_losses(before: dict) -> None:
+    def _push_defender_losses(before: dict[UnitType, int]) -> None:
         """Distribute Front-Defender losses (before - now) back to the
         per-Lord force dicts (greedy across Front Lords)."""
         now = defender.forces
@@ -1567,8 +1569,10 @@ def resolve_storm(
                 or any(d_lord_forces[lid] for lid in d_reserve)
                 or any(v > 0 for v in defender.garrison_forces.values()))
 
-    def _melee_hits(front_forces_list, caps, *, side_is_christian,
-                    round_idx, garrison=None) -> int:
+    def _melee_hits(front_forces_list: list[dict[UnitType, int]],
+                    caps: list[Any], *, side_is_christian: bool,
+                    round_idx: int,
+                    garrison: dict[UnitType, int] | None = None) -> int:
         """Per-Lord-capped (<=6 each) combined Melee Hits, + Garrison
         Melee (uncapped), folding C8 Cantador (Round 1) into per-Lord
         raw before the cap."""
@@ -1689,7 +1693,7 @@ def resolve_storm(
 
     # Final Defender forces = surviving Front + untouched Reserve units
     # (so downstream Losses/commit see the full picture).
-    final_forces: dict = {}
+    final_forces: dict[UnitType, int] = {}
     for lid in d_front + d_reserve:
         for ut, n in d_lord_forces[lid].items():
             if n > 0:
@@ -1699,7 +1703,7 @@ def resolve_storm(
     # S11b: surviving Attacker forces = Front + Reserve, and expose the
     # per-Lord post-Storm forces so the caller can commit each besieging
     # Lord exactly (not proportionally) — likewise for the Defenders.
-    a_final: dict = {}
+    a_final: dict[UnitType, int] = {}
     for lid in a_front + a_reserve:
         for ut, n in a_lord_forces[lid].items():
             if n > 0:
@@ -1801,7 +1805,7 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
 
     if result.winner is not None and result.winner != sallying_side:
         # Sallying Attackers lost -> Withdraw back inside; Siege -> 1 (RAID).
-        losers: list[dict] = []
+        losers: list[dict[str, Any]] = []
         for lid in result.attacker.lord_ids:
             if lid in state.lords:
                 state.lords[lid].in_stronghold = True
@@ -1870,7 +1874,9 @@ def resolve_relief_sally(
     besieger_side: Side,
     locale_id: str,
     max_rounds: int = 6,
-):
+) -> tuple[BattleResult, tuple[
+    BattleSide, BattleSide, BattleSide | None,
+    BattleSide | None, bool]]:
     """Rule 4.4.1 RELIEF SALLY. The Approaching (relieving) side's
     Besieged Lords Sally out to join the Attack against the besiegers.
 
@@ -1985,10 +1991,10 @@ def resolve_relief_sally(
 
     # Per-Lord force/rout tracking per lane (so multi-Lord lanes commit
     # Losses exactly, not proportionally). Keyed by id(side_obj).
-    _lf: dict[int, dict] = {}
-    _lr: dict[int, dict] = {}
+    _lf: dict[int, Any] = {}
+    _lr: dict[int, Any] = {}
 
-    def _init_lane(side_obj) -> None:
+    def _init_lane(side_obj: BattleSide) -> None:
         if side_obj is None or id(side_obj) in _lf:
             return
         if len(side_obj.lord_ids) == 1:
@@ -1999,9 +2005,10 @@ def resolve_relief_sally(
         _lr[id(side_obj)] = {lid: {} for lid in side_obj.lord_ids}
 
     for _s in (marchers, sallyers, def_front, def_rear):
-        _init_lane(_s)
+        if _s is not None:
+            _init_lane(_s)
 
-    def _push_lane(side_obj, before: dict) -> None:
+    def _push_lane(side_obj: BattleSide, before: dict[UnitType, int]) -> None:
         lf = _lf[id(side_obj)]
         lr = _lr[id(side_obj)]
         now = side_obj.forces
@@ -2019,7 +2026,8 @@ def resolve_relief_sally(
                     lr[lid][ut] = lr[lid].get(ut, 0) + take
                     lost -= take
 
-    def _lane_step(actor_role, attacker_side, defender_side, **kw):
+    def _lane_step(actor_role: Role, attacker_side: BattleSide,
+                   defender_side: BattleSide, **kw: Any) -> StepResolution:
         """Run a pooled lane Strike step and push the target's Losses
         back to per-Lord tracking."""
         target = defender_side if actor_role == "attacker" else attacker_side
@@ -2031,10 +2039,10 @@ def resolve_relief_sally(
         _push_lane(target, before)
         return step
 
-    def _lane_alive(side_obj) -> int:
+    def _lane_alive(side_obj: BattleSide) -> int:
         return sum(1 for lid in side_obj.lord_ids if _lf[id(side_obj)][lid])
 
-    def _advance_reserve(side_obj, cap: int) -> list:
+    def _advance_reserve(side_obj: BattleSide, cap: int) -> list[str]:
         """4.4.2 Reposition (relief-sally Defender): bring excess Reserve
         Defenders into a lane (Front facing Marchers, or Reserve facing
         Sallyers) up to `cap` engaged Lords, including the forced advance
@@ -2048,7 +2056,7 @@ def resolve_relief_sally(
             advanced.append(lid)
         if advanced:
             # Re-sync the pooled aggregate to include the advanced Lords.
-            agg: dict = {}
+            agg: dict[UnitType, int] = {}
             for f in _lf[id(side_obj)].values():
                 for ut, n in f.items():
                     if n > 0:
@@ -2076,7 +2084,7 @@ def resolve_relief_sally(
                             else "defender")
             c_role: Role = ("attacker" if active_side == "christian"
                             else "defender")
-            steps_this_round = [
+            steps_this_round: list[tuple[str, Role, str, UnitClass | None]] = [
                 ("1.a", "defender", "missile", None),
                 ("1.b", "attacker", "missile", None),
                 ("2.a", m_role, "melee", "horse"),
@@ -2122,7 +2130,7 @@ def resolve_relief_sally(
     # the per-Lord tracking (multi-Lord lanes no longer lose precision to
     # proportional distribution). Each Lord belongs to exactly one lane;
     # when `shared`, def_rear IS def_front (written once).
-    _written: set = set()
+    _written: set[Any] = set()
     for _s in (marchers, sallyers, def_front, def_rear):
         if _s is None or id(_s) in _written:
             continue
@@ -2159,7 +2167,7 @@ def apply_relief_sally_aftermath(
     besieger_side: Side,
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Relief-Sally aftermath (rule 4.4.1 / 4.5.3).
 
     Movement uses the standard Battle aftermath: apply_retreat_aftermath
@@ -2273,8 +2281,9 @@ def _consume_camp_attack(
         # behavior is reproducible under self-play.
         friendly = attacker if attacker.side == side_key else defender
         enemy = defender if friendly is attacker else attacker
-        asset_drain_order = ("coin", "loot", "prov", "cart", "mule")
-        total_spoils: dict[str, int] = {}
+        asset_drain_order: tuple[AssetType, ...] = (
+            "coin", "loot", "prov", "cart", "mule")
+        total_spoils: dict[AssetType, int] = {}
         for elid in enemy.lord_ids:
             elord = state.lords.get(elid)
             if elord is None:
@@ -2324,11 +2333,11 @@ def _consume_camp_attack(
 
 def _transfer_retreat_spoils(
     state: GameState,
-    lord,
+    lord: Lord,
     fate: str,
     conceded: bool,
     winner_lord_ids: list[str],
-) -> dict[str, int]:
+) -> dict[AssetType, int]:
     """Rule 4.4.3 Spoils-on-Retreat. Move the losing Lord's Assets to
     the winning Lords (round-robin), per fate:
       - Withdrew: nothing.
@@ -2340,7 +2349,7 @@ def _transfer_retreat_spoils(
     """
     if fate == "withdraw" or not winner_lord_ids:
         return {}
-    take: dict[str, int] = {}
+    take: dict[AssetType, int] = {}
     if fate == "removed" or (fate == "retreat" and not conceded):
         # All Assets.
         for atype, n in list(lord.assets.items()):
@@ -2544,7 +2553,8 @@ def apply_retreat_aftermath(
             # available (preferring loot/cart/mule/prov, keeping coin
             # for Pay step). If no Asset is available, the opt-out
             # cannot be exercised and the Service-shift fires normally.
-            asset_pay_order = ("loot", "mule", "cart", "prov", "coin")
+            asset_pay_order: tuple[AssetType, ...] = (
+                "loot", "mule", "cart", "prov", "coin")
             c7_held = "C7" in state.decks.this_levy_events.get("christian", [])
             opt_out_used = False
             if c7_held and loser_side == "christian":
@@ -2672,7 +2682,8 @@ def _reposition_array(side: BattleSide) -> None:
         if lp.position not in ("reserve", "routed") and not lp.has_unrouted():
             lp.position = "routed"
     # Step 2: advance Reserves into empty Front positions (one-for-one).
-    front_slots = ("front_center", "front_left", "front_right")
+    front_slots: tuple[ArrayPosition, ...] = (
+        "front_center", "front_left", "front_right")
     filled = {lp.position for lp in side.array if lp.position in front_slots}
     empties = [s for s in front_slots if s not in filled]
     reserves = [lp for lp in side.array if lp.position == "reserve"
@@ -2791,7 +2802,7 @@ def _resolve_protection_roll_for_lp(
     """
     forces_data = load_forces()
 
-    def _build_candidates(pool: dict) -> list[tuple[int, UnitType]]:
+    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, UnitType]]:
         cs: list[tuple[int, UnitType]] = []
         for unit_type, count in pool.items():
             if count <= 0:
@@ -2956,7 +2967,7 @@ def _resolve_step_per_pair(
     # route it to a target Lord (same position, else Flanking). Sum the
     # half-Hits per target so rounding happens ONCE per target (B2).
     # Keyed by id(target_lp) to combine opposed + Flanking strikers.
-    contributions: dict[int, dict] = {}
+    contributions: dict[int, Any] = {}
     target_order: list[int] = []
     # (c) C8 Cantador adds +1 to up to 4 of ONE Christian Lord's Knights/
     # Sergeants in Round 1. Across multiple Christian Lords this step the
@@ -3108,8 +3119,8 @@ def _resolve_step_per_pair(
 def distribute_spoils_round_robin(
     state: GameState,
     friendly_lord_ids: list[str],
-    spoils: dict[str, int],
-) -> dict[str, dict[str, int]]:
+    spoils: dict[AssetType, int],
+) -> dict[str, dict[AssetType, int]]:
     """Distribute Spoils across friendly Lords round-robin.
 
     Per rule 4.4.3 winning player distributes among winning Lords at
@@ -3117,7 +3128,7 @@ def distribute_spoils_round_robin(
     handing them one Asset at a time per kind. Returns the per-Lord
     distribution dict.
     """
-    out: dict[str, dict[str, int]] = {lid: {} for lid in friendly_lord_ids}
+    out: dict[str, dict[AssetType, int]] = {lid: {} for lid in friendly_lord_ids}
     if not friendly_lord_ids:
         return out
     for atype, total in spoils.items():

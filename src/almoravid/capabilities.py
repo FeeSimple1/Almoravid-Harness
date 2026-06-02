@@ -14,6 +14,8 @@ enforceable.
 
 from __future__ import annotations
 
+from typing import cast
+
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
 
@@ -59,7 +61,7 @@ def _scope_of(card_id: str) -> str | None:
     rec = cards.get(card_id)
     if rec is None or rec["no_capability"]:
         return None
-    return rec["capability_scope"]
+    return cast("str | None", rec["capability_scope"])
 
 
 def lord_has_capability(state: GameState, lord_id: str, card_id: str) -> bool:
