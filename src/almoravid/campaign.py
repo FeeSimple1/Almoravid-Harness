@@ -18,7 +18,7 @@ Architectural choices driven by FUTURE_PROJECTS_LESSONS.md:
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from almoravid.actions import (
     ACTOR_ORDER,
@@ -34,7 +34,6 @@ from almoravid.state import (
     PlanEntry,
     Side,
 )
-
 
 # Plan size per season (SoP §4.1 / hard-coded seasonal command_cards).
 PLAN_SIZE_BY_SEASON: dict[str, int] = {
@@ -87,7 +86,6 @@ def _apply_capability_discard(state) -> dict:
         n_lords = sum(1 for l in state.lords.values()
                       if l.side == side and l.cylinder.kind == "locale")
         if len(edge) > n_lords:
-            excess = len(edge) - n_lords
             discarded = edge[n_lords:]
             state.decks.board_edge[side] = edge[:n_lords]
             state.decks.discard.extend(discarded)
@@ -290,7 +288,7 @@ def _h_command_reveal(state: GameState, action: dict[str, Any]) -> dict[str, Any
         # No actions taken — flip baton and check campaign end.
         _record(state, action,
                 f"{side} reveals "
-                + (f"pass card" if entry.kind == "pass"
+                + ("pass card" if entry.kind == "pass"
                    else f"command card for {entry.lord_id} (not on map)"))
         _advance_or_end_campaign(state)
         return {"revealed": entry.model_dump(), "auto_pass": True,
@@ -1466,7 +1464,6 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
 
     # Force-Siege / force-Conquest at each Stronghold in the Taifa based
     # on Lord presence (1.4.3).
-    going_muslim_friendly = (new_status == "independent")
     going_christian_friendly = (new_status == "reconquista")
     going_neutral = (new_status == "parias")
 
@@ -1619,7 +1616,6 @@ def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
 
     Special: Toledo can never be Independent (rule 1.4.1 note).
     """
-    from almoravid.static_data import load_lords
     taifa = state.taifas.get(taifa_id)
     if taifa is None:
         return {"no_op": True}
@@ -2103,7 +2099,6 @@ def _h_cmd_supply(state, action):
     Provender caps at 8 (1.7.3). Dawud ibn Aisha (M8) adds +1 once.
     """
     from almoravid.effective import is_besieged
-    from almoravid.map import neighbors_via
 
     side = _require_side(action)
     _require_campaign_step(state, "activation")
@@ -2629,8 +2624,8 @@ def _h_cmd_siege(state, action):
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"
     current = getattr(loc, marker_field)
 
-    from almoravid.static_data import load_strongholds
     from almoravid.rng import roll_d6_n
+    from almoravid.static_data import load_strongholds
     capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
     sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
 
@@ -2765,9 +2760,8 @@ def _h_cmd_battle(state, action):
     code='multi_lord_battle' (Phase 5e+ work).
     """
     from almoravid.battle import (
-        apply_aftermath,
-        battleside_for_lord,
         _front_lord_count,
+        apply_aftermath,
         battleside_for_lords,
         commit_forces_after_battle,
         resolve_battle,
@@ -2828,10 +2822,11 @@ def _h_cmd_battle(state, action):
     commit_forces_after_battle(state, dfd)
     # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
     from almoravid.battle import (
-        apply_retreat_aftermath, apply_battle_losses,
+        apply_battle_losses,
+        apply_retreat_aftermath,
     )
     retreat_summary = apply_retreat_aftermath(state, result)
-    losses = apply_battle_losses(state, result, retreat_summary)
+    apply_battle_losses(state, result, retreat_summary)
     apply_aftermath(state, result)
 
     # Battle ends the card (rule 4.4.5).
@@ -3007,9 +3002,9 @@ def _h_cmd_storm(state, action):
     conq_result = None
     sack = None
     if result.winner == side:
+        from almoravid.actions import _shift_service_left as _ssl
         from almoravid.battle import distribute_spoils_round_robin
         from almoravid.state import Cylinder
-        from almoravid.actions import _shift_service_left as _ssl
         from almoravid.static_data import load_strongholds as _ls
         # Besieging Lords present (Spoils recipients).
         besiegers_here = [
@@ -3413,15 +3408,12 @@ def _h_respond_avoid_battle(state, action):
     # already-Bypassed/Besieged Stronghold simply join it.
     from almoravid.effective import is_friendly_locale as _is_friendly
     dest = state.locales.get(target)
-    bypass_marked = None
     if (avoiding and dest is not None and dest.base_type != "region"
             and not _is_friendly(state, target, side)):
         if side == "christian" and not dest.bypass_yellow and dest.siege_yellow == 0:
             dest.bypass_yellow = True
-            bypass_marked = "bypass_yellow"
         elif side == "muslim" and not dest.bypass_green and dest.siege_green == 0:
             dest.bypass_green = True
-            bypass_marked = "bypass_green"
     # C2: remove the avoiding subset from the still-pending defenders.
     payload["defender_lord_ids"] = [
         d for d in payload["defender_lord_ids"] if d not in avoiding]
@@ -3609,8 +3601,8 @@ def _h_respond_stand_battle(state, action):
     on both sides at the Approach Locale. Battle ends the active side's
     card (rule 4.4.5)."""
     from almoravid.battle import (
-        apply_aftermath,
         _front_lord_count,
+        apply_aftermath,
         battleside_for_lords,
         commit_forces_after_battle,
         resolve_battle,
@@ -3656,13 +3648,15 @@ def _h_respond_stand_battle(state, action):
              code="no_defender")
 
     from almoravid.battle import (
-        apply_retreat_aftermath, apply_battle_losses,
+        apply_battle_losses,
+        apply_retreat_aftermath,
     )
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
         from almoravid.battle import (
-            resolve_relief_sally, apply_relief_sally_aftermath,
+            apply_relief_sally_aftermath,
+            resolve_relief_sally,
         )
         result, lanes = resolve_relief_sally(
             state, marcher_ids, sallyer_ids, defender_lord_ids,
@@ -3696,7 +3690,7 @@ def _h_respond_stand_battle(state, action):
             state, result,
             approach_from_locale=payload.get("from_locale_id"),
             approach_way_type=payload.get("via_way_type"))
-        losses = apply_battle_losses(state, result, retreat_summary)
+        apply_battle_losses(state, result, retreat_summary)
         apply_aftermath(state, result)
 
     # End the active side's card (rule 4.4.5).
@@ -3753,9 +3747,9 @@ def _h_play_pope_gregory(state, action):
     if mode == "muster_from_calendar":
         _require(lord.cylinder.kind == "calendar",
                  f"{lord_id} not on Calendar", code="not_on_calendar")
-        from almoravid.static_data import load_lords as _ll
-        from almoravid.state import Cylinder
         from almoravid.actions import _free_seats_for
+        from almoravid.state import Cylinder
+        from almoravid.static_data import load_lords as _ll
         rec = _ll()["lords"].get(lord_id, {})
         # 3.4.1: auto-Muster places only at a free Seat (neither Enemy nor
         # with an Enemy Lord present); "must otherwise still Muster by the
@@ -3850,9 +3844,9 @@ def _h_play_cluniacs(state, action):
     if mode == "muster_from_calendar":
         _require(lord.cylinder.kind == "calendar",
                  f"{lord_id} not on Calendar", code="not_on_calendar")
-        from almoravid.static_data import load_lords as _ll
-        from almoravid.state import Cylinder
         from almoravid.actions import _free_seats_for
+        from almoravid.state import Cylinder
+        from almoravid.static_data import load_lords as _ll
         rec = _ll()["lords"].get(lord_id, {})
         # 3.4.1: auto-Muster places only at a free Seat (neither Enemy nor
         # with an Enemy Lord present); "must otherwise still Muster by the
@@ -3927,8 +3921,8 @@ def _h_cmd_march_port_to_port(state, action):
       side: acting (Muslim)
       target_locale_id: destination Port
     """
-    from almoravid.state import Cylinder
     from almoravid.effective import is_besieged
+    from almoravid.state import Cylinder
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
@@ -4265,7 +4259,6 @@ def _h_cmd_encamp(state, action):
     """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
     Laden) to replace all his Bypass markers at the Locale with 1
     Siege marker; this ends his actions on the current card."""
-    from almoravid.effective import is_bypassed
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
@@ -4709,7 +4702,7 @@ def _cabalgadas_targets(state, lord_id: str, side) -> list[str]:
     two Ways distant whose path's intervening Locale (if any) and target
     both have NO Unbesieged Enemy Lord, and the target is a legal Ravage
     target (Enemy Locale not already Ravaged by this side). 4.7.2 + C14/C17."""
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_besieged, is_friendly_locale
     from almoravid.map import all_neighbors
     lord = state.lords.get(lord_id)
     if lord is None or lord.cylinder.kind != "locale" or is_besieged(state, lord_id):
@@ -4864,8 +4857,12 @@ def _h_resolve_battle(state, action):
     Attacker's Marshal (Alfonso or Yusuf) is at Front center; whoever wins
     the Battle wins the game (Background Book). Supports an optional
     per-combat absorption_policy (4.4.2)."""
-    from almoravid.battle import (battleside_for_lords, resolve_battle,
-                                  commit_forces_after_battle, _front_lord_count)
+    from almoravid.battle import (
+        _front_lord_count,
+        battleside_for_lords,
+        commit_forces_after_battle,
+        resolve_battle,
+    )
     from almoravid.state import Cylinder
     _require(state.meta.phase == "battle"
              and state.pending is not None

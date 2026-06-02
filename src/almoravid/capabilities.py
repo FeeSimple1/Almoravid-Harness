@@ -17,7 +17,6 @@ from __future__ import annotations
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
 
-
 # Eligible-Lord sets for This-Lord capabilities whose card text restricts
 # WHO may hold them (Arts of War Reference "Lords." line; 3.4.4). The four
 # Christian "captains" share one list across C8 Hueste, C15 Alferez, and

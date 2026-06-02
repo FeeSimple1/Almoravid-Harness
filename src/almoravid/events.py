@@ -30,7 +30,6 @@ from typing import Any, Callable
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
 
-
 # (state, side, card_id, payload) -> result dict
 ResolverFn = Callable[[GameState, Side, str, dict[str, Any]], dict[str, Any]]
 
@@ -1017,9 +1016,9 @@ def _m22_massacre(state, side, card_id, payload):
         l = state.lords.get(lid)
         if (l is not None and l.is_taifa and l.side == "muslim"
                 and l.cylinder.kind == "calendar"):
-            from almoravid.static_data import load_lords as _ll
-            from almoravid.state import Cylinder
             from almoravid.actions import _free_seats_for
+            from almoravid.state import Cylinder
+            from almoravid.static_data import load_lords as _ll
             rec = _ll()["lords"].get(lid, {})
             # 3.4.1: auto-Muster places only at a free Seat (neither Enemy
             # nor with an Enemy Lord present); no free Seat -> fall through
@@ -1216,9 +1215,9 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
         if target is None:
             return _no_op_with_note(state, card_id, side,
                                     "no Christian Lord on Calendar to Muster")
-        from almoravid.static_data import load_lords as _ll
-        from almoravid.state import Cylinder
         from almoravid.actions import _free_seats_for
+        from almoravid.state import Cylinder
+        from almoravid.static_data import load_lords as _ll
         rec = _ll()["lords"].get(target.id, {})
         # 3.4.1: Muster only at a free Seat (neither Enemy nor Enemy-occupied). [Door C]
         free = _free_seats_for(state, target.id)

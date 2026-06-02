@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from almoravid.state import GameState, Locale, Lord
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

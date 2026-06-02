@@ -85,8 +85,7 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                           "lord_id": lord_id, "mode": "ravage"})
             # Supply: one option per reachable Seat (mirror cmd_supply).
             try:
-                from almoravid.campaign import (_own_seats,
-                                                _find_supply_routes)
+                from almoravid.campaign import _find_supply_routes, _own_seats
                 if lord is not None and lord.cylinder.kind == "locale":
                     seats = _own_seats(state, lord_id)
                     here = lord.cylinder.locale_id
@@ -240,8 +239,7 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                                 "side": side, "card_id": cid})
                 else:  # this_lord: offer each eligible Mustered Lord (+ discard)
                     _nm = rec.get("capability_name")
-                    from almoravid.capabilities import (
-                        capability_eligible_lords as _cel_d)
+                    from almoravid.capabilities import capability_eligible_lords as _cel_d
                     _elig_d = _cel_d(cid)   # 3.4.4 card-text eligibility [Q-001]
                     for lid, l in state.lords.items():
                         if l.side != side or l.cylinder.kind != "locale":
@@ -282,7 +280,7 @@ def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     options (pay 1 to a payer's own marker, and Taifa-box Coin to any
     Unbesieged Muslim Lord); richer same-Locale / multi-amount targets
     are reachable by supplying explicit parameters."""
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_besieged, is_friendly_locale
     out: list[dict[str, Any]] = []
     has_marker = {sm.lord_id for sm in state.calendar.service_markers
                   if sm.vassal_id is None}
@@ -373,7 +371,7 @@ def pending_mandatory_disbands(state: GameState, side: Side) -> list[str]:
 
 def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     """3.4 Muster: Lord-Muster + Lordship-spending Levy actions."""
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_besieged, is_friendly_locale
     out: list[dict[str, Any]] = []
     # 3.4.1: a Levying Lord (on the map, eligible, with spare Lordship,
     # not newly Mustered this segment) must spend a point to enable a
@@ -412,7 +410,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         # (Bypassed is OK) to take any Levy action.
         if (lord.cylinder.kind == "locale"
                 and lord.lordship_used < lord.lordship_rating):
-            from almoravid.effective import is_friendly_locale, is_besieged
+            from almoravid.effective import is_besieged, is_friendly_locale
             here = lord.cylinder.locale_id
             try:
                 eligible = (is_friendly_locale(state, here, side)
@@ -424,8 +422,8 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                     if v.ready:
                         out.append({"type": "levy_take_vassal", "side": side,
                                     "lord_id": lid, "vassal_index": i})
-                from almoravid.static_data import load_cards as _lc_cap
                 from almoravid.actions import _unused_capability_cards
+                from almoravid.static_data import load_cards as _lc_cap
                 _capcards = _lc_cap()["cards"]
                 _held = [_capcards.get(c, {}).get("capability_name")
                          for c in lord.capabilities]
@@ -437,8 +435,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                     if _rec.get("capability_scope") == "this_lord":
                         # 3.4.4: max 2 This-Lord caps, no same title, and
                         # card-text eligibility (e.g. C8/C15/C24). [Q-001]
-                        from almoravid.capabilities import (
-                            capability_eligible_lords as _cel_l)
+                        from almoravid.capabilities import capability_eligible_lords as _cel_l
                         _elig_l = _cel_l(card_id)
                         if (len(lord.capabilities) >= 2
                                 or _rec.get("capability_name") in _held
@@ -462,7 +459,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     limit and the Christian-first / Muslim-then sequencing implicitly
     via active_player + cta_option_used_{side}.
     """
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_besieged, is_friendly_locale
     out: list[dict[str, Any]] = []
     if state.meta.phase != "levy" or state.meta.levy_step != "call_to_arms":
         return out
@@ -788,9 +785,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # Provender, own or Shared) may Ravage a Locale up to two
                 # Ways away with no Unbesieged Enemy Lord on the path/target,
                 # using his entire Command card (Arts of War ref C14/C17).
-                from almoravid.campaign import (_cabalgadas_capable,
-                                                _cabalgadas_prov_holder,
-                                                _cabalgadas_targets)
+                from almoravid.campaign import (
+                    _cabalgadas_capable,
+                    _cabalgadas_prov_holder,
+                    _cabalgadas_targets,
+                )
                 if (_cabalgadas_capable(state, lord_id)
                         and _cabalgadas_prov_holder(state, lord_id, active)
                         is not None):
@@ -806,9 +805,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # offering a phantom-legal move that the handler will
                 # reject.
                 try:
+                    from almoravid.campaign import _is_laden
                     from almoravid.effective import is_besieged
                     from almoravid.map import neighbors_via
-                    from almoravid.campaign import _is_laden
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
                             # C3/M3 Swollen River: a Lord already blocked
@@ -842,11 +841,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # cmd_supply (4.6) and cmd_tax (4.7.3) enumeration.
                 # CROSS_PROJECT_LESSONS.md §1 defensive try/except.
                 try:
-                    from almoravid.effective import is_besieged
                     from almoravid.campaign import (
                         _find_supply_routes,
                         _own_seats,
                     )
+                    from almoravid.effective import is_besieged
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
                             and state.meta.actions_remaining >= 1):
@@ -879,7 +878,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # _LESSONS §1: try/except wrap.
                 try:
                     from almoravid.effective import (
-                        has_gardens, is_besieged as _ib, is_friendly_locale,
+                        has_gardens,
+                        is_friendly_locale,
+                    )
+                    from almoravid.effective import (
+                        is_besieged as _ib,
                     )
                     if (lord.cylinder.kind == "locale"
                             and state.meta.actions_remaining >= 1):

@@ -42,7 +42,6 @@ from almoravid.rng import roll_d6
 from almoravid.state import GameState, Side, UnitType
 from almoravid.static_data import load_forces
 
-
 Role = Literal["attacker", "defender"]
 StrikeKind = Literal["melee", "missiles", "javelins", "crossbows", "bowmen", "slingers"]
 UnitClass = Literal["horse", "foot"]
@@ -489,13 +488,11 @@ def _resolve_protection_roll(
         return cs
 
     chosen = None
-    chosen_pool_name = None
     chosen_pool = None
     for pool_name, pool in pools:
         cands = _build_candidates(pool)
         if cands:
             _, chosen = cands[0]
-            chosen_pool_name = pool_name
             chosen_pool = pool
             break
     if chosen is None:
@@ -1426,8 +1423,8 @@ def resolve_storm(
     by Stronghold Capacity. Per-Lord post-Storm forces are exposed on the
     result (attacker_lord_forces / defender_lord_forces).
     """
-    from almoravid.static_data import load_strongholds
     from almoravid.capabilities import any_lord_with_capability
+    from almoravid.static_data import load_strongholds
 
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
@@ -2401,7 +2398,7 @@ def apply_retreat_aftermath(
     """
     from almoravid.actions import _shift_service_left
     from almoravid.effective import (
-        is_besieged, is_bypassed, is_friendly_locale,
+        is_friendly_locale,
     )
     from almoravid.map import neighbors_via
     from almoravid.rng import roll_d6
@@ -2612,7 +2609,9 @@ def _retreat_target_clear(
     """Per rule 4.4.3 retreat requires: no Enemy Lord and no Enemy
     Stronghold (unless Besieged or Bypassed)."""
     from almoravid.effective import (
-        is_besieged, is_bypassed, is_friendly_locale,
+        is_besieged,
+        is_bypassed,
+        is_friendly_locale,
     )
     other = "muslim" if retreating_side == "christian" else "christian"
     for l in state.lords.values():
