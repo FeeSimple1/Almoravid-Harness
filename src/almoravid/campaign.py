@@ -574,16 +574,29 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Feed (a Battle/Storm or Group March marks several), with Sharing
     # among same-Locale same-side Lords.
     feed_result = _feed_all_moved_fought(state)
-    # 4.8.3 auto-Disband at service limit (deferred fix landed here).
-    # Check every Lord that Moved/Fought (and the active Lord) since the
-    # Feed Unfed penalty may have pushed a Lord to its Service limit.
-    disband_result = _auto_disband_at_service_limit(state, lord_id)
+    # 4.8.2/4.8.3 auto-Disband at Service limit: "any Christian then Muslim
+    # Lords whose Service markers are at their limit must Disband." Sweep
+    # ALL on-map Lords (both sides), not only the active one, since the Feed
+    # Unfed penalty (or other Service shifts this card) can push a different
+    # Lord to its limit. _auto_disband_at_service_limit no-ops when a Lord
+    # is not at its limit.
+    disbanded_now: list[dict[str, Any]] = []
+    _sides_order: tuple[Side, Side] = ("christian", "muslim")
+    for _sd in _sides_order:
+        for _lid in [lo.id for lo in state.lords.values()
+                     if lo.side == _sd and lo.cylinder.kind == "locale"]:
+            _res = _auto_disband_at_service_limit(state, _lid)
+            if _res.get("disbanded"):
+                disbanded_now.append(_res)
+    disband_result: dict[str, Any] = (
+        {"disbanded_lords": [d["disbanded"] for d in disbanded_now]}
+        if disbanded_now else {"no_op": True})
     # 3.4.2 advanced Vassal Service: at the 4.8.2 Disband step the
     # Mustered Vassals at/beyond Service limit also Disband (Christian
     # then Muslim), with the no-Forces Lord cascade (1.6).
     if state.meta.advanced_vassal_service:
         from almoravid.actions import _disband_vassals_for_side
-        for _sd in ("christian", "muslim"):
+        for _sd in _sides_order:
             _disband_vassals_for_side(state, _sd)
     # Bookkeeping
     state.meta.active_lord_id = None
@@ -606,7 +619,7 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             f"shared={len(feed_result.get('shared', []))} "
             f"unfed={feed_result.get('unfed', [])}"
             + (f"; auto-disband {disband_result}"
-               if disband_result.get('disbanded') else "")
+               if disband_result.get('disbanded_lords') else "")
             + (f" -> campaign_step={state.meta.campaign_step}"
                if state.meta.campaign_step != "activation" else ""))
     return {"ended": lord_id, "feed": feed_result,
@@ -898,11 +911,13 @@ def apply_curias(state: GameState, box: int) -> dict[str, Any]:
     # Advance Levy marker to box 7
     state.calendar.current_box = 7
 
-    # Shift Beyond-Service Lords (Service marker at box <= prior current
-    # box) forward to box 7.
+    # 6.2.2: shift the Service markers of any Lords "Beyond Service (in box
+    # 6 or lower)" to the current 40 Days (box 7). The threshold is a FIXED
+    # box 6 (relative to the post-Curias Levy marker at box 7), regardless
+    # of whether Curias fires at box 5 or box 6.
     shifted = []
     for sm in list(state.calendar.service_markers):
-        if sm.box <= box:
+        if sm.box <= 6:
             sm.box = 7
             shifted.append(sm.lord_id)
 
@@ -1393,6 +1408,25 @@ def _h_winter_siege_pay(state: GameState, action: dict[str, Any]) -> dict[str, A
 # ---------------------------------------------------------------------------
 
 
+def _taifa_ravaged_count(state: GameState, taifa_id: str) -> int:
+    """Count Ravaged markers (either color) in a Taifa's Locales."""
+    taifa = state.taifas.get(taifa_id)
+    if taifa is None:
+        return 0
+    return sum(1 for lid in taifa.locale_ids
+               if state.locales[lid].ravaged != "none")
+
+
+def _parias_coin_amount(state: GameState, taifa_id: str | None,
+                        base: int) -> int:
+    """1.4.3 Parias Coin amount. Under the Ruined Land special rule
+    (Scenarios E & F) it is Service LESS the number of Ravaged markers
+    (either side) in the Taifa, floored at zero."""
+    if state.meta.ruined_land and taifa_id is not None:
+        return max(0, base - _taifa_ravaged_count(state, taifa_id))
+    return base
+
+
 def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
                         *, award_parias_coin: bool = True,
                         neutrality_choices: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1464,7 +1498,8 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
     if (old_status == "independent" and new_status == "parias"
             and award_parias_coin):
         from almoravid.actions import _award_parias_coin
-        amount = 6 if taifa_id == "sevilla" else 4
+        base = 6 if taifa_id == "sevilla" else 4
+        amount = _parias_coin_amount(state, taifa_id, base)
         results["parias_coin"] = _award_parias_coin(state, amount, None)
 
     # Determine the transition and apply the cascade.
@@ -2037,9 +2072,16 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
 
 def _own_seats(state: GameState, lord_id: str) -> list[str]:
-    """Locale ids that are printed Seats for this Lord (from static data)."""
+    """Locale ids that are Seats for this Lord. Per the 4.6 NOTE, this is
+    the printed Pennant Seats (static data) PLUS any movable Seat markers
+    on the map — Rodrigo/Yusuf/Sir's Seat markers and (via Cathedrals)
+    Alfonso's — which all live in Locale.seat_marker_lord_ids."""
     from almoravid.static_data import load_lords
-    return list(load_lords()["lords"][lord_id].get("seats", []))
+    seats = set(load_lords()["lords"][lord_id].get("seats", []))
+    for lid, loc in state.locales.items():
+        if lord_id in loc.seat_marker_lord_ids:
+            seats.add(lid)
+    return sorted(seats)
 
 
 def _route_blocked_by_enemy(state: GameState, route: list[str],
@@ -2337,31 +2379,38 @@ def _h_cmd_forage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     here = lord.cylinder.locale_id
     assert here is not None
     loc = state.locales[here]
-    gardens_path = (has_gardens(state, here)
-                    and is_friendly_locale(state, here, side))
+    friendly = is_friendly_locale(state, here, side)
+    is_stronghold = loc.base_type != "region"
     besieged = is_besieged(state, lord_id)
+    # 4.7.1 PROCEDURE: "Forage in a Friendly Stronghold adds one Provender
+    # automatically. For Forage anywhere else, roll a die." GARDENS (City
+    # or Fortress only) auto-add even if the Locale is Ravaged or the Lord
+    # is Besieged.
+    gardens_path = has_gardens(state, here) and friendly
+    friendly_strong_auto = (friendly and is_stronghold and not besieged
+                            and loc.ravaged == "none")
+    auto = gardens_path or friendly_strong_auto
     if besieged:
-        # Besieged Lord may Forage only via the Gardens path.
+        # The Lord may not be Besieged (4.7.1) — EXCEPTION: Gardens.
         _require(gardens_path,
-                 "Besieged Lord may Forage only at Friendly City/Fortress "
+                 "Besieged Lord may Forage only at his Friendly City/Fortress "
                  "Gardens (4.7.1)",
                  code="besieged_no_gardens")
-    elif gardens_path:
-        pass  # Friendly Stronghold: auto path
-    else:
-        # Open Forage requires Unravaged
+    if not auto:
+        # Forage "anywhere else": the Locale may not be Ravaged; roll a die.
         _require(loc.ravaged == "none",
                  f"Cannot Forage Ravaged Locale {here}",
                  code="ravaged")
 
-    if gardens_path:
+    if auto:
         new_prov = min(8, lord.assets.get("prov", 0) + 1)
         lord.assets["prov"] = new_prov
+        path = "gardens" if gardens_path else "friendly_stronghold"
         _record(state, action,
-                f"{side} {lord_id} Forages Gardens at {here} (+1 Prov -> "
+                f"{side} {lord_id} Forages ({path}) at {here} (+1 Prov -> "
                 f"{new_prov})")
         state.meta.actions_remaining -= 1
-        return {"path": "gardens", "prov_after": new_prov, "roll": None,
+        return {"path": path, "prov_after": new_prov, "roll": None,
                 "actions_remaining": state.meta.actions_remaining}
 
     # Open Forage: 1d6 roll.
@@ -2425,11 +2474,11 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Enemy Locale: not Friendly to active side (rule 4.7.2 "locale_is_enemy")
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Ravage Friendly Locale {here}", code="friendly_locale")
-    # Already Ravaged by this side check.
-    color = "yellow" if side == "christian" else "green"
-    _require(loc.ravaged != color,
-             f"{here} already Ravaged by {side} (color {color})",
-             code="already_ravaged_by_us")
+    # 4.7.2: Ravage may only target a Locale "not yet Ravaged" — neither
+    # color. (Markers flip to Enemy color only via Conquest, 1.3.1.)
+    _require(loc.ravaged == "none",
+             f"{here} is already Ravaged (4.7.2 targets an un-Ravaged Locale)",
+             code="already_ravaged")
 
     res = _apply_ravage_effect(state, lord, side, here)
     state.meta.actions_remaining -= 1
@@ -2670,7 +2719,18 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"
     current = getattr(loc, marker_field)
 
-    from almoravid.rng import roll_d6_n
+    # C1/M1 Battering Ram (Capability): any of our Lords at this Siege
+    # Locale (outside the Stronghold) holding it lets us reroll one
+    # Surrender die and counts as 2 Lords toward Siegeworks Capacity (4.5.1).
+    from almoravid.capabilities import lord_has_capability
+    _br_card = "C1" if side == "christian" else "M1"
+    has_battering_ram = any(
+        lord_has_capability(state, lo.id, _br_card)
+        for lo in state.lords.values()
+        if lo.side == side and lo.cylinder.kind == "locale"
+        and lo.cylinder.locale_id == here and not lo.in_stronghold)
+
+    from almoravid.rng import roll_d6, roll_d6_n
     from almoravid.static_data import load_strongholds
     capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
     sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
@@ -2707,6 +2767,13 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         else:
             dice = roll_d6_n(state, sh_value)
             cancellations = sum(1 for d in dice if d <= threshold)
+            # C1/M1 Battering Ram: may reroll one (failed) Surrender die.
+            if has_battering_ram and cancellations < sh_value:
+                for _i, _d in enumerate(dice):
+                    if _d > threshold:
+                        dice[_i] = roll_d6(state)
+                        break
+                cancellations = sum(1 for d in dice if d <= threshold)
         if cancellations == sh_value:
             surrendered = True
             conq_result = _conquer_stronghold(state, here, side)
@@ -2752,7 +2819,9 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             if other.side == side and other.cylinder.kind == "locale"
             and other.cylinder.locale_id == here
         )
-        siegeworks = lords_here_our_side >= capacity
+        # C1/M1 Battering Ram counts as 2 Lords for this Capacity test.
+        effective_lords = lords_here_our_side + (1 if has_battering_ram else 0)
+        siegeworks = effective_lords >= capacity
         if siegeworks and current < 4:
             setattr(loc, marker_field, current + 1)
             placed = 1
@@ -3433,7 +3502,6 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         BattleSide,
-        battleside_for_lord,
         resolve_sally,
     )
     from almoravid.effective import is_besieged
@@ -3465,10 +3533,26 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     ]
     _require(besiegers, f"No besiegers to Sally against at {here}",
              code="no_besiegers")
-    atk = battleside_for_lord(state, lord_id, "attacker")
-    atk.lord_ids = [lord_id]  # the sallying Lord
-    # Sally exits the Stronghold for the duration of the Sally
-    state.lords[lord_id].in_stronghold = False
+    # 4.5.3: ALL Besieged Lords of this side at the Locale Sally out and
+    # Attack (not only the Active Lord). The Active Lord leads; the others'
+    # Forces are pooled in (the Sally uses the pooled path so the besieging
+    # Defender's Siegeworks-as-Walls apply).
+    sallying_ids = [lord_id] + [
+        lo.id for lo in state.lords.values()
+        if lo.side == side and lo.cylinder.kind == "locale"
+        and lo.cylinder.locale_id == here and lo.in_stronghold
+        and is_besieged(state, lo.id) and lo.id != lord_id]
+    atk_forces: dict[UnitType, int] = {}
+    atk_caps: list[str] = []
+    for sid in sallying_ids:
+        for ut, n in state.lords[sid].forces.items():
+            atk_forces[ut] = atk_forces.get(ut, 0) + n
+        atk_caps.extend(state.lords[sid].capabilities)
+    atk = BattleSide(side=side, role="attacker", lord_ids=sallying_ids,
+                     forces=atk_forces, capabilities_in_play=atk_caps)
+    # Sallying Lords exit the Stronghold for the duration of the Sally.
+    for sid in sallying_ids:
+        state.lords[sid].in_stronghold = False
 
     # Build defender side (besiegers)
     dfd_forces: dict[UnitType, int] = {}
@@ -5242,13 +5326,12 @@ def _cabalgadas_targets(state: GameState, lord_id: str,
         return []
     here = lord.cylinder.locale_id
     assert here is not None
-    color = "yellow" if side == "christian" else "green"
 
     def ravageable(t: str) -> bool:
         loc = state.locales.get(t)
         return (loc is not None and t != here
                 and not is_friendly_locale(state, t, side)
-                and loc.ravaged != color
+                and loc.ravaged == "none"
                 and not _has_unbesieged_enemy_lord(state, t, side))
 
     targets: set[str] = set()

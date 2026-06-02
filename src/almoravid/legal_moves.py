@@ -383,8 +383,12 @@ def _service_disband_moves(state: GameState, side: Side) -> list[dict[str, Any]]
                     if c.side == "christian" and c.cylinder.kind == "locale"
                     and not is_besieged(state, cid)]
             if elig:
-                move["parias_coin_targets"] = [
-                    {"lord_id": elig[0], "coin": lord.service_rating}]
+                from almoravid.campaign import _parias_coin_amount
+                amt = _parias_coin_amount(state, lord.home_taifa,
+                                          lord.service_rating)
+                if amt > 0:
+                    move["parias_coin_targets"] = [
+                        {"lord_id": elig[0], "coin": amt}]
         out.append(move)
     return out
 
@@ -950,10 +954,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         # Ravage: not Besieged, Enemy Locale, not already
                         # Ravaged by us. Pattern 9 mirror against handler.
                         if not besieged:
-                            color = ("yellow" if active == "christian"
-                                     else "green")
                             if (not is_friendly_locale(state, here, active)
-                                    and loc.ravaged != color):
+                                    and loc.ravaged == "none"):
                                 out.append({"type": "cmd_ravage",
                                             "side": active})
                             # Siege: enemy Stronghold, marker cap not

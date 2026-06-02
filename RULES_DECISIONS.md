@@ -134,3 +134,53 @@ Revolt "no Muster of OR BY <Lord>" — the ban now also blocks the named Lord
 from acting as the Levying Lord (it previously only blocked being Mustered).
 
 **Revisit:** when the Javelins-marker subsystem gains owner round-choice.
+
+
+## DECISION-004 — Residual simplifications after the full rulebook reconciliation
+
+**Date:** 2026-06-02
+**Type:** [INTERPRETATION] / [HOUSE RULE]
+**Trigger:** Line-by-line reconciliation of the Rules of Play against the
+implementation (see RECONCILIATION.md). All clear rules-accuracy GAPS found
+were fixed (Ravage re-target, Forage Friendly-Stronghold, Supply/Tax dynamic
+Seats, FPD Disband sweep, Curias box-6 threshold, Ruined Land Parias Coin,
+Scenario D start-Bypass, Crossbows -1 vs Armor, Hills full-Battle duration,
+Sally all-Besieged-Lords, Battering Ram). The items below remain as
+deliberate, documented deviations — they are choice-model abstractions or
+ambiguous readings, not wrong-outcome bugs.
+
+**Interactive-choice abstractions** (the engine resolves deterministically
+instead of prompting the controlling player; reactive interaction exists for
+Concede via the opt-in interactive_concede mechanism but not for these):
+- 4.9.4 Wastage: the discarded Asset/Capability is auto-picked (largest
+  Asset stack, else a This-Lord card) rather than chosen by the player.
+- 4.8.1 Greed: the optional discard of Mules in excess of those Fed is not
+  offered as a choice.
+- 4.8.2 / 6.3.1: voluntary Pay (3.2) during the per-card Feed/Pay/Disband and
+  the Winter-Disband Pay sub-step are not exposed as actions (mandatory
+  Disband IS applied; a player cannot pre-empt it by paying).
+
+**Defensible per-card defaults** (rules grant "any 1 Round"/owner choice;
+the engine uses a fixed sensible default):
+- M7 Spear Wall and one-round Javelins fire in Round 1 (see DECISION-003).
+- C8 Cantador's +4 is a single side-wide budget spent in Front order rather
+  than confined to the one Lord holding the card; bounded at +4 either way.
+  (C8 is modelled as a this_levy_events hold, with no per-Lord owner.)
+- 4.4.2 Flanking targets the largest unopposed enemy Front Lord rather than
+  the positionally "closest"; affects only which enemy a flanker is routed
+  against in a multi-Lord Battle.
+
+**Ambiguous reading:**
+- 4.5.1 Siege / 4.7.3 Tax "use all actions of his Command card" is read as
+  "ends the card" (consumes remaining actions) rather than "requires a fresh
+  card"; a Lord may thus take a cheaper action first and then Siege/Tax.
+
+**Edge case:**
+- 3.1.1: C18 Milites "removed" permanence is not separately tracked (C18 is
+  modelled as a board-edge Capability + immediate Event); it does not
+  re-enter the draw deck in normal play.
+
+**Scope:** combat (battle.py), commands/economy (campaign.py), end-game.
+**Revisit:** when an interactive decision layer is added for non-combat
+choices (Wastage/Pay/Greed), or per-Lord capability ownership is tracked
+(C8), or Battle Array geometry is modelled for Flanking adjacency.

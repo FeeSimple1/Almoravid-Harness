@@ -118,6 +118,8 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
         active_player=cast(Side, raw.get("active_player_at_start", "christian")),
         phase="setup",
         turn_index=0,
+        ruined_land=("ruined_land_parias_coin"
+                     in raw.get("special_rules", [])),
     )
 
     # ---- Calendar -------------------------------------------------
@@ -250,6 +252,15 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
             # A Lord Besieged at scenario start sits INSIDE the Stronghold
             # (e.g. Scenario D: al-Mustain Besieged at Zaragoza, 4.5/1.3.1).
             in_stronghold = bool(m.get("in_stronghold", False))
+            # A Lord Bypassing an Enemy Stronghold at start (e.g. Scenario D:
+            # Garcia Ordonez with Bypass at Tudela) places his side's Bypass
+            # marker on that Locale (4.3.5).
+            if m.get("bypass"):
+                _bcolor = ("yellow" if lord_obj["side"] == "christian"
+                           else "green")
+                _bloc = locales_state.get(m["locale_id"])
+                if _bloc is not None:
+                    setattr(_bloc, f"bypass_{_bcolor}", True)
         elif lid in set_aside:
             cylinder = Cylinder(kind="set_aside")
             forces = {}
