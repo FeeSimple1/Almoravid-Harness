@@ -454,6 +454,7 @@ def _feed_all_moved_fought(state: GameState, *,
             continue
         lord = state.lords[lid]
         loc_id = lord.cylinder.locale_id
+        assert loc_id is not None
         # Same-side Lords at the same Locale (excluding self) must share
         # their remaining Provender then Loot.
         for donor_id, donor in state.lords.items():
@@ -546,6 +547,7 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "no active Lord — reveal a card first",
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     # 4.8.1 Feed — E4/E5: ALL Lords marked Moved/Fought on both sides
     # Feed (a Battle/Storm or Group March marks several), with Sharing
@@ -928,7 +930,7 @@ def winter_disband(state: GameState) -> dict[str, Any]:
     state expansion.
     """
     from almoravid.state import Cylinder
-    results = {"disbanded_to_mat": [], "rodrigo_to_box_9": [],
+    results: dict[str, Any] = {"disbanded_to_mat": [], "rodrigo_to_box_9": [],
                "lords_at_sieges_kept": [], "board_edge_discarded": [],
                "beyond_service_removed": [], "taifas_box_coin_added": 0}
 
@@ -944,6 +946,7 @@ def winter_disband(state: GameState) -> dict[str, Any]:
     for lid, lord in state.lords.items():
         if lord.cylinder.kind != "locale":
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales[lord.cylinder.locale_id]
         # Lord at an active Siege keeps for the Winter Siege step (6.3.2).
         at_siege = (loc.siege_yellow > 0 or loc.siege_green > 0)
@@ -1021,7 +1024,7 @@ def spring_muster(state: GameState) -> dict[str, Any]:
     """
     from almoravid.state import Cylinder, ServiceMarker
     from almoravid.static_data import load_lords
-    results = {"christian_mustered": [], "muslim_mustered": [],
+    results: dict[str, Any] = {"christian_mustered": [], "muslim_mustered": [],
                "no_free_seat": []}
     static = load_lords()["lords"]
 
@@ -1071,10 +1074,11 @@ def winter_plowing(state: GameState) -> dict[str, Any]:
     each to half their number, rounded up. Mirrors 4.9.2 Harvest but
     restricted to Lords at a Siege Locale."""
     import math as _m
-    out = {"plowed": []}
+    out: dict[str, Any] = {"plowed": []}
     for lid, lord in state.lords.items():
         if lord.cylinder.kind != "locale":
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales[lord.cylinder.locale_id]
         if not (loc.siege_yellow > 0 or loc.siege_green > 0):
             continue
@@ -1139,6 +1143,7 @@ def _siege_locale_lords(state: GameState) -> list[str]:
     for lid, lord in state.lords.items():
         if lord.cylinder.kind != "locale":
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales[lord.cylinder.locale_id]
         if loc.siege_yellow > 0 or loc.siege_green > 0:
             out.append(lid)
@@ -1238,6 +1243,7 @@ def _winter_advance(state: GameState) -> dict[str, Any]:
     pending set with waiting_on correct) only when player input is
     needed; runs the auto Feed at the besieger->pay boundary."""
     pd = state.pending
+    assert pd is not None
     payload = pd.payload
     if payload["step"] == "besieger_actions":
         # Drop any besieger no longer eligible (e.g. removed mid-step).
@@ -1420,7 +1426,7 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
     if old_status == new_status:
         return {"no_op": True, "reason": "no change"}
 
-    results = {"taifa_id": taifa_id, "from": old_status, "to": new_status,
+    results: dict[str, Any] = {"taifa_id": taifa_id, "from": old_status, "to": new_status,
                "ravaged_flips": [], "auto_conquered": [],
                "siege_removed": [], "jihad_added": [],
                "deferred_neutrality": []}
@@ -1754,6 +1760,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "no active Lord — reveal a card first",
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} is not on {side}'s side",
              code="wrong_side")
@@ -1764,6 +1771,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"Lord {lord_id} is not at a Locale (cannot March)",
              code="not_on_map")
     from_loc = lord.cylinder.locale_id
+    assert from_loc is not None
 
     target = action.get("target_locale_id")
     way_type = action.get("way_type", "road")
@@ -2111,6 +2119,7 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "no active Lord — reveal a card first",
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} is not on {side}'s side",
              code="wrong_side")
@@ -2129,6 +2138,7 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="no_own_seat")
 
     here = lord.cylinder.locale_id
+    assert here is not None
     # Find the shortest unblocked route from `here` to each of `seats`,
     # consuming 1 Cart/Mule per intervening Way (rule 4.6.1). Multi-hop
     # via BFS. Lord at his Seat needs no Transport for that Seat.
@@ -2237,6 +2247,7 @@ def _h_cmd_tax(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2247,6 +2258,7 @@ def _h_cmd_tax(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"{lord_id} not at a Locale",
              code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
     seats = _own_seats(state, lord_id)
     _require(here in seats,
              f"Tax requires Lord at own Seat; {lord_id} is at {here} "
@@ -2290,6 +2302,7 @@ def _h_cmd_forage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2299,6 +2312,7 @@ def _h_cmd_forage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "Forage costs 1 action", code="not_enough_actions")
 
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     gardens_path = (has_gardens(state, here)
                     and is_friendly_locale(state, here, side))
@@ -2371,6 +2385,7 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2382,6 +2397,7 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "Ravage costs 1 action", code="not_enough_actions")
 
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     # Enemy Locale: not Friendly to active side (rule 4.7.2 "locale_is_enemy")
     _require(not is_friendly_locale(state, here, side),
@@ -2611,6 +2627,7 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2619,6 +2636,7 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     _require(loc.base_type != "region",
              f"Siege requires a Stronghold; {here} is a Region",
@@ -2782,6 +2800,7 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2791,6 +2810,7 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
 
     # Find enemy Lord(s) at this Locale
     other = "muslim" if side == "christian" else "christian"
@@ -2887,6 +2907,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -2896,6 +2917,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     _require(loc.base_type != "region",
              f"No Stronghold at {here} to Storm", code="region_no_storm")
@@ -3090,6 +3112,7 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
@@ -3942,6 +3965,7 @@ def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[
     _require("M19" in state.decks.this_levy_events.get("muslim", []),
              "M19 not held", code="card_not_held")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     _require(lord_id is not None, "no active Lord", code="no_active_lord")
     lord = state.lords[lord_id]
     _require(lord.cylinder.kind == "locale", f"{lord_id} not at Locale",
@@ -3950,6 +3974,7 @@ def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[
              "Besieged Lord may only Sally/Forage/Pass",
              code="besieged")
     from_loc = lord.cylinder.locale_id
+    assert from_loc is not None
     _require(state.locales[from_loc].has_port,
              f"{from_loc} is not a Port", code="not_port")
     target = action.get("target_locale_id")
@@ -4179,6 +4204,7 @@ def _h_toggle_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, 
     _require_campaign_step(state, "activation")
     _require_active(state, side)
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     _require(lord_id is not None, "no active Lord", code="no_active_lord")
     _require(lord_has_capability(state, lord_id, "C15"),
              f"{lord_id} lacks Alferez (C15)", code="no_alferez")
@@ -4272,6 +4298,7 @@ def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require_campaign_step(state, "activation")
     _require_active(state, side)
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     _require(lord_id is not None, "no active Lord", code="no_active_lord")
     lord = state.lords[lord_id]
     _require(lord.cylinder.kind == "locale", f"{lord_id} not at a Locale",
@@ -4279,6 +4306,7 @@ def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.actions_remaining >= 1,
              "Encamp costs 1 March action", code="not_enough_actions")
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     color_bypass = "bypass_yellow" if side == "christian" else "bypass_green"
     _require(getattr(loc, color_bypass),
@@ -4318,6 +4346,7 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require_campaign_step(state, "activation")
     _require_active(state, side)
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     _require(lord_id is not None, "no active Lord", code="no_active_lord")
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
@@ -4325,6 +4354,7 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(lord.cylinder.kind == "locale", f"{lord_id} not at a Locale",
              code="not_on_map")
     here = lord.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     _require(loc.base_type != "region",
              f"Sortie requires a Stronghold; {here} is a Region",
@@ -4498,6 +4528,7 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
                  "Scenario F: Cathedrals may not place Seats until Yusuf "
                  "or Sir Muster", code="cathedrals_gated")
     here = alfonso.cylinder.locale_id
+    assert here is not None
     loc = state.locales[here]
     _require(loc.base_type == "city",
              f"{here} is not a City (Cathedral Seat requires a Conquered "
@@ -4703,6 +4734,7 @@ def _cabalgadas_prov_holder(state: GameState, lord_id: str,
     if lord.assets.get("prov", 0) >= 1:
         return lord_id
     here = lord.cylinder.locale_id
+    assert here is not None
     for lid, lord_obj in state.lords.items():
         if (lid != lord_id and lord_obj.side == side and lord_obj.cylinder.kind == "locale"
                 and lord_obj.cylinder.locale_id == here and lord_obj.assets.get("prov", 0) >= 1):
@@ -4722,6 +4754,7 @@ def _cabalgadas_targets(state: GameState, lord_id: str,
     if lord is None or lord.cylinder.kind != "locale" or is_besieged(state, lord_id):
         return []
     here = lord.cylinder.locale_id
+    assert here is not None
     color = "yellow" if side == "christian" else "green"
 
     def ravageable(t: str) -> bool:
@@ -4756,6 +4789,7 @@ def _h_cmd_cabalgadas(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
+    assert lord_id is not None
     lord = state.lords[lord_id]
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
