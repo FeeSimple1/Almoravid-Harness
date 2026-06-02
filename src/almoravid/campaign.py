@@ -2795,6 +2795,34 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _finish_sally(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    atk: Any,
+    dfd: Any,
+    result: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Post-Sally aftermath (4.5.3), shared by the synchronous cmd_sally
+    path and the interactive battle_concede driver."""
+    from almoravid.battle import apply_sally_aftermath, commit_forces_after_battle
+    side: Side = pl["side"]
+    here: str = pl["here"]
+    commit_forces_after_battle(state, atk)
+    if len(dfd.lord_ids) == 1:
+        commit_forces_after_battle(state, dfd)
+    apply_sally_aftermath(state, result, here)
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {pl['lord_id']} Sallies at {here}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}; "
+            f"card spent ({consumed} actions)")
+    return {"winner": result.winner, "rounds": len(result.rounds),
+            "actions_consumed": consumed}
+
+
 def _finish_open_field_battle(
     state: GameState,
     action: dict[str, Any],
@@ -2947,6 +2975,9 @@ def _h_battle_concede(state: GameState,
     else:
         result.winner = None
     state.pending = None
+    if pl.get("finish") == "sally":
+        return _finish_sally(state, action, atk=atk, dfd=dfd,
+                             result=result, pl=pl)
     return _finish_open_field_battle(state, action, atk=atk, dfd=dfd,
                                      result=result, pl=pl)
 
@@ -3261,9 +3292,7 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         BattleSide,
-        apply_sally_aftermath,
         battleside_for_lord,
-        commit_forces_after_battle,
         resolve_sally,
     )
     from almoravid.effective import is_besieged
@@ -3314,24 +3343,28 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         forces=dfd_forces,
         capabilities_in_play=dfd_caps,
     )
+    pl: dict[str, Any] = {
+        "engagement_label": "sally",
+        "finish": "sally",
+        "side": side,
+        "here": here,
+        "lord_id": lord_id,
+    }
+    if bool(action.get("interactive_concede")):
+        loc = state.locales[here]
+        siege = (loc.siege_yellow if other == "christian"
+                 else loc.siege_green)
+        walls = (1, siege) if siege > 0 else None
+        return _begin_interactive_battle(state, action, atk, dfd, pl,
+                                         defender_walls_range=walls)
     result = resolve_sally(
         state, atk, dfd,
         attacker_concede_round=_concede_round_arg(
             action, "attacker_concede_round"),
         defender_concede_round=_concede_round_arg(
             action, "defender_concede_round"))
-    commit_forces_after_battle(state, atk)
-    if len(dfd.lord_ids) == 1:
-        commit_forces_after_battle(state, dfd)
-    apply_sally_aftermath(state, result, here)
-
-    consumed = state.meta.actions_remaining
-    state.meta.actions_remaining = 0
-    _record(state, action,
-            f"{side} {lord_id} Sallies at {here}: winner={result.winner}, "
-            f"rounds={len(result.rounds)}; card spent ({consumed} actions)")
-    return {"winner": result.winner, "rounds": len(result.rounds),
-            "actions_consumed": consumed}
+    return _finish_sally(state, action, atk=atk, dfd=dfd, result=result,
+                         pl=pl)
 
 
 
