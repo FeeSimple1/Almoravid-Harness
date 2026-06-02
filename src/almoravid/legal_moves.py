@@ -145,8 +145,8 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         _held_c = state.decks.this_levy_events.get("christian", [])
         _c_targets = {
             "C14": (("sancho", "eudes"), "play_pope_gregory"),
-            "C15": (tuple(lid for lid, l in state.lords.items()
-                          if l.side == "christian"), "play_cluniacs"),
+            "C15": (tuple(lid for lid, lord_obj in state.lords.items()
+                          if lord_obj.side == "christian"), "play_cluniacs"),
         }
         for _card, (_targets, _atype) in _c_targets.items():
             if _card not in _held_c:
@@ -241,15 +241,15 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                     _nm = rec.get("capability_name")
                     from almoravid.capabilities import capability_eligible_lords as _cel_d
                     _elig_d = _cel_d(cid)   # 3.4.4 card-text eligibility [Q-001]
-                    for lid, l in state.lords.items():
-                        if l.side != side or l.cylinder.kind != "locale":
+                    for lid, lord in state.lords.items():
+                        if lord.side != side or lord.cylinder.kind != "locale":
                             continue
                         if _elig_d is not None and lid not in _elig_d:
                             continue
                         held = [cards.get(c, {}).get("capability_name")
-                                for c in l.capabilities]
+                                for c in lord.capabilities]
                         # 3.4.4: max 2 This-Lord caps, no same title.
-                        if len(l.capabilities) >= 2 or _nm in held:
+                        if len(lord.capabilities) >= 2 or _nm in held:
                             continue
                         out.append({"type": "aow_deploy_capability",
                                     "side": side, "card_id": cid,
@@ -472,9 +472,9 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     def no_enemy_lord(lid: str) -> bool:
         # 3.4.1: a Muster Seat must have no Enemy Lord present. [P-5]
         return not any(
-            l.cylinder.kind == "locale" and l.cylinder.locale_id == lid
-            and l.side != side
-            for l in state.lords.values())
+            lord.cylinder.kind == "locale" and lord.cylinder.locale_id == lid
+            and lord.side != side
+            for lord in state.lords.values())
 
     def ready(lord) -> bool:
         return (lord.cylinder.kind == "calendar"
@@ -525,8 +525,8 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         camp = state.lords["rodrigo_campeador"]
         eudes = state.lords["eudes"]
         christian_removed = any(
-            l.side == "christian" and l.cylinder.kind == "removed"
-            for l in state.lords.values())
+            lord.side == "christian" and lord.cylinder.kind == "removed"
+            for lord in state.lords.values())
         if sayyid.cylinder.kind == "locale" or christian_removed:
             out.append({"type": "cta_reconcile_rodrigo", "side": "christian"})
         if ready(camp):
@@ -695,15 +695,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             # Lord and not already leading one. (Working handler, no menu
             # entry -> under-enumeration; mirrors _h_designate_lieutenant.)
             from almoravid.campaign import _is_marshal as _ismar
-            side_on_map = [(lid, l) for lid, l in state.lords.items()
-                           if l.side == side and l.cylinder.kind == "locale"]
-            for lid, l in side_on_map:
+            side_on_map = [(lid, lord_obj) for lid, lord_obj in state.lords.items()
+                           if lord_obj.side == side and lord_obj.cylinder.kind == "locale"]
+            for lid, lord_obj in side_on_map:
                 if _ismar(lid, side):
                     continue
                 for cid, cl in side_on_map:
                     if cid == lid or _ismar(cid, side):
                         continue
-                    if cl.cylinder.locale_id != l.cylinder.locale_id:
+                    if cl.cylinder.locale_id != lord_obj.cylinder.locale_id:
                         continue
                     if cl.lieutenant_of is not None:
                         continue
@@ -921,17 +921,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             # Battle: single-Lord against single enemy
                             # Lord at this Locale (Phase 5e baseline).
                             our_here = [
-                                l.id for l in state.lords.values()
-                                if l.side == active
-                                and l.cylinder.kind == "locale"
-                                and l.cylinder.locale_id == here
+                                lord_obj.id for lord_obj in state.lords.values()
+                                if lord_obj.side == active
+                                and lord_obj.cylinder.kind == "locale"
+                                and lord_obj.cylinder.locale_id == here
                             ]
                             enemy_here = [
-                                l.id for l in state.lords.values()
-                                if l.side != active
-                                and l.cylinder.kind == "locale"
-                                and l.cylinder.locale_id == here
-                                and not _ib(state, l.id)
+                                lord_obj.id for lord_obj in state.lords.values()
+                                if lord_obj.side != active
+                                and lord_obj.cylinder.kind == "locale"
+                                and lord_obj.cylinder.locale_id == here
+                                and not _ib(state, lord_obj.id)
                             ]
                             # Deferred fix: multi-Lord battles now
                             # allowed via aggregated BattleSide.
@@ -952,11 +952,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     if _ib(state, lord_id):
                         here = lord.cylinder.locale_id
                         besiegers = [
-                            l.id for l in state.lords.values()
-                            if l.side != active
-                            and l.cylinder.kind == "locale"
-                            and l.cylinder.locale_id == here
-                            and not l.in_stronghold
+                            lord_obj.id for lord_obj in state.lords.values()
+                            if lord_obj.side != active
+                            and lord_obj.cylinder.kind == "locale"
+                            and lord_obj.cylinder.locale_id == here
+                            and not lord_obj.in_stronghold
                         ]
                         if besiegers:
                             out.append({"type": "cmd_sally",
@@ -984,11 +984,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         if (loc.base_type != "region" and enemy_bypass
                                 and is_friendly_locale(state, here, active)):
                             enemy_out = any(
-                                l for l in state.lords.values()
-                                if l.side != active
-                                and l.cylinder.kind == "locale"
-                                and l.cylinder.locale_id == here
-                                and not l.in_stronghold)
+                                lord_obj for lord_obj in state.lords.values()
+                                if lord_obj.side != active
+                                and lord_obj.cylinder.kind == "locale"
+                                and lord_obj.cylinder.locale_id == here
+                                and not lord_obj.in_stronghold)
                             if enemy_out:
                                 out.append({"type": "cmd_sortie",
                                             "side": active})
@@ -1038,10 +1038,10 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
             capacity = (load_strongholds()["strongholds"][loc.base_type]
                         ["capacity"])
             already_inside = sum(
-                1 for l in state.lords.values()
-                if l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == locale_id
-                and l.in_stronghold
+                1 for lord in state.lords.values()
+                if lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == locale_id
+                and lord.in_stronghold
             )
             incoming = len(payload.get("defender_lord_ids", []))
             if already_inside + incoming <= capacity:
@@ -1067,12 +1067,12 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
                     if nbr == from_locale:
                         continue
                     blocked = False
-                    for l in state.lords.values():
-                        if (l.side == active_side
-                                and l.cylinder.kind == "locale"
-                                and l.cylinder.locale_id == nbr
-                                and not is_besieged(state, l.id)
-                                and not is_bypassed(state, l.id)):
+                    for lord in state.lords.values():
+                        if (lord.side == active_side
+                                and lord.cylinder.kind == "locale"
+                                and lord.cylinder.locale_id == nbr
+                                and not is_besieged(state, lord.id)
+                                and not is_bypassed(state, lord.id)):
                             blocked = True
                             break
                     if blocked:

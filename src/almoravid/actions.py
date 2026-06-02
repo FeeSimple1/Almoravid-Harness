@@ -370,9 +370,9 @@ def _rebuild_aow_deck(state: GameState, side: str) -> int:
     excluded.update(state.decks.board_edge.get(side, []))
     excluded.update(c.card_id for c in state.decks.capabilities_in_play
                     if c.owner_side == side)
-    for l in state.lords.values():
-        if l.side == side:
-            excluded.update(l.capabilities)
+    for lord in state.lords.values():
+        if lord.side == side:
+            excluded.update(lord.capabilities)
     excluded.update(state.decks.pending_draw.get(side, []))
     state.decks.draw = [cid for cid, c in cards.items()
                         if c["side"] == side and cid not in excluded]
@@ -708,9 +708,9 @@ def _cta_seat_has_enemy_lord(state: GameState, locale_id: str,
     (same test as the normal-Muster _free_seats_for helper, so the CtA
     auto-Muster paths stay consistent with 3.4.1 Muster). [P-5 playtest]"""
     return any(
-        l.cylinder.kind == "locale" and l.cylinder.locale_id == locale_id
-        and l.side != side
-        for l in state.lords.values()
+        lord.cylinder.kind == "locale" and lord.cylinder.locale_id == locale_id
+        and lord.side != side
+        for lord in state.lords.values()
     )
 
 
@@ -851,8 +851,8 @@ def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[s
     campeador = state.lords["rodrigo_campeador"]
     sayyid_on_map = sayyid.cylinder.kind == "locale"
     christian_removed = any(
-        l.side == "christian" and l.cylinder.kind == "removed"
-        for l in state.lords.values())
+        lord.side == "christian" and lord.cylinder.kind == "removed"
+        for lord in state.lords.values())
     _require(sayyid_on_map or christian_removed,
              "Reconcile needs al-Sayyid on the map OR a permanently "
              "removed Christian Lord (3.5.1)", code="cta_unavailable")
@@ -1058,10 +1058,10 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
     _cta_require_turn(state, side)
     yusuf = state.lords["yusuf"]
     sir = state.lords["sir"]
-    for lid, l in (("yusuf", yusuf), ("sir", sir)):
-        _require(l.cylinder.kind == "calendar"
-                 and l.cylinder.box is not None
-                 and l.cylinder.box <= state.calendar.current_box,
+    for lid, lord in (("yusuf", yusuf), ("sir", sir)):
+        _require(lord.cylinder.kind == "calendar"
+                 and lord.cylinder.box is not None
+                 and lord.cylinder.box <= state.calendar.current_box,
                  f"{lid} is not Ready on the Calendar (3.5.2)",
                  code="not_ready")
     from almoravid.events import _jihad_eligible_locales
@@ -1491,8 +1491,8 @@ def _award_parias_coin(state: GameState, amount: int, targets) -> dict[str, Any]
     placed (stays in the pool).
     """
     from almoravid.effective import is_besieged
-    eligible = [lid for lid, l in state.lords.items()
-                if l.side == "christian" and l.cylinder.kind == "locale"
+    eligible = [lid for lid, lord_obj in state.lords.items()
+                if lord_obj.side == "christian" and lord_obj.cylinder.kind == "locale"
                 and not is_besieged(state, lid)]
     if not eligible:
         return {"amount": amount, "placed": {}, "unplaced": amount,
@@ -1848,9 +1848,9 @@ def _unused_capability_cards(state: GameState, side: str) -> list[str]:
     excluded.update(state.decks.board_edge.get(side, []))
     excluded.update(c.card_id for c in state.decks.capabilities_in_play
                     if c.owner_side == side)
-    for l in state.lords.values():
-        if l.side == side:
-            excluded.update(l.capabilities)
+    for lord in state.lords.values():
+        if lord.side == side:
+            excluded.update(lord.capabilities)
     excluded.update(state.decks.pending_draw.get(side, []))
     return [cid for cid, c in cards.items()
             if c["side"] == side and cid not in excluded

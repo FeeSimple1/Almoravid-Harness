@@ -85,8 +85,8 @@ def any_lord_with_capability(
     if _scope_of(card_id) != "this_lord":
         return []
     return [
-        lid for lid, l in state.lords.items()
-        if l.side == side and card_id in l.capabilities
+        lid for lid, lord in state.lords.items()
+        if lord.side == side and card_id in lord.capabilities
     ]
 
 

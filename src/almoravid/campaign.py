@@ -83,8 +83,8 @@ def _apply_capability_discard(state) -> dict:
     out: dict = {}
     for side in ("christian", "muslim"):
         edge = state.decks.board_edge.get(side, [])
-        n_lords = sum(1 for l in state.lords.values()
-                      if l.side == side and l.cylinder.kind == "locale")
+        n_lords = sum(1 for lord in state.lords.values()
+                      if lord.side == side and lord.cylinder.kind == "locale")
         if len(edge) > n_lords:
             discarded = edge[n_lords:]
             state.decks.board_edge[side] = edge[:n_lords]
@@ -885,22 +885,22 @@ def apply_curias(state, box: int) -> dict:
     disbanded = []
     from almoravid.state import Cylinder
     for lid in ("pedro_ansurez", "garcia_ordonez"):
-        l = state.lords.get(lid)
-        if l is None or l.cylinder.kind != "locale":
+        lord = state.lords.get(lid)
+        if lord is None or lord.cylinder.kind != "locale":
             continue
         # Apply Phase 5g _h_disband_lord behavior inline
-        new_box = state.calendar.current_box + l.service_rating
+        new_box = state.calendar.current_box + lord.service_rating
         if new_box > 16:
             new_box = 17
             state.calendar.off_right.append(lid)
-        l.cylinder = Cylinder(kind="calendar", box=new_box)
-        l.forces = {}
-        l.assets = {}
-        l.capabilities = []
-        l.vassals = []
-        l.in_stronghold = False
-        l.moved_fought = False
-        l.routed_units = {}
+        lord.cylinder = Cylinder(kind="calendar", box=new_box)
+        lord.forces = {}
+        lord.assets = {}
+        lord.capabilities = []
+        lord.vassals = []
+        lord.in_stronghold = False
+        lord.moved_fought = False
+        lord.routed_units = {}
         state.calendar.service_markers = [
             s for s in state.calendar.service_markers if s.lord_id != lid
         ]
@@ -939,10 +939,10 @@ def winter_disband(state) -> dict:
             if lord_id in loc2.seat_marker_lord_ids:
                 loc2.seat_marker_lord_ids.remove(lord_id)
 
-    for lid, l in state.lords.items():
-        if l.cylinder.kind != "locale":
+    for lid, lord in state.lords.items():
+        if lord.cylinder.kind != "locale":
             continue
-        loc = state.locales[l.cylinder.locale_id]
+        loc = state.locales[lord.cylinder.locale_id]
         # Lord at an active Siege keeps for the Winter Siege step (6.3.2).
         at_siege = (loc.siege_yellow > 0 or loc.siege_green > 0)
         if at_siege:
@@ -954,47 +954,47 @@ def winter_disband(state) -> dict:
         # Rodrigo (placed at box 9 even if Beyond Service, 6.3.1).
         beyond_service = (lid in svc and svc[lid] < cur_box)
         if is_rodrigo:
-            l.cylinder = Cylinder(kind="calendar", box=9)
+            lord.cylinder = Cylinder(kind="calendar", box=9)
             results["rodrigo_to_box_9"].append(lid)
-            l.forces = {}
-            l.assets = {}
-            l.capabilities = []
-            l.in_stronghold = False
-            l.moved_fought = False
-            l.routed_units = {}
+            lord.forces = {}
+            lord.assets = {}
+            lord.capabilities = []
+            lord.in_stronghold = False
+            lord.moved_fought = False
+            lord.routed_units = {}
             continue
         if beyond_service:
             # Permanently removed from the game (3.3.1): Forces/Assets to
             # pools (cleared), This-Lord Capabilities to their deck,
             # cylinder/mat/Seat markers out of the game.
-            state.decks.discard.extend(l.capabilities)
+            state.decks.discard.extend(lord.capabilities)
             _strip_seats(lid)
-            l.cylinder = Cylinder(kind="removed")
-            l.forces = {}
-            l.assets = {}
-            l.capabilities = []
-            l.in_stronghold = False
-            l.moved_fought = False
-            l.routed_units = {}
+            lord.cylinder = Cylinder(kind="removed")
+            lord.forces = {}
+            lord.assets = {}
+            lord.capabilities = []
+            lord.in_stronghold = False
+            lord.moved_fought = False
+            lord.routed_units = {}
             results["beyond_service_removed"].append(lid)
             continue
         # Otherwise Disband as if at Service limit (3.3.2) but to the mat
         # (6.3.1 modification), to auto-Muster at Spring Muster (6.3.3).
         # Disbanding Taifa Lords put all Coin from their mats into the
         # Taifas box (do NOT adjust Taifa status / award Parias Coin).
-        if l.is_taifa:
-            coin = l.assets.get("coin", 0)
+        if lord.is_taifa:
+            coin = lord.assets.get("coin", 0)
             if coin:
                 state.taifas_box_coin += coin
                 results["taifas_box_coin_added"] += coin
-        l.cylinder = Cylinder(kind="mat")
+        lord.cylinder = Cylinder(kind="mat")
         results["disbanded_to_mat"].append(lid)
-        l.forces = {}
-        l.assets = {}
-        l.capabilities = []
-        l.in_stronghold = False
-        l.moved_fought = False
-        l.routed_units = {}
+        lord.forces = {}
+        lord.assets = {}
+        lord.capabilities = []
+        lord.in_stronghold = False
+        lord.moved_fought = False
+        lord.routed_units = {}
 
     # Discard board-edge Capabilities (3.4.4)
     for side in ("christian", "muslim"):
@@ -1024,13 +1024,13 @@ def spring_muster(state) -> dict:
     static = load_lords()["lords"]
 
     for side in ("christian", "muslim"):
-        for lid, l in state.lords.items():
-            if l.side != side:
+        for lid, lord in state.lords.items():
+            if lord.side != side:
                 continue
-            if l.cylinder.kind != "mat":
+            if lord.cylinder.kind != "mat":
                 continue
             free_seats = []
-            for seat in l.seats:
+            for seat in lord.seats:
                 # Free = no Enemy Lord present
                 enemy_here = any(
                     o for o in state.lords.values()
@@ -1046,18 +1046,18 @@ def spring_muster(state) -> dict:
                     chosen = "leon"
                 else:
                     chosen = free_seats[0]
-                l.cylinder = Cylinder(kind="locale", locale_id=chosen)
-                l.forces = dict(static[lid]["forces"])
-                l.assets = dict(static[lid]["assets"])
+                lord.cylinder = Cylinder(kind="locale", locale_id=chosen)
+                lord.forces = dict(static[lid]["forces"])
+                lord.assets = dict(static[lid]["assets"])
                 # Service marker advanced
-                new_box = state.calendar.current_box + l.service_rating
+                new_box = state.calendar.current_box + lord.service_rating
                 state.calendar.service_markers.append(
                     ServiceMarker(lord_id=lid, box=min(new_box, 17)))
                 results[f"{side}_mustered"].append((lid, chosen))
             else:
                 # No free Seat: place on Calendar
-                new_box = state.calendar.current_box + l.service_rating
-                l.cylinder = Cylinder(kind="calendar",
+                new_box = state.calendar.current_box + lord.service_rating
+                lord.cylinder = Cylinder(kind="calendar",
                                        box=min(new_box, 17))
                 results["no_free_seat"].append(lid)
     return results
@@ -1070,26 +1070,26 @@ def winter_plowing(state) -> dict:
     restricted to Lords at a Siege Locale."""
     import math as _m
     out = {"plowed": []}
-    for lid, l in state.lords.items():
-        if l.cylinder.kind != "locale":
+    for lid, lord in state.lords.items():
+        if lord.cylinder.kind != "locale":
             continue
-        loc = state.locales[l.cylinder.locale_id]
+        loc = state.locales[lord.cylinder.locale_id]
         if not (loc.siege_yellow > 0 or loc.siege_green > 0):
             continue
-        cart = l.assets.get("cart", 0)
-        mule = l.assets.get("mule", 0)
+        cart = lord.assets.get("cart", 0)
+        mule = lord.assets.get("mule", 0)
         if cart <= 1 and mule <= 1:
             continue
         new_cart = _m.ceil(cart / 2) if cart > 0 else 0
         new_mule = _m.ceil(mule / 2) if mule > 0 else 0
         if new_cart > 0:
-            l.assets["cart"] = new_cart
+            lord.assets["cart"] = new_cart
         else:
-            l.assets.pop("cart", None)
+            lord.assets.pop("cart", None)
         if new_mule > 0:
-            l.assets["mule"] = new_mule
+            lord.assets["mule"] = new_mule
         else:
-            l.assets.pop("mule", None)
+            lord.assets.pop("mule", None)
         out["plowed"].append({"lord_id": lid, "cart": (cart, new_cart),
                               "mule": (mule, new_mule)})
     return out
@@ -1134,10 +1134,10 @@ def _siege_locale_lords(state) -> list[str]:
     """All Lords (both sides, including Besieged garrisons inside) whose
     cylinder is at a Locale that has any Siege marker."""
     out = []
-    for lid, l in state.lords.items():
-        if l.cylinder.kind != "locale":
+    for lid, lord in state.lords.items():
+        if lord.cylinder.kind != "locale":
             continue
-        loc = state.locales[l.cylinder.locale_id]
+        loc = state.locales[lord.cylinder.locale_id]
         if loc.siege_yellow > 0 or loc.siege_green > 0:
             out.append(lid)
     return out
@@ -1147,13 +1147,13 @@ def _winter_besiegers(state) -> list[str]:
     """6.3.2 bullet 1 "each Besieging Lord (only)": a Lord OUTSIDE a
     Stronghold at a Locale where HIS side has a Siege marker."""
     out = []
-    for lid, l in state.lords.items():
-        if l.cylinder.kind != "locale" or l.in_stronghold:
+    for lid, lord in state.lords.items():
+        if lord.cylinder.kind != "locale" or lord.in_stronghold:
             continue
-        loc = state.locales[l.cylinder.locale_id]
-        if l.side == "christian" and loc.siege_yellow > 0:
+        loc = state.locales[lord.cylinder.locale_id]
+        if lord.side == "christian" and loc.siege_yellow > 0:
             out.append(lid)
-        elif l.side == "muslim" and loc.siege_green > 0:
+        elif lord.side == "muslim" and loc.siege_green > 0:
             out.append(lid)
     return out
 
@@ -1203,8 +1203,8 @@ def _winter_siege_disband(state) -> list[dict]:
     results = []
     cur = state.calendar.current_box
     for lid in list(_siege_locale_lords(state)):
-        l = state.lords[lid]
-        if l.cylinder.kind != "locale":
+        lord = state.lords[lid]
+        if lord.cylinder.kind != "locale":
             continue
         sm = next((m for m in state.calendar.service_markers
                    if m.lord_id == lid and m.vassal_id is None), None)
@@ -1212,9 +1212,9 @@ def _winter_siege_disband(state) -> list[dict]:
         if not at_or_beyond:
             continue
         with _MetaCtx(state, phase="levy", levy_step="service_disband",
-                      active_player=l.side):
+                      active_player=lord.side):
             results.append(_h_disband_lord(
-                state, {"type": "disband_lord", "side": l.side,
+                state, {"type": "disband_lord", "side": lord.side,
                         "lord_id": lid}))
     return results
 
@@ -1473,16 +1473,16 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
             continue
         # Find Lords present at this Locale (one of each side, generally)
         present_christian = [
-            l.id for l in state.lords.values()
-            if l.side == "christian"
-            and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id == lid
+            lord.id for lord in state.lords.values()
+            if lord.side == "christian"
+            and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == lid
         ]
         present_muslim = [
-            l.id for l in state.lords.values()
-            if l.side == "muslim"
-            and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id == lid
+            lord.id for lord in state.lords.values()
+            if lord.side == "muslim"
+            and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == lid
         ]
         # HOSTAGE POPULACE (1.4.3): a Muslim Lord force-Conquers only a
         # Stronghold that was Friendly/Neutral-to-him and turns Enemy or
@@ -1626,8 +1626,8 @@ def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
                                               "castle")
         and (state.locales[lid].is_reconquista_target
              or lid in [
-                 seat for l in state.lords.values()
-                 for seat in l.seats if l.home_taifa == taifa_id
+                 seat for lord in state.lords.values()
+                 for seat in lord.seats if lord.home_taifa == taifa_id
              ])
     ]
     all_christian = all(
@@ -1636,10 +1636,10 @@ def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
     ) if target_locales else False
     # Taifa Lord on map?
     taifa_lord_on_map = any(
-        l.is_taifa
-        and l.home_taifa == taifa_id
-        and l.cylinder.kind == "locale"
-        for l in state.lords.values()
+        lord.is_taifa
+        and lord.home_taifa == taifa_id
+        and lord.cylinder.kind == "locale"
+        for lord in state.lords.values()
     )
     new_status = taifa.status  # default no change
     if all_christian and target_locales:
@@ -1709,13 +1709,13 @@ def _group_laden(state, lord_ids, way_type: str | None = None) -> bool:
     Lords moving together (1.5.2). Same triggers as _is_laden."""
     prov = loot = cart = mule = 0
     for lid in lord_ids:
-        l = state.lords.get(lid)
-        if l is None:
+        lord = state.lords.get(lid)
+        if lord is None:
             continue
-        prov += l.assets.get("prov", 0)
-        loot += l.assets.get("loot", 0)
-        cart += l.assets.get("cart", 0)
-        mule += l.assets.get("mule", 0)
+        prov += lord.assets.get("prov", 0)
+        loot += lord.assets.get("loot", 0)
+        cart += lord.assets.get("cart", 0)
+        mule += lord.assets.get("mule", 0)
     transport = cart + mule
     if loot >= 1:
         return True
@@ -1819,10 +1819,10 @@ def _h_cmd_march(state, action):
     # Lord, 4.1.3/4.3.1).
     moving = {lord_id, *group_req}
     for mover in list(moving):
-        for l in state.lords.values():
-            if (l.lieutenant_of == mover and l.cylinder.kind == "locale"
-                    and l.cylinder.locale_id == from_loc):
-                moving.add(l.id)
+        for lord_obj in state.lords.values():
+            if (lord_obj.lieutenant_of == mover and lord_obj.cylinder.kind == "locale"
+                    and lord_obj.cylinder.locale_id == from_loc):
+                moving.add(lord_obj.id)
     moving_lords = sorted(moving)
     # 1.7.2 Provender capacity: each Cart/Mule carries up to TWO
     # Provender, so the (shared) Transport caps carriable Provender at
@@ -1937,8 +1937,8 @@ def _h_cmd_march(state, action):
                                and not is_friendly_locale(state, target,
                                                           "christian"))
         any_lord_there = any(
-            l.cylinder.kind == "locale" and l.cylinder.locale_id == target
-            for l in state.lords.values()
+            lord_obj.cylinder.kind == "locale" and lord_obj.cylinder.locale_id == target
+            for lord_obj in state.lords.values()
         )
         if is_enemy_stronghold and not any_lord_there:
             state.decks.this_levy_events["christian"].remove("C6")
@@ -2630,9 +2630,9 @@ def _h_cmd_siege(state, action):
     sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
 
     enemy_inside = any(
-        l for l in state.lords.values()
-        if l.side != side and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here and l.in_stronghold
+        lord_obj for lord_obj in state.lords.values()
+        if lord_obj.side != side and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here and lord_obj.in_stronghold
     )
 
     # --- 4.5.1 SURRENDER? (FIRST, before Siegeworks; only if no
@@ -2678,9 +2678,9 @@ def _h_cmd_siege(state, action):
                 multiplier = 2
                 spoils = {k: v * multiplier for k, v in base_spoils.items()}
                 friendly_here = [
-                    l.id for l in state.lords.values()
-                    if l.side == side and l.cylinder.kind == "locale"
-                    and l.cylinder.locale_id == here
+                    lord_obj.id for lord_obj in state.lords.values()
+                    if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
+                    and lord_obj.cylinder.locale_id == here
                 ]
                 if friendly_here and spoils:
                     distribute_spoils_round_robin(state, friendly_here, spoils)
@@ -2788,11 +2788,11 @@ def _h_cmd_battle(state, action):
     # Find enemy Lord(s) at this Locale
     other = "muslim" if side == "christian" else "christian"
     enemy_lord_ids = [
-        l.id for l in state.lords.values()
-        if l.side == other
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here
-        and not is_besieged(state, l.id)  # 4.4 doesn't engage besieged Lords here
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side == other
+        and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here
+        and not is_besieged(state, lord_obj.id)  # 4.4 doesn't engage besieged Lords here
     ]
     _require(enemy_lord_ids, f"No Enemy Lord at {here} to Battle",
              code="no_enemy")
@@ -2803,11 +2803,11 @@ def _h_cmd_battle(state, action):
     # losses back proportionally. Full Array (Front/Reserve/Flanking)
     # is a Phase 6 refinement.
     our_at_here = [
-        l.id for l in state.lords.values()
-        if l.side == side
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here
-        and not l.in_stronghold
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side == side
+        and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here
+        and not lord_obj.in_stronghold
     ]
     other = "muslim" if side == "christian" else "christian"
     atk = battleside_for_lords(state, our_at_here, side, "attacker",
@@ -2903,21 +2903,21 @@ def _h_cmd_storm(state, action):
 
     # Find enemy Lords inside the Stronghold (defenders)
     enemy_inside = [
-        l.id for l in state.lords.values()
-        if l.side != side
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here
-        and l.in_stronghold
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side != side
+        and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here
+        and lord_obj.in_stronghold
     ]
     # S11b (4.5.2): all besieging Lords at the Locale (outside the
     # Stronghold) may Storm together — the Active Lord starts at Front,
     # the others in Reserve (resolve_storm handles Front/Reserve +
     # Reposition). Build the multi-besieger Attacker side, Active first.
     besieger_ids = [lord_id] + [
-        l.id for l in state.lords.values()
-        if l.side == side and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here and not l.in_stronghold
-        and l.id != lord_id]
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here and not lord_obj.in_stronghold
+        and lord_obj.id != lord_id]
     if len(besieger_ids) == 1:
         atk = battleside_for_lord(state, lord_id, "attacker")
     else:
@@ -3008,9 +3008,9 @@ def _h_cmd_storm(state, action):
         from almoravid.static_data import load_strongholds as _ls
         # Besieging Lords present (Spoils recipients).
         besiegers_here = [
-            l.id for l in state.lords.values()
-            if l.side == side and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id == here
+            lord_obj.id for lord_obj in state.lords.values()
+            if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
+            and lord_obj.cylinder.locale_id == here
         ]
         sack_spoils: dict[str, int] = {}
         removed_lords: list[str] = []
@@ -3093,11 +3093,11 @@ def _h_cmd_sally(state, action):
     # Find besieging Lord(s) outside the Stronghold at this Locale
     other = "muslim" if side == "christian" else "christian"
     besiegers = [
-        l.id for l in state.lords.values()
-        if l.side == other
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here
-        and not l.in_stronghold
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side == other
+        and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here
+        and not lord_obj.in_stronghold
     ]
     _require(besiegers, f"No besiegers to Sally against at {here}",
              code="no_besiegers")
@@ -3169,9 +3169,9 @@ def _remove_orphaned_siege_bypass(state, locale_id: str) -> dict:
         return out
     for color, sd in (("yellow", "christian"), ("green", "muslim")):
         present = any(
-            l for l in state.lords.values()
-            if l.side == sd and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id == locale_id)
+            lord for lord in state.lords.values()
+            if lord.side == sd and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == locale_id)
         if present:
             continue
         sfield = "siege_yellow" if color == "yellow" else "siege_green"
@@ -3200,13 +3200,13 @@ def _check_approach_trigger(
     from almoravid.state import PendingDecision
     other = _other(active_side)
     defenders = [
-        l.id for l in state.lords.values()
-        if l.side == other
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id
-        and not l.in_stronghold
-        and not is_besieged(state, l.id)
-        and not is_bypassed(state, l.id)
+        lord.id for lord in state.lords.values()
+        if lord.side == other
+        and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id
+        and not lord.in_stronghold
+        and not is_besieged(state, lord.id)
+        and not is_bypassed(state, lord.id)
     ]
     if not defenders:
         return None
@@ -3328,14 +3328,14 @@ def _h_respond_avoid_battle(state, action):
     # (Bug S fix — Pattern 2 mirror: trigger filters by both
     # is_besieged AND is_bypassed; this destination check must match).
     from almoravid.effective import is_bypassed
-    for l in state.lords.values():
-        if (l.side == active_side and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == target
-                and not is_besieged(state, l.id)
-                and not is_bypassed(state, l.id)):
+    for lord in state.lords.values():
+        if (lord.side == active_side and lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == target
+                and not is_besieged(state, lord.id)
+                and not is_bypassed(state, lord.id)):
             raise IllegalAction(
                 f"Cannot Avoid into {target} — Unbesieged/Unbypassed "
-                f"{active_side} Lord {l.id} present",
+                f"{active_side} Lord {lord.id} present",
                 code="destination_has_enemy",
             )
     # C5 (4.3.4): Avoid Battle must be Unladen, but a Laden Lord may
@@ -3354,11 +3354,11 @@ def _h_respond_avoid_battle(state, action):
     # discarded (no Loot may be taken when Avoiding).
     avoiders = [lid for lid in avoiding if lid in state.lords]
     for lid in avoiders:
-        l = state.lords[lid]
-        loot = l.assets.get("loot", 0)
+        lord = state.lords[lid]
+        loot = lord.assets.get("loot", 0)
         if loot > 0:
             discarded["loot"] += loot
-            l.assets.pop("loot", None)
+            lord.assets.pop("loot", None)
     group_cap = sum(
         (state.lords[lid].assets.get("mule", 0) if way_type == "pass"
          else state.lords[lid].assets.get("cart", 0)
@@ -3372,20 +3372,20 @@ def _h_respond_avoid_battle(state, action):
     for lid in avoiders:
         if to_drop <= 0:
             break
-        l = state.lords[lid]
-        have = l.assets.get("prov", 0)
+        lord = state.lords[lid]
+        have = lord.assets.get("prov", 0)
         drop = min(have, to_drop)
         if drop > 0:
-            l.assets["prov"] = have - drop
-            if l.assets["prov"] == 0:
-                l.assets.pop("prov", None)
+            lord.assets["prov"] = have - drop
+            if lord.assets["prov"] == 0:
+                lord.assets.pop("prov", None)
             to_drop -= drop
     # Distribute discarded Assets to the Approaching attackers as Spoils.
     spoils = {k: v for k, v in discarded.items() if v > 0}
     attackers = [
-        l.id for l in state.lords.values()
-        if l.side == active_side and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id and not l.in_stronghold]
+        lord.id for lord in state.lords.values()
+        if lord.side == active_side and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id and not lord.in_stronghold]
     spoils_dist = {}
     if spoils and attackers:
         from almoravid.battle import distribute_spoils_round_robin
@@ -3396,10 +3396,10 @@ def _h_respond_avoid_battle(state, action):
     # exempt (4.3.4 WITHDRAW).
     for lid in avoiding:
         if lid in state.lords:
-            l = state.lords[lid]
-            l.cylinder = Cylinder(kind="locale", locale_id=target)
-            l.in_stronghold = False
-            l.moved_fought = True
+            lord = state.lords[lid]
+            lord.cylinder = Cylinder(kind="locale", locale_id=target)
+            lord.in_stronghold = False
+            lord.moved_fought = True
     # 4.3.4: "Mark Lords Avoiding Battle to an Unbesieged Enemy
     # Stronghold as Bypassing it (4.3.5)." If the destination holds an
     # Enemy Stronghold to the avoiding (inactive) side that is not
@@ -3454,10 +3454,10 @@ def _h_respond_withdraw(state, action):
     withdrawing = _approach_subset(payload, action)   # C2 partition subset
     # Count Lords already inside the Stronghold + the withdrawing group.
     already_inside = sum(
-        1 for l in state.lords.values()
-        if l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id
-        and l.in_stronghold
+        1 for lord in state.lords.values()
+        if lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id
+        and lord.in_stronghold
     )
     incoming = len(withdrawing)
     # C9 (4.1.3): a Lieutenant and his Lower Lord always move together,
@@ -3467,13 +3467,13 @@ def _h_respond_withdraw(state, action):
     # Lt/Lower pair (one withdraws, the partner stays outside).
     wset = set(withdrawing)
     for lid in withdrawing:
-        l = state.lords.get(lid)
-        if l is None:
+        lord = state.lords.get(lid)
+        if lord is None:
             continue
         partner = None
-        if l.lieutenant_of is not None:
-            partner = l.lieutenant_of
-        elif l.is_lieutenant:
+        if lord.lieutenant_of is not None:
+            partner = lord.lieutenant_of
+        elif lord.is_lieutenant:
             partner = next((x.id for x in state.lords.values()
                             if x.lieutenant_of == lid), None)
         if partner is not None and partner not in wset:
@@ -3519,16 +3519,16 @@ def _set_besiege_or_bypass_pending(state, locale_id: str, active_side: Side,
     other = _other(active_side)
     # Enemy Lords inside the Stronghold here?
     enemy_inside = any(
-        l.side == other and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id and l.in_stronghold
-        for l in state.lords.values())
+        lord.side == other and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id and lord.in_stronghold
+        for lord in state.lords.values())
     if not enemy_inside:
         return False
     # Active-side Lord(s) outside the Stronghold here?
     ours_outside = [
-        l.id for l in state.lords.values()
-        if l.side == active_side and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id and not l.in_stronghold]
+        lord.id for lord in state.lords.values()
+        if lord.side == active_side and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id and not lord.in_stronghold]
     if not ours_outside:
         return False
     # Already Besieged or Bypassed by this side?
@@ -3617,22 +3617,22 @@ def _h_respond_stand_battle(state, action):
     other = _other(active_side)
 
     attacker_lord_ids = [
-        l.id for l in state.lords.values()
-        if l.side == active_side
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id
-        and not l.in_stronghold
+        lord.id for lord in state.lords.values()
+        if lord.side == active_side
+        and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id
+        and not lord.in_stronghold
     ]
     # Relief Sally (4.4.1, Phase 7f): if the Approaching side also has
     # its own Besieged Lords inside a Stronghold at this Locale, they
     # Sally out to join the Approach as relief attackers.
     from almoravid.effective import is_besieged as _isb
     relief_sally_ids = [
-        l.id for l in state.lords.values()
-        if l.side == active_side
-        and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == locale_id
-        and l.in_stronghold and _isb(state, l.id)
+        lord.id for lord in state.lords.values()
+        if lord.side == active_side
+        and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale_id
+        and lord.in_stronghold and _isb(state, lord.id)
     ]
     # B6 (4.4.1): the relieving Marchers and the Sallying (Besieged)
     # Lords are SEPARATE groups in the Array, not one merged Attacker.
@@ -3947,11 +3947,11 @@ def _h_cmd_march_port_to_port(state, action):
     _require(state.locales[target].has_port,
              f"{target} is not a Port", code="not_port")
     # No Christian Lord at target.
-    for l in state.lords.values():
-        if (l.side == "christian" and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == target):
+    for lord_obj in state.lords.values():
+        if (lord_obj.side == "christian" and lord_obj.cylinder.kind == "locale"
+                and lord_obj.cylinder.locale_id == target):
             raise IllegalAction(
-                f"Christian Lord {l.id} at {target} — blocked",
+                f"Christian Lord {lord_obj.id} at {target} — blocked",
                 code="destination_has_enemy",
             )
     # Execute Port-to-Port March.
@@ -3976,8 +3976,8 @@ def _h_cmd_march_port_to_port(state, action):
 def _mustered_lords_on_map(state, side: Side) -> int:
     """Count a side's Lords with a cylinder on a map Locale."""
     return sum(
-        1 for l in state.lords.values()
-        if l.side == side and l.cylinder.kind == "locale"
+        1 for lord in state.lords.values()
+        if lord.side == side and lord.cylinder.kind == "locale"
     )
 
 
@@ -4142,8 +4142,8 @@ def _h_designate_lieutenant(state, action):
     _require(cmd.lieutenant_of is None,
              f"{commander_id} is itself a Lower Lord — cannot lead",
              code="commander_is_subordinate")
-    existing = [l.id for l in state.lords.values()
-                if l.lieutenant_of == commander_id]
+    existing = [lord_obj.id for lord_obj in state.lords.values()
+                if lord_obj.lieutenant_of == commander_id]
     _require(not existing,
              f"{commander_id} already has Lower Lord {existing}",
              code="lieutenant_full")
@@ -4192,8 +4192,8 @@ def _h_toggle_lieutenant(state, action):
              and cmd.cylinder.kind == "locale"
              and lord.cylinder.locale_id == cmd.cylinder.locale_id,
              "must be at the same Locale", code="not_same_locale")
-    existing = [l.id for l in state.lords.values()
-                if l.lieutenant_of == commander_id]
+    existing = [lord_obj.id for lord_obj in state.lords.values()
+                if lord_obj.lieutenant_of == commander_id]
     _require(not existing, f"{commander_id} already has a Lower Lord",
              code="lieutenant_full")
     lord.is_lieutenant = True
@@ -4208,9 +4208,9 @@ def _h_toggle_lieutenant(state, action):
 def _unstack_all_lieutenants(state) -> None:
     """End-of-Campaign cleanup (4.1.3 / SoP 'Unstack Lieutenants and
     Lower Lords')."""
-    for l in state.lords.values():
-        l.is_lieutenant = False
-        l.lieutenant_of = None
+    for lord in state.lords.values():
+        lord.is_lieutenant = False
+        lord.lieutenant_of = None
 
 
 
@@ -4332,9 +4332,9 @@ def _h_cmd_sortie(state, action):
              f"{here} is not Bypassed by the Enemy (4.3.6)",
              code="not_bypassed")
     bypassing_enemy = [
-        l.id for l in state.lords.values()
-        if l.side == other and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == here and not l.in_stronghold]
+        lord_obj.id for lord_obj in state.lords.values()
+        if lord_obj.side == other and lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == here and not lord_obj.in_stronghold]
     _require(bypassing_enemy,
              "no Bypassing Enemy Lord to Sortie against (4.3.6)",
              code="no_enemy")
@@ -4610,8 +4610,8 @@ def _emir_jihad_targets(state) -> list[str]:
     eligible = _jihad_eligible_locales(state)
     if not eligible:
         return []
-    christian_locs = [l.cylinder.locale_id for l in state.lords.values()
-                      if l.side == "christian" and l.cylinder.kind == "locale"]
+    christian_locs = [lord.cylinder.locale_id for lord in state.lords.values()
+                      if lord.side == "christian" and lord.cylinder.kind == "locale"]
     out: list[str] = []
     for tgt in eligible:
         dist = hop_distances(tgt)
@@ -4661,10 +4661,10 @@ def _has_unbesieged_enemy_lord(state, locale_id: str, side) -> bool:
     path/target (Arts of War ref C14/C17 / M24: "not at or past any
     Unbesieged Enemy Lord, even if Bypassed")."""
     from almoravid.effective import is_besieged
-    for l in state.lords.values():
-        if (l.side != side and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == locale_id
-                and not is_besieged(state, l.id)):
+    for lord in state.lords.values():
+        if (lord.side != side and lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == locale_id
+                and not is_besieged(state, lord.id)):
             return True
     return False
 
@@ -4690,9 +4690,9 @@ def _cabalgadas_prov_holder(state, lord_id: str, side):
     if lord.assets.get("prov", 0) >= 1:
         return lord_id
     here = lord.cylinder.locale_id
-    for lid, l in state.lords.items():
-        if (lid != lord_id and l.side == side and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == here and l.assets.get("prov", 0) >= 1):
+    for lid, lord_obj in state.lords.items():
+        if (lid != lord_id and lord_obj.side == side and lord_obj.cylinder.kind == "locale"
+                and lord_obj.cylinder.locale_id == here and lord_obj.assets.get("prov", 0) >= 1):
             return lid
     return None
 
@@ -4878,12 +4878,12 @@ def _h_resolve_battle(state, action):
         atk_side, def_side, marshal = "muslim", "christian", "yusuf"
     from almoravid.scenarios import _SAGRAJAS_LOCALE
     here = _SAGRAJAS_LOCALE
-    atk_lords = [lid for lid, l in state.lords.items()
-                 if l.side == atk_side and l.cylinder.kind == "locale"
-                 and l.cylinder.locale_id == here]
-    def_lords = [lid for lid, l in state.lords.items()
-                 if l.side == def_side and l.cylinder.kind == "locale"
-                 and l.cylinder.locale_id == here]
+    atk_lords = [lid for lid, lord in state.lords.items()
+                 if lord.side == atk_side and lord.cylinder.kind == "locale"
+                 and lord.cylinder.locale_id == here]
+    def_lords = [lid for lid, lord in state.lords.items()
+                 if lord.side == def_side and lord.cylinder.kind == "locale"
+                 and lord.cylinder.locale_id == here]
     _apply_absorption_policy(state, atk_side, action)
     _apply_absorption_policy(state, def_side, action)
     atk = battleside_for_lords(state, atk_lords, atk_side, "attacker",
@@ -4904,8 +4904,8 @@ def _h_resolve_battle(state, action):
     # decide by remaining (unrouted) strength; a true tie is a no-decision.
     if winner is None:
         def _strength(sd: str) -> int:
-            return sum(sum(l.forces.values()) for l in state.lords.values()
-                       if l.side == sd and l.cylinder.kind == "locale")
+            return sum(sum(lord.forces.values()) for lord in state.lords.values()
+                       if lord.side == sd and lord.cylinder.kind == "locale")
         a_str, d_str = _strength(atk_side), _strength(def_side)
         if a_str > d_str:
             winner = atk_side
@@ -4918,10 +4918,10 @@ def _h_resolve_battle(state, action):
         losers = [(def_side if winner == atk_side else atk_side)]
     else:
         losers = [atk_side, def_side]   # no decision: clear the field
-    for lid, l in state.lords.items():
-        if l.side in losers:
-            l.cylinder = Cylinder(kind="removed")
-            l.in_stronghold = False
+    for lid, lord in state.lords.items():
+        if lord.side in losers:
+            lord.cylinder = Cylinder(kind="removed")
+            lord.in_stronghold = False
     state.score.winner = winner
     state.score.victory_reason = (
         f"Battle of Sagrajas: {winner} wins the Battle" if winner

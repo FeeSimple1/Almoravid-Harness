@@ -226,11 +226,11 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
         return
     contribs: list[tuple[int, str]] = []
     for lid in side.lord_ids:
-        l = state.lords.get(lid)
-        if l is None:
+        lord = state.lords.get(lid)
+        if lord is None:
             continue
-        af = (l.forces.get("men_at_arms", 0)
-              + l.forces.get("african_foot", 0))
+        af = (lord.forces.get("men_at_arms", 0)
+              + lord.forces.get("african_foot", 0))
         contribs.append((af, lid))
     contribs.sort(reverse=True)
     if side.array is not None:
@@ -1177,10 +1177,10 @@ def battleside_for_lords(
     forces: dict[UnitType, int] = {}
     caps: list[str] = []
     for lid in lord_ids:
-        l = state.lords[lid]
-        for ut, n in l.forces.items():
+        lord = state.lords[lid]
+        for ut, n in lord.forces.items():
             forces[ut] = forces.get(ut, 0) + n
-        caps.extend(l.capabilities)
+        caps.extend(lord.capabilities)
 
     side_obj = BattleSide(
         side=side, role=role, lord_ids=list(lord_ids),
@@ -1207,11 +1207,11 @@ def battleside_for_lords(
             else:
                 slots.append((lid, "reserve"))
         for lid, pos in slots:
-            l = state.lords[lid]
+            lord = state.lords[lid]
             array.append(LordPosition(
                 lord_id=lid, position=pos,
-                forces=dict(l.forces),
-                capabilities_in_play=list(l.capabilities),
+                forces=dict(lord.forces),
+                capabilities_in_play=list(lord.capabilities),
             ))
         side_obj.array = array
 
@@ -1429,15 +1429,15 @@ def resolve_storm(
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
     for lid in defender.lord_ids:
-        l = state.lords.get(lid)
-        if l and l.cylinder.kind == "locale":
-            locale_id = l.cylinder.locale_id
+        lord = state.lords.get(lid)
+        if lord and lord.cylinder.kind == "locale":
+            locale_id = lord.cylinder.locale_id
             break
     if locale_id is None:
         for lid in attacker.lord_ids:
-            l = state.lords.get(lid)
-            if l and l.cylinder.kind == "locale":
-                locale_id = l.cylinder.locale_id
+            lord = state.lords.get(lid)
+            if lord and lord.cylinder.kind == "locale":
+                locale_id = lord.cylinder.locale_id
                 break
     walls_range = (1, 4)
     capacity = 1
@@ -1752,9 +1752,9 @@ def resolve_sally(
     # side's Siege markers there.
     locale_id = None
     for lid in attacker.lord_ids:
-        l = state.lords.get(lid)
-        if l and l.cylinder.kind == "locale":
-            locale_id = l.cylinder.locale_id
+        lord = state.lords.get(lid)
+        if lord and lord.cylinder.kind == "locale":
+            locale_id = lord.cylinder.locale_id
             break
     defender_walls = None
     if locale_id is not None:
@@ -1853,10 +1853,10 @@ def _pooled_battleside(state: GameState, lord_ids: list[str],
     forces: dict[UnitType, int] = {}
     caps: list[str] = []
     for lid in lord_ids:
-        l = state.lords[lid]
-        for ut, n in l.forces.items():
+        lord = state.lords[lid]
+        for ut, n in lord.forces.items():
             forces[ut] = forces.get(ut, 0) + n
-        caps.extend(l.capabilities)
+        caps.extend(lord.capabilities)
     return BattleSide(side=side, role=role, lord_ids=list(lord_ids),
                       forces=forces, capabilities_in_play=caps)
 
@@ -2440,9 +2440,9 @@ def apply_retreat_aftermath(
     # Battle locale = first loser Lord's cylinder.locale_id.
     battle_locale = None
     for lid in loser_side_obj.lord_ids:
-        l = state.lords.get(lid)
-        if l is not None and l.cylinder.kind == "locale":
-            battle_locale = l.cylinder.locale_id
+        lord_obj = state.lords.get(lid)
+        if lord_obj is not None and lord_obj.cylinder.kind == "locale":
+            battle_locale = lord_obj.cylinder.locale_id
             break
     if battle_locale is None:
         return summary
@@ -2471,10 +2471,10 @@ def apply_retreat_aftermath(
     else:
         capacity = 0
     already_inside = sum(
-        1 for l in state.lords.values()
-        if l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == battle_locale
-        and l.in_stronghold
+        1 for lord_obj in state.lords.values()
+        if lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == battle_locale
+        and lord_obj.in_stronghold
     )
 
     # Iterate losing Lords in stable order so RNG draws are
@@ -2614,10 +2614,10 @@ def _retreat_target_clear(
         is_friendly_locale,
     )
     other = "muslim" if retreating_side == "christian" else "christian"
-    for l in state.lords.values():
-        if (l.side == other and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == locale_id):
-            if not (is_besieged(state, l.id) or is_bypassed(state, l.id)):
+    for lord in state.lords.values():
+        if (lord.side == other and lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == locale_id):
+            if not (is_besieged(state, lord.id) or is_bypassed(state, lord.id)):
                 return False
     loc = state.locales[locale_id]
     if loc.base_type != "region" and not is_friendly_locale(
