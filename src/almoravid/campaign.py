@@ -2719,7 +2719,18 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"
     current = getattr(loc, marker_field)
 
-    from almoravid.rng import roll_d6_n
+    # C1/M1 Battering Ram (Capability): any of our Lords at this Siege
+    # Locale (outside the Stronghold) holding it lets us reroll one
+    # Surrender die and counts as 2 Lords toward Siegeworks Capacity (4.5.1).
+    from almoravid.capabilities import lord_has_capability
+    _br_card = "C1" if side == "christian" else "M1"
+    has_battering_ram = any(
+        lord_has_capability(state, lo.id, _br_card)
+        for lo in state.lords.values()
+        if lo.side == side and lo.cylinder.kind == "locale"
+        and lo.cylinder.locale_id == here and not lo.in_stronghold)
+
+    from almoravid.rng import roll_d6, roll_d6_n
     from almoravid.static_data import load_strongholds
     capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
     sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
@@ -2756,6 +2767,13 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         else:
             dice = roll_d6_n(state, sh_value)
             cancellations = sum(1 for d in dice if d <= threshold)
+            # C1/M1 Battering Ram: may reroll one (failed) Surrender die.
+            if has_battering_ram and cancellations < sh_value:
+                for _i, _d in enumerate(dice):
+                    if _d > threshold:
+                        dice[_i] = roll_d6(state)
+                        break
+                cancellations = sum(1 for d in dice if d <= threshold)
         if cancellations == sh_value:
             surrendered = True
             conq_result = _conquer_stronghold(state, here, side)
@@ -2801,7 +2819,9 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             if other.side == side and other.cylinder.kind == "locale"
             and other.cylinder.locale_id == here
         )
-        siegeworks = lords_here_our_side >= capacity
+        # C1/M1 Battering Ram counts as 2 Lords for this Capacity test.
+        effective_lords = lords_here_our_side + (1 if has_battering_ram else 0)
+        siegeworks = effective_lords >= capacity
         if siegeworks and current < 4:
             setattr(loc, marker_field, current + 1)
             placed = 1
@@ -3482,7 +3502,6 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         BattleSide,
-        battleside_for_lord,
         resolve_sally,
     )
     from almoravid.effective import is_besieged
@@ -3514,10 +3533,26 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     ]
     _require(besiegers, f"No besiegers to Sally against at {here}",
              code="no_besiegers")
-    atk = battleside_for_lord(state, lord_id, "attacker")
-    atk.lord_ids = [lord_id]  # the sallying Lord
-    # Sally exits the Stronghold for the duration of the Sally
-    state.lords[lord_id].in_stronghold = False
+    # 4.5.3: ALL Besieged Lords of this side at the Locale Sally out and
+    # Attack (not only the Active Lord). The Active Lord leads; the others'
+    # Forces are pooled in (the Sally uses the pooled path so the besieging
+    # Defender's Siegeworks-as-Walls apply).
+    sallying_ids = [lord_id] + [
+        lo.id for lo in state.lords.values()
+        if lo.side == side and lo.cylinder.kind == "locale"
+        and lo.cylinder.locale_id == here and lo.in_stronghold
+        and is_besieged(state, lo.id) and lo.id != lord_id]
+    atk_forces: dict[UnitType, int] = {}
+    atk_caps: list[str] = []
+    for sid in sallying_ids:
+        for ut, n in state.lords[sid].forces.items():
+            atk_forces[ut] = atk_forces.get(ut, 0) + n
+        atk_caps.extend(state.lords[sid].capabilities)
+    atk = BattleSide(side=side, role="attacker", lord_ids=sallying_ids,
+                     forces=atk_forces, capabilities_in_play=atk_caps)
+    # Sallying Lords exit the Stronghold for the duration of the Sally.
+    for sid in sallying_ids:
+        state.lords[sid].in_stronghold = False
 
     # Build defender side (besiegers)
     dfd_forces: dict[UnitType, int] = {}

@@ -424,6 +424,7 @@ def _resolve_protection_roll(
     striker_selects: bool = False,
     striker_unit_class: UnitClass | None = None,
     absorb_policy: str = "weakest_first",
+    striker_minus_armor: int = 0,
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -538,6 +539,8 @@ def _resolve_protection_roll(
                 and target_side.m7_boosts_remaining > 0):
             hi = hi + 1
             target_side.m7_boosts_remaining -= 1
+        # Crossbows: -1 vs Armor (Quick Ref Table 1 / Errata).
+        hi = hi - striker_minus_armor
         if lo <= rng <= hi:
             canceled = True
     elif ptype == "unarmored":
@@ -774,6 +777,7 @@ def _apply_step_cancellation_and_hits(
             continue
         striker_selects_target = (kind == "crossbows")
         protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
+        minus_armor = 1 if kind == "crossbows" else 0
         for _ in range(count):
             if not target.has_unrouted():
                 break
@@ -783,6 +787,7 @@ def _apply_step_cancellation_and_hits(
                 striker_selects=striker_selects_target,
                 striker_unit_class=unit_class,
                 absorb_policy=absorb_policy,
+                striker_minus_armor=minus_armor,
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
@@ -905,7 +910,7 @@ def _battle_one_round(
             break
     # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills C1/M1).
     if round_idx == 1:
-        _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        _discard_round1_events(state, ["C8", "M7"])
     # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
     if round_idx == 2:
         _discard_round1_events(state, ["M6"])
@@ -2200,7 +2205,7 @@ def _relief_run_round(state: GameState, rs: _ReliefState,
         if _relief_over(state, rs):
             break
     if rnd_i == 1:
-        _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
+        _discard_round1_events(state, ["C8", "M7"])
     if rnd_i == 2:
         _discard_round1_events(state, ["M6"])
     return rnd
@@ -2991,6 +2996,7 @@ def _resolve_protection_roll_for_lp(
     striker_selects: bool = False,
     striker_unit_class: UnitClass | None = None,
     absorb_policy: str = "weakest_first",
+    striker_minus_armor: int = 0,
 ) -> tuple[bool, UnitType | None]:
     """Protection roll that drains from a single LordPosition's forces.
 
@@ -3068,6 +3074,8 @@ def _resolve_protection_roll_for_lp(
             # Pool-path fallback only when no per-Lord markers exist.
             hi = hi + 1
             side.m7_boosts_remaining -= 1
+        # Crossbows: -1 vs Armor (Quick Ref Table 1 / Errata).
+        hi = hi - striker_minus_armor
         if lo <= rng <= hi:
             canceled = True
     elif ptype == "unarmored":
@@ -3282,6 +3290,7 @@ def _resolve_step_per_pair(
             striker_selects_target = (kind == "crossbows")
             protroll_kind: StrikeKind = ("melee" if kind == "melee"
                                          else "missiles")
+            minus_armor = 1 if kind == "crossbows" else 0
             for _ in range(count):
                 if not target_lp.has_unrouted():
                     break
@@ -3291,6 +3300,7 @@ def _resolve_step_per_pair(
                     striker_selects=striker_selects_target,
                     striker_unit_class=unit_class,
                     absorb_policy=absorb_policy,
+                    striker_minus_armor=minus_armor,
                 )
                 if routed is not None:
                     step_res.losses[routed] = (
