@@ -31,6 +31,8 @@ from almoravid.actions import (
 )
 from almoravid.state import (
     GameState,
+    Lord,
+    PendingDecision,
     PlanEntry,
     Side,
 )
@@ -70,7 +72,7 @@ def _require_campaign_step(state: GameState, step: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _apply_capability_discard(state) -> dict:
+def _apply_capability_discard(state: GameState) -> dict[str, Any]:
     """Rule 4.0 CAPABILITY DISCARD: at the start of each Campaign the
     players (Christian first, then Muslim) must discard side-wide
     Capability cards (those tucked under the map edge, state.decks.
@@ -80,7 +82,7 @@ def _apply_capability_discard(state) -> dict:
     the board_edge list (a minor player choice that does not affect
     totals).
     """
-    out: dict = {}
+    out: dict[str, Any] = {}
     for side in ("christian", "muslim"):
         edge = state.decks.board_edge.get(side, [])
         n_lords = sum(1 for lord in state.lords.values()
@@ -522,7 +524,7 @@ def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, 
     return {"disbanded": lord_id, "to_box": new_box}
 
 
-def _clear_per_card_event_flags(state) -> None:
+def _clear_per_card_event_flags(state: GameState) -> None:
     """Phase 6h: clear card-scope event flags at end_card."""
     state.meta.swollen_river_blocked_card_lord_id = None
 
@@ -617,7 +619,7 @@ def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _apply_grow_harvest_repairs(state, prev_box: int) -> dict:
+def _apply_grow_harvest_repairs(state: GameState, prev_box: int) -> dict[str, Any]:
     """Rules 4.9.2 GROW / HARVEST and 4.9.3 REPAIRS, applied for the
     Campaign that just concluded in `prev_box` (1-indexed). Only runs
     when the game continues (4.9.1 Game End is checked first).
@@ -638,7 +640,7 @@ def _apply_grow_harvest_repairs(state, prev_box: int) -> dict:
     (per besieger color).
     """
     import math as _m
-    out: dict = {"grow": None, "harvest": None, "repairs": []}
+    out: dict[str, Any] = {"grow": None, "harvest": None, "repairs": []}
     boxes = state.calendar.boxes
     if prev_box < 1 or prev_box > len(boxes):
         return out
@@ -814,7 +816,7 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def check_curias(state) -> dict:
+def check_curias(state: GameState) -> dict[str, Any]:
     """Rule 6.2: Curias check at start of Autumn (box 5) and again at
     box 6 if not triggered in 5. Only applies in Scenario F.
 
@@ -846,7 +848,7 @@ def check_curias(state) -> dict:
             "yellow_count": yellow, "green_count": green}
 
 
-def apply_curias(state, box: int) -> dict:
+def apply_curias(state: GameState, box: int) -> dict[str, Any]:
     """Rule 6.2 trigger actions. Returns dict describing the cascade.
 
     Place a Curias marker in the current box (and a 2nd in box 6 if firing
@@ -911,7 +913,7 @@ def apply_curias(state, box: int) -> dict:
             "auto_disbanded": disbanded}
 
 
-def winter_disband(state) -> dict:
+def winter_disband(state: GameState) -> dict[str, Any]:
     """Rule 6.3.1 Winter Disband at box 7 (Scenario F only).
 
     Mustered Lords (except those at Sieges) Disband to their mats:
@@ -1009,7 +1011,7 @@ def winter_disband(state) -> dict:
     return results
 
 
-def spring_muster(state) -> dict:
+def spring_muster(state: GameState) -> dict[str, Any]:
     """Rule 6.3.3 Spring Muster at end of box 8 (Scenario F only).
 
     Christian Lords on mats automatically Muster — cylinder to a free
@@ -1063,7 +1065,7 @@ def spring_muster(state) -> dict:
     return results
 
 
-def winter_plowing(state) -> dict:
+def winter_plowing(state: GameState) -> dict[str, Any]:
     """Rule 6.3.4 Plowing: at the end of the second 40 Days of Winter
     (box 8), each Lord at a Siege (only) reduces his Carts and Mules
     each to half their number, rounded up. Mirrors 4.9.2 Harvest but
@@ -1100,7 +1102,7 @@ def winter_plowing(state) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _return_to_levy(state) -> None:
+def _return_to_levy(state: GameState) -> None:
     """Reset turn state for the start of a new Levy phase."""
     state.meta.phase = "levy"
     state.meta.campaign_step = None
@@ -1130,7 +1132,7 @@ def _return_to_levy(state) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _siege_locale_lords(state) -> list[str]:
+def _siege_locale_lords(state: GameState) -> list[str]:
     """All Lords (both sides, including Besieged garrisons inside) whose
     cylinder is at a Locale that has any Siege marker."""
     out = []
@@ -1143,7 +1145,7 @@ def _siege_locale_lords(state) -> list[str]:
     return out
 
 
-def _winter_besiegers(state) -> list[str]:
+def _winter_besiegers(state: GameState) -> list[str]:
     """6.3.2 bullet 1 "each Besieging Lord (only)": a Lord OUTSIDE a
     Stronghold at a Locale where HIS side has a Siege marker."""
     out = []
@@ -1163,11 +1165,11 @@ class _MetaCtx:
     command handlers (Supply, Ravage, Pay, Disband) can be reused inside
     the Winter sequence without duplicating their effect logic."""
 
-    def __init__(self, state, **overrides):
+    def __init__(self, state: GameState, **overrides: Any) -> None:
         self.state = state
         self.overrides = overrides
 
-    def __enter__(self):
+    def __enter__(self) -> "_MetaCtx":
         m = self.state.meta
         self._saved = {k: getattr(m, k) for k in (
             "phase", "campaign_step", "levy_step", "active_player",
@@ -1178,7 +1180,7 @@ class _MetaCtx:
         self.state.pending = None
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> None:
         m = self.state.meta
         for k, v in self._saved.items():
             setattr(m, k, v)
@@ -1186,7 +1188,7 @@ class _MetaCtx:
         return False
 
 
-def _winter_feed(state) -> dict:
+def _winter_feed(state: GameState) -> dict[str, Any]:
     """6.3.2 bullet 2: each Lord at a Siege Locale Feeds (4.8.1). Marks
     those Lords Moved/Fought and runs the shared Feed (Christians then
     Muslims, Sharing among same-Locale allies, Unfed Service-shift)."""
@@ -1195,7 +1197,7 @@ def _winter_feed(state) -> dict:
     return _feed_all_moved_fought(state)
 
 
-def _winter_siege_disband(state) -> list[dict]:
+def _winter_siege_disband(state: GameState) -> list[dict[str, Any]]:
     """6.3.2 bullet 3 (mandatory): Disband Lords at Siege Locales at or
     beyond Service limit per 3.3 (Beyond -> permanent removal; At limit
     -> Calendar). Reuses the tested disband handler."""
@@ -1219,7 +1221,7 @@ def _winter_siege_disband(state) -> list[dict]:
     return results
 
 
-def _enter_winter_box(state, box: int) -> dict:
+def _enter_winter_box(state: GameState, box: int) -> dict[str, Any]:
     """Begin the Winter Siege sequence for `box` (7 or 8)."""
     from almoravid.state import PendingDecision
     state.meta.phase = "winter"
@@ -1231,7 +1233,7 @@ def _enter_winter_box(state, box: int) -> dict:
     return _winter_advance(state)
 
 
-def _winter_advance(state) -> dict:
+def _winter_advance(state: GameState) -> dict[str, Any]:
     """Progress the Winter Siege state machine, pausing (leaving the
     pending set with waiting_on correct) only when player input is
     needed; runs the auto Feed at the besieger->pay boundary."""
@@ -1268,7 +1270,7 @@ def _winter_advance(state) -> dict:
             "pay_side": payload["pay_side"]}
 
 
-def _finish_winter_box(state, box: int) -> dict:
+def _finish_winter_box(state: GameState, box: int) -> dict[str, Any]:
     """After both sides' Pay: mandatory at-limit Disband, then either
     advance to box 8 (interactive again) or, after box 8, run Spring
     Muster (6.3.3) + Plowing (6.3.4) and enter the box-9 Spring Levy."""
@@ -1286,7 +1288,7 @@ def _finish_winter_box(state, box: int) -> dict:
             "spring_muster": sm, "phase": state.meta.phase}
 
 
-def _h_winter_siege_action(state, action):
+def _h_winter_siege_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """6.3.2 bullet 1: the current Besieging Lord takes ONE Supply or
     Ravage action, or passes. Forage is NOT offered in Winter Siege."""
     side = _require_side(action)
@@ -1325,7 +1327,7 @@ def _h_winter_siege_action(state, action):
             "advance": adv}
 
 
-def _h_winter_siege_pay(state, action):
+def _h_winter_siege_pay(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """6.3.2 bullet 3 (optional half): Christian then Muslim may Pay
     Lords at Sieges (3.2). `done` ends that side's Pay; after Muslim's
     `done` the mandatory at-limit Disband runs and the box completes."""
@@ -1363,9 +1365,9 @@ def _h_winter_siege_pay(state, action):
 # ---------------------------------------------------------------------------
 
 
-def adjust_taifa_status(state, taifa_id: str, new_status: str,
+def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
                         *, award_parias_coin: bool = True,
-                        neutrality_choices: dict | None = None) -> dict:
+                        neutrality_choices: dict[str, Any] | None = None) -> dict[str, Any]:
     """Apply a Taifa status transition and its cascades per 1.4.3.
 
     Returns dict with the cascade effects: ravaged flips, forced Conquests,
@@ -1603,7 +1605,7 @@ def adjust_taifa_status(state, taifa_id: str, new_status: str,
     return results
 
 
-def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
+def maybe_recompute_taifa_status(state: GameState, taifa_id: str) -> dict[str, Any]:
     """Re-evaluate a Taifa's status based on current map state per 1.4.1.
 
     Status rules:
@@ -1673,7 +1675,7 @@ def maybe_recompute_taifa_status(state, taifa_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _is_laden(lord, way_type: str | None = None) -> bool:
+def _is_laden(lord: Lord, way_type: str | None = None) -> bool:
     """A Lord is Laden if (rule 4.3.2):
       - a Mule or Cart carries TWO Provender (i.e. Provender exceeds the
         number of Transport units, so at least one unit must double up);
@@ -1703,7 +1705,8 @@ def _is_laden(lord, way_type: str | None = None) -> bool:
     return False
 
 
-def _group_laden(state, lord_ids, way_type: str | None = None) -> bool:
+def _group_laden(state: GameState, lord_ids: list[str],
+                 way_type: str | None = None) -> bool:
     """C3/C4 (4.3.1/4.3.2 SHARED TRANSPORT): a March group's Laden status
     is computed from the COMBINED Provender, Loot, Carts and Mules of all
     Lords moving together (1.5.2). Same triggers as _is_laden."""
@@ -1726,7 +1729,7 @@ def _group_laden(state, lord_ids, way_type: str | None = None) -> bool:
     return False
 
 
-def _h_cmd_march(state, action):
+def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3 March: move the active Lord to an adjacent Locale.
 
     Args:
@@ -2002,13 +2005,14 @@ def _h_cmd_march(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _own_seats(state, lord_id: str) -> list[str]:
+def _own_seats(state: GameState, lord_id: str) -> list[str]:
     """Locale ids that are printed Seats for this Lord (from static data)."""
     from almoravid.static_data import load_lords
     return list(load_lords()["lords"][lord_id].get("seats", []))
 
 
-def _route_blocked_by_enemy(state, route: list[str], side) -> bool:
+def _route_blocked_by_enemy(state: GameState, route: list[str],
+                            side: Side) -> bool:
     """Per rule 4.6.1: route may not include a Locale with an Enemy
     Stronghold or Lord, unless that Enemy is Besieged or Bypassed.
 
@@ -2039,8 +2043,8 @@ def _route_blocked_by_enemy(state, route: list[str], side) -> bool:
 
 
 
-def _find_supply_routes(state, here: str, seats: list[str],
-                          side, lord) -> dict[str, list[str] | None]:
+def _find_supply_routes(state: GameState, here: str, seats: list[str],
+                          side: Side, lord: Lord) -> dict[str, list[str] | None]:
     """BFS from `here` looking for an unblocked path to each Seat.
 
     Returns {seat_id: route_locale_list_or_None}. The route list
@@ -2085,7 +2089,7 @@ def _find_supply_routes(state, here: str, seats: list[str],
             queue.append(nbr)
     return target_routes
 
-def _h_cmd_supply(state, action):
+def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.6 Supply: 1 action. Active Lord (not Besieged) supplies from
     one or more of his own Seats. For each Seat used as Source:
     +1 Provender on the Lord's mat.
@@ -2220,7 +2224,7 @@ def _h_cmd_supply(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_tax(state, action):
+def _h_cmd_tax(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.7.3 Tax: end-of-card action. Lord at his own Seat (and not
     Besieged) adds 1 Coin to his mat. Uses the ENTIRE Command card —
     consumes all remaining actions.
@@ -2266,7 +2270,7 @@ def _h_cmd_tax(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_forage(state, action):
+def _h_cmd_forage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.7.1 Forage: 1 action. Two eligibility paths:
 
       (a) Locale Unravaged AND Lord Unbesieged: roll 1d6, 1-3 add
@@ -2346,7 +2350,7 @@ def _h_cmd_forage(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_ravage(state, action):
+def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.7.2 Ravage: 1 action. Not Besieged. Enemy Locale not already
     Ravaged by this side.
 
@@ -2398,7 +2402,8 @@ def _h_cmd_ravage(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
-def _apply_ravage_effect(state, lord, side, target_id: str) -> dict:
+def _apply_ravage_effect(state: GameState, lord: Lord, side: Side,
+                         target_id: str) -> dict[str, Any]:
     """Shared 4.7.2 Ravage EFFECT applied to `target_id` (which may differ
     from the Lord's Locale for long-range Ravage / Cabalgadas): place the
     side's Ravaged marker, Rustling (Loot/Prov to the Ravaging Lord, War
@@ -2457,7 +2462,8 @@ def _apply_ravage_effect(state, lord, side, target_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _ravaged_count_in_taifa_for_side(state, locale_id: str, side) -> int:
+def _ravaged_count_in_taifa_for_side(state: GameState, locale_id: str,
+                                     side: Side) -> int:
     """Count Ravaged markers of `side`'s color in the Taifa containing
     locale_id. Used by Surrender (4.5.1) — die rolls cancel if <=
     siege_markers + ravaged_markers_of_besieging_side.
@@ -2473,7 +2479,8 @@ def _ravaged_count_in_taifa_for_side(state, locale_id: str, side) -> int:
     )
 
 
-def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
+def _conquer_stronghold(state: GameState, locale_id: str,
+                        conquering_side: Side) -> dict[str, Any]:
     """Apply Conquest of a Stronghold (rule 1.4.4, 4.5.1 Surrender,
     4.5.2 Storm victory, 4.5.3 Sally retreat).
 
@@ -2580,7 +2587,7 @@ def _conquer_stronghold(state, locale_id: str, conquering_side) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_siege(state, action):
+def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.5.1 Siege: end-of-card action.
 
     Active Lord at an Enemy Stronghold (Locale with Stronghold not
@@ -2748,7 +2755,7 @@ def _h_cmd_siege(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_battle(state, action):
+def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.4 Battle: end-of-card action.
 
     Active Lord at a Locale containing exactly one Enemy Lord triggers
@@ -2858,7 +2865,7 @@ def _h_cmd_battle(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_cmd_storm(state, action):
+def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.5.2 Storm. Active Lord outside a Besieged Stronghold (i.e.,
     with at least one of our Siege markers at the Locale) assaults
     the defending Garrison + any besieged enemy Lords inside.
@@ -2921,7 +2928,7 @@ def _h_cmd_storm(state, action):
     if len(besieger_ids) == 1:
         atk = battleside_for_lord(state, lord_id, "attacker")
     else:
-        a_forces: dict = {}
+        a_forces: dict[str, Any] = {}
         a_caps: list[str] = []
         for bid in besieger_ids:
             for ut, n in state.lords[bid].forces.items():
@@ -2931,7 +2938,7 @@ def _h_cmd_storm(state, action):
                          forces=a_forces, capabilities_in_play=a_caps)
     # Build defender side. If multiple Lords inside, aggregate (Phase 5f).
     if enemy_inside:
-        dfd_forces: dict = {}
+        dfd_forces: dict[str, Any] = {}
         dfd_caps: list[str] = []
         for eid in enemy_inside:
             for ut, n in state.lords[eid].forces.items():
@@ -3061,7 +3068,7 @@ def _h_cmd_storm(state, action):
             "actions_consumed": consumed}
 
 
-def _h_cmd_sally(state, action):
+def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.5.3 Sally. Besieged Lord attacks the besieger.
 
     Uses entire card. If Sally loses, sallying Lords Withdraw back
@@ -3107,7 +3114,7 @@ def _h_cmd_sally(state, action):
     state.lords[lord_id].in_stronghold = False
 
     # Build defender side (besiegers)
-    dfd_forces: dict = {}
+    dfd_forces: dict[str, Any] = {}
     dfd_caps: list[str] = []
     for bid in besiegers:
         for ut, n in state.lords[bid].forces.items():
@@ -3142,7 +3149,7 @@ def _h_cmd_sally(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _sweep_all_orphaned_markers(state) -> None:
+def _sweep_all_orphaned_markers(state: GameState) -> None:
     """Door B backstop (Advisory #2; RoP 4.3.5/4.3.6/4.4.1): "Whenever a
     Besieged or Bypassed Stronghold becomes free of Enemy Lords in the
     Locale, remove all Siege and Bypass markers there." Run after every
@@ -3157,14 +3164,14 @@ def _sweep_all_orphaned_markers(state) -> None:
             _remove_orphaned_siege_bypass(state, lid)
 
 
-def _remove_orphaned_siege_bypass(state, locale_id: str) -> dict:
+def _remove_orphaned_siege_bypass(state: GameState, locale_id: str) -> dict[str, Any]:
     """4.3.5/4.3.6 DEPART: when a Besieged or Bypassed Stronghold
     becomes free of the besieging side's (Enemy) Lords in the Locale,
     remove that side's Siege and Bypass markers there. Markers are
     color-coded, so a side's markers clear once that side has no Lord
     present at the Locale. Called after any departure (e.g. March)."""
     loc = state.locales.get(locale_id)
-    out: dict = {"removed": []}
+    out: dict[str, Any] = {"removed": []}
     if loc is None or loc.base_type == "region":
         return out
     for color, sd in (("yellow", "christian"), ("green", "muslim")):
@@ -3186,7 +3193,7 @@ def _remove_orphaned_siege_bypass(state, locale_id: str) -> dict:
 
 
 def _check_approach_trigger(
-    state, locale_id: str, active_side: Side,
+    state: GameState, locale_id: str, active_side: Side,
     from_locale_id: str, way_type: str, active_lord_id: str,
 ) -> dict[str, Any] | None:
     """If an Unbesieged/Unbypassed enemy Lord is at `locale_id` not
@@ -3228,24 +3235,26 @@ def _check_approach_trigger(
     return dict(payload)
 
 
-def _clear_approach_pending(state, original_active: Side) -> None:
+def _clear_approach_pending(state: GameState, original_active: Side) -> None:
     """Clear the PendingDecision and restore active_player to the
     marching side so their card continues."""
     state.pending = None
     state.meta.active_player = original_active
 
 
-def _require_pending(state, kind: str, side: Side):
+def _require_pending(state: GameState, kind: str, side: Side) -> PendingDecision:
     pd = state.pending
     _require(pd is not None and pd.kind == kind,
              f"no pending {kind} decision", code="no_pending")
     _require(pd.waiting_on == side,
              f"pending decision waiting on {pd.waiting_on}, not {side}",
              code="not_responder")
+    assert pd is not None
     return pd
 
 
-def _approach_subset(payload, action) -> list[str]:
+def _approach_subset(payload: dict[str, Any],
+                     action: dict[str, Any]) -> list[str]:
     """C2 (4.3.4): the Inactive side may partition its Lords across
     Avoid / Withdraw / Battle. An avoid/withdraw response acts on the
     `lord_ids` subset of the still-pending defenders (default: ALL of
@@ -3261,7 +3270,8 @@ def _approach_subset(payload, action) -> list[str]:
     return subset
 
 
-def _resolve_or_repend_approach(state, payload, active_side, *,
+def _resolve_or_repend_approach(state: GameState, payload: dict[str, Any],
+                                active_side: Side, *,
                                 some_withdrew: bool) -> bool:
     """After an Avoid/Withdraw subset acts, either re-pend the remaining
     defenders' response (still owing Avoid/Withdraw/Battle) or, when none
@@ -3288,7 +3298,7 @@ def _resolve_or_repend_approach(state, payload, active_side, *,
     return False
 
 
-def _h_respond_avoid_battle(state, action):
+def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Avoid Battle. Defender Lords move together to an adjacent
     Locale that:
       - is not the Locale the Active side came from (way_not_used_by_enemy_approach)
@@ -3429,7 +3439,7 @@ def _h_respond_avoid_battle(state, action):
             "discarded_as_spoils": spoils, "spoils_distribution": spoils_dist}
 
 
-def _h_respond_withdraw(state, action):
+def _h_respond_withdraw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Withdraw. Defender Lords enter Friendly Stronghold at the
     Approach Locale, up to Siege Capacity (1.3.1). Does NOT mark
     moved_fought (SoP withdraw_definition).
@@ -3506,8 +3516,9 @@ def _h_respond_withdraw(state, action):
             "pending_followup": repended}
 
 
-def _set_besiege_or_bypass_pending(state, locale_id: str, active_side: Side,
-                                   active_lord_id) -> bool:
+def _set_besiege_or_bypass_pending(state: GameState, locale_id: str,
+                                   active_side: Side,
+                                   active_lord_id: str | None) -> bool:
     """4.3.5: if `active_side` has Lord(s) outside the Enemy Stronghold
     at `locale_id`, that Stronghold is not already Besieged/Bypassed by
     that side, and Enemy Lords are inside it, set a `besiege_or_bypass`
@@ -3548,7 +3559,7 @@ def _set_besiege_or_bypass_pending(state, locale_id: str, active_side: Side,
     return True
 
 
-def _h_respond_besiege(state, action):
+def _h_respond_besiege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.5 Besiege: place one Siege marker of the Active side's color
     on the Enemy Stronghold, skip any remaining actions on this card,
     and proceed to Feed/Pay/Disband (the card ends)."""
@@ -3572,7 +3583,7 @@ def _h_respond_besiege(state, action):
             else "siege_green"}
 
 
-def _h_respond_bypass(state, action):
+def _h_respond_bypass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.5 Bypass: place a Bypass marker of the Active side's color on
     the Lord(s) outside and continue any remaining actions on the card
     without leaving the Locale."""
@@ -3596,7 +3607,7 @@ def _h_respond_bypass(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
-def _h_respond_stand_battle(state, action):
+def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
     on both sides at the Approach Locale. Battle ends the active side's
     card (rule 4.4.5)."""
@@ -3720,7 +3731,7 @@ def _h_respond_stand_battle(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _h_play_pope_gregory(state, action):
+def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C14 (Hold) Pope Gregory: Play on Sancho or Eudes to
     Muster him from Calendar, OR shift his Service 2 boxes right,
     OR for Lordship +2.
@@ -3783,7 +3794,7 @@ def _h_play_pope_gregory(state, action):
     return result
 
 
-def _h_play_al_qadir(state, action):
+def _h_play_al_qadir(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Play held M11 "Al-Qadir balks at payment" (Hold, Muslim) to add
     Jihad per 1.4.4: base 1, or 3 if the Yusuf/Sir bonus is active
     (_m11_jihad_bonus_active). Optional payload jihad_targets choose the
@@ -3818,7 +3829,7 @@ def _h_play_al_qadir(state, action):
             "bonus": bonus, "placement": placement}
 
 
-def _h_play_cluniacs(state, action):
+def _h_play_cluniacs(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C15 (Hold) Cluniacs: Play on a Lord to Muster from Calendar,
     OR shift Service +1 right, OR Lordship +2.
 
@@ -3877,7 +3888,7 @@ def _h_play_cluniacs(state, action):
     return result
 
 
-def _h_play_de_vivar_reconcile(state, action):
+def _h_play_de_vivar_reconcile(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C25 (Hold) De Vivar: Reconcile with Rodrigo (3.5.1) — Rodrigo
     al-Sayyid leaves the map; Muslim side gains 1 VP "to Taifas box"
     (modeled as +1 Muslim score).
@@ -3913,7 +3924,7 @@ def _h_play_de_vivar_reconcile(state, action):
     return {"reconciled": True, "muslim_vp_delta": 1.0}
 
 
-def _h_cmd_march_port_to_port(state, action):
+def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """M19 (Hold) African Fleet: Lord uses entire Command card to
     March between two Ports where no Christian Lord at destination.
 
@@ -3973,7 +3984,7 @@ def _h_cmd_march_port_to_port(state, action):
 # ---------------------------------------------------------------------------
 
 
-def _mustered_lords_on_map(state, side: Side) -> int:
+def _mustered_lords_on_map(state: GameState, side: Side) -> int:
     """Count a side's Lords with a cylinder on a map Locale."""
     return sum(
         1 for lord in state.lords.values()
@@ -3981,7 +3992,7 @@ def _mustered_lords_on_map(state, side: Side) -> int:
     )
 
 
-def check_campaign_victory(state) -> str | None:
+def check_campaign_victory(state: GameState) -> str | None:
     """Rule 5.2: during the Campaign, if a side has no Mustered Lords
     on the map, the OTHER side wins immediately regardless of VP.
     Returns the winning side, or None."""
@@ -3992,7 +4003,7 @@ def check_campaign_victory(state) -> str | None:
     return None
 
 
-def compute_final_vp(state) -> tuple[float, float]:
+def compute_final_vp(state: GameState) -> tuple[float, float]:
     """Recompute board VP per rule 5.1 (independent of the running
     incremental score, which doesn't track Taifa-status VP).
 
@@ -4034,7 +4045,7 @@ def compute_final_vp(state) -> tuple[float, float]:
     return christian, muslim
 
 
-def compute_victory(state) -> dict:
+def compute_victory(state: GameState) -> dict[str, Any]:
     """Determine the winner (rule 5.1/5.2/5.3) and store the verdict
     on state.score. Campaign victory (5.2) takes precedence; otherwise
     higher recomputed VP wins, tie = draw."""
@@ -4079,13 +4090,13 @@ def _is_marshal(lord_id: str, side: Side) -> bool:
     return _MARSHALS.get(side) == lord_id
 
 
-def _is_taifa_locale(state, locale_id: str) -> bool:
+def _is_taifa_locale(state: GameState, locale_id: str) -> bool:
     """A Locale in Muslim Taifa territory (not a Christian Kingdom)."""
     loc = state.locales.get(locale_id)
     return loc is not None and loc.territory in state.taifas
 
 
-def _counts_as_marshal_for_march(state, lord_id: str, side: Side,
+def _counts_as_marshal_for_march(state: GameState, lord_id: str, side: Side,
                                  from_loc: str, target: str) -> bool:
     """4.3.1 Group March leader test. True for the side's actual Marshal,
     OR a Lord with C8 Hueste for a March to/from any Taifa Locale (not
@@ -4105,7 +4116,7 @@ def _counts_as_marshal_for_march(state, lord_id: str, side: Side,
     return False
 
 
-def _h_designate_lieutenant(state, action):
+def _h_designate_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.1.3 (Plan step): stack `lord_id` as a Lower Lord with
     `commander_id` (its Lieutenant) at the same Locale.
 
@@ -4154,7 +4165,7 @@ def _h_designate_lieutenant(state, action):
     return {"lower_lord": lord_id, "lieutenant": commander_id}
 
 
-def _h_toggle_lieutenant(state, action):
+def _h_toggle_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C15 Alferez (capability): a Lord with Alferez may spend 1 Command
     action to become, or stop being, a Lower Lord stacked on another
     Christian Lord at the same Locale (rule 4.1.3 exception).
@@ -4205,7 +4216,7 @@ def _h_toggle_lieutenant(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
-def _unstack_all_lieutenants(state) -> None:
+def _unstack_all_lieutenants(state: GameState) -> None:
     """End-of-Campaign cleanup (4.1.3 / SoP 'Unstack Lieutenants and
     Lower Lords')."""
     for lord in state.lords.values():
@@ -4219,13 +4230,13 @@ def _unstack_all_lieutenants(state) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _apply_wastage(state) -> list[dict]:
+def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
     """Rule 4.9.4: each Mustered Lord (on the map) with MORE THAN ONE
     of any Asset type, or more than one This-Lord Capability card,
     discards one excess. Greedy/deterministic: drop one unit of the
     largest Asset stack > 1; if none, drop one This-Lord Capability."""
     from almoravid.capabilities import capabilities_for_lord
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for lid in sorted(state.lords):
         lord = state.lords[lid]
         if lord.cylinder.kind != "locale":
@@ -4253,7 +4264,7 @@ def _apply_wastage(state) -> list[dict]:
     return out
 
 
-def _h_cmd_encamp(state, action):
+def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
     Laden) to replace all his Bypass markers at the Locale with 1
     Siege marker; this ends his actions on the current card."""
@@ -4287,7 +4298,7 @@ def _h_cmd_encamp(state, action):
     return {"locale": here, "encamped": True, "actions_consumed": consumed}
 
 
-def _h_cmd_sortie(state, action):
+def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.6 SORTIE: a Lord (or a Marshal/Lieutenant-led group, 4.3.1)
     inside a Bypassed FRIENDLY Stronghold uses one March action
     (regardless of Laden status, 4.3.2) to Approach (4.3.4) the
@@ -4385,7 +4396,7 @@ def _h_cmd_sortie(state, action):
             "actions_remaining": state.meta.actions_remaining}
 
 
-def _h_dinars_deposit(state, action):
+def _h_dinars_deposit(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.1.4 Dinars: an Unbesieged Taifa Lord (not Yusuf/Sir/Rodrigo)
     deposits any Coin from his mat into the Taifas box (Plan step)."""
     from almoravid.effective import is_besieged
@@ -4421,7 +4432,7 @@ def _h_dinars_deposit(state, action):
 _ABSORB_POLICIES = ("weakest_first", "armored_first")
 
 
-def _apply_absorption_policy(state, side: Side, action: dict) -> None:
+def _apply_absorption_policy(state: GameState, side: Side, action: dict[str, Any]) -> None:
     """If a combat action carries an 'absorption_policy', set it as the
     acting side's standing policy for this (and subsequent) combats.
     The Storm Attacker is still rule-forced to armored_first (4.5.2)
@@ -4435,7 +4446,7 @@ def _apply_absorption_policy(state, side: Side, action: dict) -> None:
     state.meta.absorption_policy[side] = pol
 
 
-def _h_set_absorption_policy(state, action):
+def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Set a side's Hit-absorption policy (rule 4.4.2 ASSIGN HITS) at
     any time — the owner's standing strategic choice for how its units
     soak Hits: 'weakest_first' (shield strong units) or 'armored_first'
@@ -4451,7 +4462,7 @@ def _h_set_absorption_policy(state, action):
     return {"side": side, "absorption_policy": pol}
 
 
-def _h_place_cathedral_seat(state, action):
+def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C16 Cathedrals (Arts of War ref): Alfonso at a Conquered City may
     place a Cathedral Seat marker if none is there yet. The marker acts
     as a Christian Seat AND is worth +1 Christian VP (5.1); placing it
@@ -4523,7 +4534,8 @@ def _h_place_cathedral_seat(state, action):
             "cathedral_seats": list(state.cathedral_seat_locales)}
 
 
-def _set_neutrality_pending(state, deferred: list, resume_active) -> bool:
+def _set_neutrality_pending(state: GameState, deferred: list[Any],
+                            resume_active: bool) -> bool:
     """T4 (1.4.3 RECOGNITION OF NEUTRALITY): set a pending decision for
     the first side (Christian then Muslim) that has a Lord Besieging a
     now-Neutral Enemy Stronghold, letting it choose remove-Siege vs
@@ -4543,13 +4555,14 @@ def _set_neutrality_pending(state, deferred: list, resume_active) -> bool:
     return False
 
 
-def _maybe_set_neutrality_pending(state, results: dict, resume_active) -> bool:
+def _maybe_set_neutrality_pending(state: GameState, results: dict[str, Any],
+                                  resume_active: bool) -> bool:
     deferred = results.get("deferred_neutrality") or []
     return _set_neutrality_pending(state, deferred, resume_active) if deferred \
         else False
 
 
-def _h_respond_neutrality_choice(state, action):
+def _h_respond_neutrality_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.5/1.4.3: resolve one side's RECOGNITION OF NEUTRALITY choices.
     `choices` maps locale_id -> 'remove'|'add' (default 'remove'). A
     Muslim besieger that 'adds' places Christian Conquered markers (=
@@ -4591,7 +4604,7 @@ def _h_respond_neutrality_choice(state, action):
     return {"applied": applied, "more_pending": next_pending}
 
 
-def _emir_jihad_targets(state) -> list[str]:
+def _emir_jihad_targets(state: GameState) -> list[str]:
     """M9 Emir al-Muslimin: the Jihad-eligible Locales (1.4.4) to which
     Yusuf -- holding the M9 capability and on the map -- is STRICTLY closer
     than every Christian Lord on the map (shortest chain of adjacent
@@ -4623,7 +4636,7 @@ def _emir_jihad_targets(state) -> list[str]:
     return out
 
 
-def _h_cmd_emir_jihad(state, action):
+def _h_cmd_emir_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """M9 Emir al-Muslimin (Arts of War ref M9): Yusuf, if closer than any
     Christian to a Jihad-eligible Locale (1.4.4), may use his ENTIRE
     Command card to add 1 Jihad there."""
@@ -4653,7 +4666,8 @@ def _h_cmd_emir_jihad(state, action):
     return {"jihad_locale": target, "placement": placement,
             "actions_consumed": consumed}
 
-def _has_unbesieged_enemy_lord(state, locale_id: str, side) -> bool:
+def _has_unbesieged_enemy_lord(state: GameState, locale_id: str,
+                               side: Side) -> bool:
     """Any Enemy (other-side) Lord at `locale_id` who is NOT Besieged
     (a Bypassed Lord still counts as Unbesieged). Blocks Cabalgadas
     path/target (Arts of War ref C14/C17 / M24: "not at or past any
@@ -4673,14 +4687,15 @@ def _has_unbesieged_enemy_lord(state, locale_id: str, side) -> bool:
 CABALGADAS_CAPS = ("C14", "C17", "M24")
 
 
-def _cabalgadas_capable(state, lord_id: str) -> bool:
+def _cabalgadas_capable(state: GameState, lord_id: str) -> bool:
     """The Lord holds a Cabalgadas-family long-range-Ravage capability
     (C14/C17 Cabalgadas or M24 Al-Garada)."""
     from almoravid.capabilities import lord_has_capability
     return any(lord_has_capability(state, lord_id, c) for c in CABALGADAS_CAPS)
 
 
-def _cabalgadas_prov_holder(state, lord_id: str, side):
+def _cabalgadas_prov_holder(state: GameState, lord_id: str,
+                            side: Side) -> str | None:
     """Who pays the 1 Provender (1.5.2 Share): the Lord himself if he has
     Provender, else a same-Locale same-side ally with Provender. Returns
     the paying lord_id or None."""
@@ -4695,7 +4710,8 @@ def _cabalgadas_prov_holder(state, lord_id: str, side):
     return None
 
 
-def _cabalgadas_targets(state, lord_id: str, side) -> list[str]:
+def _cabalgadas_targets(state: GameState, lord_id: str,
+                        side: Side) -> list[str]:
     """Valid Cabalgadas targets for the Lord at his Locale: a Locale up to
     two Ways distant whose path's intervening Locale (if any) and target
     both have NO Unbesieged Enemy Lord, and the target is a legal Ravage
@@ -4728,7 +4744,7 @@ def _cabalgadas_targets(state, lord_id: str, side) -> list[str]:
     return sorted(targets)
 
 
-def _h_cmd_cabalgadas(state, action):
+def _h_cmd_cabalgadas(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C14/C17 Cabalgadas long-range Ravage (Arts of War ref): the bearer
     must have or Share (1.5.2) one Provender and use ALL actions on his
     Command card; expend the Provender and Ravage a Locale up to two
@@ -4776,7 +4792,7 @@ def _h_cmd_cabalgadas(state, action):
 # Battle of Sagrajas minigame handlers (Background Book pp.44-47)
 # ---------------------------------------------------------------------------
 
-def _h_sagrajas_attack(state, action):
+def _h_sagrajas_attack(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Christians Attack (historical). Add: two French Crusaders Vassal
     markers (4 Knights total), Jabalinas (C7) + Slingers (C9), and
     Cantador (C8) as a Held Event. Then the Christians are the Attacker."""
@@ -4810,7 +4826,7 @@ def _h_sagrajas_attack(state, action):
     return {"role": "attack", "attacker": "christian"}
 
 
-def _h_sagrajas_defend(state, action):
+def _h_sagrajas_defend(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Christians Defend (Yusuf attacks). Muslims add: Saqalibah (M15) at
     al-Mutamid (+2 Men-at-Arms), Harbah (M3) at a Taifa Lord, Andalusians
     (M10, side-wide Light-Horse Evade), and hold Feigned Retreat (M6)."""
@@ -4850,7 +4866,7 @@ def _h_sagrajas_defend(state, action):
     return {"role": "defend", "attacker": "muslim"}
 
 
-def _h_resolve_battle(state, action):
+def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Resolve the Sagrajas Battle (4.4) once the role is chosen. The
     Attacker's Marshal (Alfonso or Yusuf) is at Front center; whoever wins
     the Battle wins the game (Background Book). Supports an optional
