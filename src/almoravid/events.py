@@ -29,7 +29,7 @@ import math as _math
 from collections.abc import Callable
 from typing import Any
 
-from almoravid.state import GameState, Side
+from almoravid.state import GameState, Lord, Side
 from almoravid.static_data import load_cards
 
 # (state, side, card_id, payload) -> result dict
@@ -58,7 +58,7 @@ class EventNotResolvable(ValueError):
 
 def _is_immediate(card_id: str) -> bool:
     rec = load_cards()["cards"].get(card_id, {})
-    return rec.get("event_persistence") == "immediate"
+    return bool(rec.get("event_persistence") == "immediate")
 
 
 def _no_op_with_note(state: GameState, card_id: str, side: Side, note: str) -> dict[str, Any]:
@@ -134,7 +134,8 @@ def resolve_event(
 
 @register("C1")  # Hills (Christian)
 @register("M1")  # Hills (Muslim)
-def _hills(state, side, card_id, payload):
+def _hills(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Hold-event Hills: Defending side, Slingers x1.5, other Missiles
     x1 (not x1/2). Combat hook in Phase 5; here we just persist it.
     """
@@ -143,7 +144,8 @@ def _hills(state, side, card_id, payload):
 
 @register("C3")
 @register("M3")
-def _swollen_river(state, side, card_id, payload):
+def _swollen_river(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Hold-event Swollen River: affects movement / battle terrain.
     Phase 5 hooks into March / Battle eligibility."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
@@ -151,7 +153,8 @@ def _swollen_river(state, side, card_id, payload):
 
 @register("C4")  # Arid Terrain
 @register("M4")
-def _arid_terrain(state, side, card_id, payload):
+def _arid_terrain(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Hold-event: triggers when enemy Marches (Phase 6h hook in
     _h_cmd_march). Buffered in this_levy_events until that fires."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
@@ -159,7 +162,8 @@ def _arid_terrain(state, side, card_id, payload):
 
 @register("C5")  # Drought
 @register("M5")  # Drought
-def _drought(state, side, card_id, payload):
+def _drought(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Drought: Immediate. The TARGET side (opposite of the side that
     drew) immediately Feeds 2 of their Lords not at Friendly Gardens
     or Seat. Phase 6h: pick deterministically (first two on the map
@@ -180,6 +184,7 @@ def _drought(state, side, card_id, payload):
         if lord.cylinder.kind != "locale":
             continue
         loc_id = lord.cylinder.locale_id
+        assert loc_id is not None
         gardens_ok = has_gardens(state, loc_id)
         seat_ok = loc_id in state.lords[lord.id].seats
         friendly = is_friendly_locale(state, loc_id, target_side)
@@ -200,19 +205,22 @@ def _drought(state, side, card_id, payload):
 
 @register("C7")  # Baggage Parapet
 @register("M7")  # Spear Wall
-def _baggage_or_spear(state, side, card_id, payload):
+def _baggage_or_spear(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Hold-event battle bonuses. Phase 5 combat hook."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 @register("C8")  # Cantador
-def _cantador(state, side, card_id, payload):
+def _cantador(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Hold-event: Knights and Sergeants +1 Hit Round 1 Melee. Phase 5 combat hook."""
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 @register("C9")  # Betrayal of Terms
-def _c9_betrayal_of_terms(state, side, card_id, payload):
+def _c9_betrayal_of_terms(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C9 (Hold): Play upon Surrender to take Spoils as if Sack, OR
     take double and Muslims add 1 Jihad. Phase 6i: parked in
     this_levy_events; consumed by the Surrender hook in _h_cmd_siege.
@@ -230,7 +238,8 @@ def _c9_betrayal_of_terms(state, side, card_id, payload):
 @register("M2")
 @register("C6")  # Surprise — immediate
 @register("M6")  # Feigned Retreat — immediate
-def _battle_immediate_marker(state, side, card_id, payload):
+def _battle_immediate_marker(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Cards whose effect manifests in a specific Battle moment.
     Buffered in this_campaign_events; Phase 5 Battle code will fish
     them out at the right moment."""
@@ -244,7 +253,8 @@ def _battle_immediate_marker(state, side, card_id, payload):
 
 
 @register("M12")  # Taifa Marriage
-def _m12_taifa_marriage(state, side, card_id, payload):
+def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M12 (Hold): shift up to 2 Taifa Lords' cylinder LEFT if on
     Calendar, or Service RIGHT if Lord is on the map. OR one Lord
     uses Lordship +2.
@@ -301,7 +311,8 @@ def _m12_taifa_marriage(state, side, card_id, payload):
 
 
 @register("C10")  # Devaluation (Christian-played, drains Muslim Coin)
-def _c10_devaluation_christian(state, side, card_id, payload):
+def _c10_devaluation_christian(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
     and Lords to 2/3 of the total (rounded up).'
 
@@ -339,18 +350,21 @@ def _c10_devaluation_christian(state, side, card_id, payload):
 
 
 @register("M14")  # Devaluation (Muslim-played, drains Christian Coin)
-def _m14_devaluation_muslim(state, side, card_id, payload):
+def _m14_devaluation_muslim(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M14 Devaluation: 'Each Locale where Christian Lords have Coin,
     they reduce their total there to half (rounded up).'
 
     Phase 6d: per-Locale halving for Christian Coin. Pattern 10: no
     Coin -> no-op.
     """
-    per_locale: dict[str, list] = {}
+    per_locale: dict[str, list[Lord]] = {}
     for lord in state.lords.values():
         if (lord.side == "christian" and lord.cylinder.kind == "locale"
                 and lord.assets.get("coin", 0) > 0):
-            per_locale.setdefault(lord.cylinder.locale_id, []).append(lord)
+            loc_id = lord.cylinder.locale_id
+            assert loc_id is not None
+            per_locale.setdefault(loc_id, []).append(lord)
     if not per_locale:
         return _no_op_with_note(state, card_id, side,
                                 "no Christian Coin at any Locale")
@@ -417,7 +431,8 @@ def unresolved_event_cards() -> list[str]:
 # (battle.py) can consult state.decks.this_levy_events to apply effects.
 
 @register("C13")  # Berenguer Ramon — Christian event
-def _c13_berenguer_ramon(state, side, card_id, payload):
+def _c13_berenguer_ramon(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C13 (Immediate): If Count of Barcelona with Muslims, discard.
     Otherwise a named Christian Lord may pay 1 Asset and Levy this
     card and its units (2 Knights + 2 Men-at-Arms per Capability text).
@@ -462,7 +477,8 @@ def _c13_berenguer_ramon(state, side, card_id, payload):
 
 
 @register("M23")  # Berenguer Ramon — Muslim event (mirror)
-def _m23_berenguer_ramon(state, side, card_id, payload):
+def _m23_berenguer_ramon(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M23: mirror of C13 — if Count of Barcelona with Christians,
     discard no-effect. Otherwise a Muslim Lord gets 2 Knights + 2 MaA
     by paying 1 Asset (coin).
@@ -502,7 +518,8 @@ def _m23_berenguer_ramon(state, side, card_id, payload):
 
 @register("C11")  # Indulgences
 @register("C12")  # Song of Roland
-def _crusader_event(state, side, card_id, payload):
+def _crusader_event(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C11 Indulgences / C12 Song of Roland: Place 1 Crusader marker
     on an Unbesieged Christian Lord with 2 Knights attached (modeled
     by incrementing lord.crusader_markers + adding 2 Knights to forces).
@@ -552,7 +569,8 @@ def _crusader_event(state, side, card_id, payload):
 
 
 @register("C14")  # Pope Gregory
-def _pope_gregory(state, side, card_id, payload):
+def _pope_gregory(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """Pope Gregory: hold-event eligibility on Sancho (Pope Gregory cap).
     Phase 5j: held in this_levy_events; resolver hook for Sancho's
     capability bonus."""
@@ -560,7 +578,8 @@ def _pope_gregory(state, side, card_id, payload):
 
 
 @register("C15")  # Cluniacs
-def _religious_hold(state, side, card_id, payload):
+def _religious_hold(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C15 Cluniacs (Hold): Lord Muster from Calendar, OR Service +1
     right, OR Lordship +2 for this Levy. Phase 6j: parks in
     this_levy_events; consumed by ad-hoc Levy action (TODO)."""
@@ -571,7 +590,8 @@ def _religious_hold(state, side, card_id, payload):
 
 
 @register("C25")  # De Vivar
-def _c25_de_vivar(state, side, card_id, payload):
+def _c25_de_vivar(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C25 (Hold): Play as Christian Call to Arms if Rodrigo al-Sayyid
     on map. Reconcile with Rodrigo for 1 VP to Taifas box.
 
@@ -582,7 +602,8 @@ def _c25_de_vivar(state, side, card_id, payload):
 
 
 @register("C26")  # Freebooter
-def _c26_freebooter(state, side, card_id, payload):
+def _c26_freebooter(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C26 (Immediate): Disband Rodrigo al-Sayyid as if at Service
     Limit (3.3.2). Optional Reconcile clause deferred.
 
@@ -609,7 +630,8 @@ def _c26_freebooter(state, side, card_id, payload):
 
 
 @register("M13")  # Severed Heads
-def _m13_severed_heads(state, side, card_id, payload):
+def _m13_severed_heads(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M13 (Hold): multi-trigger event.
       - Play as Ravaging to shift 1 Taifa Lord's cylinder or Service
         2 boxes OR add 2 Jihad.
@@ -628,7 +650,8 @@ def _m13_severed_heads(state, side, card_id, payload):
 
 
 @register("M15")  # Parias Revolt
-def _m15_parias_revolt(state, side, card_id, payload):
+def _m15_parias_revolt(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M15 Parias Revolt: 'Hold: Play to add 1 Jihad in Parias Taifa,
     OR 2 Jihad at Jihad there, OR 3 Jihad if Yusuf or Sir there.'
 
@@ -669,13 +692,15 @@ _M17_LORDS = ("pedro_ansurez", "garcia_ordonez", "alvar_fanez",
               "rodrigo_campeador")
 
 
-def _shift_one_service_left(state, lord_id: str, boxes: int = 1) -> int:
+def _shift_one_service_left(state: GameState, lord_id: str,
+                            boxes: int = 1) -> int:
     from almoravid.actions import _shift_service_left
     return _shift_service_left(state, lord_id, boxes=boxes)
 
 
 @register("M16")  # Galician Revolt
-def _m16_galician_revolt(state, side, card_id, payload):
+def _m16_galician_revolt(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M16 Galician Revolt: 'Shift Service of Ansurez, Ordonez, OR
     Fanez by 1 box left. This Levy, no Muster of or by Alfonso.'
 
@@ -711,7 +736,8 @@ def _m16_galician_revolt(state, side, card_id, payload):
 
 
 @register("M17")  # Leon y Castilla
-def _m17_leon_y_castilla(state, side, card_id, payload):
+def _m17_leon_y_castilla(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M17 Leon y Castilla: 'Shift Service of Ansurez, Ordonez, Fanez,
     OR Rodrigo Campeador 1 box left. This Levy, no Muster of or by them.'
 
@@ -831,11 +857,11 @@ def _first_jihad_eligible_locale(
 def _add_jihad(
     state: GameState,
     count: int,
-    payload: dict,
+    payload: dict[str, Any],
     *,
     statuses: tuple[str, ...] = ("parias", "reconquista"),
     same_taifa_as: tuple[str, ...] | None = None,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Distribute `count` Jihad markers across Table-4-eligible Locales.
 
     If payload['jihad_targets'] is given (list of locale_ids, possibly
@@ -880,7 +906,8 @@ def _add_jihad(
 
 
 @register("M8")  # Ahmad Ibn Rumayla
-def _m8_ahmad_ibn_rumayla(state, side, card_id, payload):
+def _m8_ahmad_ibn_rumayla(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M8 (Hold): Play in Taifa with Yusuf, Sir, or al-Mutamid to
     remove Conquered from empty Town OR add 2 Jihad.
 
@@ -915,13 +942,14 @@ def _m8_ahmad_ibn_rumayla(state, side, card_id, payload):
             "jihad_added": 2, "placement": placement}
 
 
-def _m11_jihad_bonus_active(state) -> bool:
+def _m11_jihad_bonus_active(state: GameState) -> bool:
     """M11 3-Jihad bonus: Yusuf or Sir in any Reconquista/Parias Taifa
     or in a Kingdom (Leon/Aragon)."""
     for lid in ("yusuf", "sir"):
         lord = state.lords.get(lid)
         if lord is None or lord.cylinder.kind != "locale":
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales.get(lord.cylinder.locale_id)
         if loc is None:
             continue
@@ -935,7 +963,8 @@ def _m11_jihad_bonus_active(state) -> bool:
 
 
 @register("M11")  # Al-Qadir balks at payment
-def _m11_al_qadir(state, side, card_id, payload):
+def _m11_al_qadir(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M11 "Al-Qadir balks at payment" is a HOLD event (the card text
     begins "Hold:"). It is NOT applied when drawn; it is held and the
     Muslim plays it at a moment of his choosing to add Jihad (base 1, or
@@ -949,7 +978,8 @@ def _m11_al_qadir(state, side, card_id, payload):
 
 
 @register("M18")  # Refugees
-def _m18_refugees(state, side, card_id, payload):
+def _m18_refugees(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M18 (Hold played in Muster): each Unbesieged Taifa Lord
     restores Lost Unarmored units (Light Horse + Militia) to their
     starting Forces + Vassal Mustered units, AND adds 1 Transport
@@ -958,7 +988,7 @@ def _m18_refugees(state, side, card_id, payload):
     from almoravid.effective import is_besieged
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
-    restored: list[dict] = []
+    restored: list[dict[str, Any]] = []
     for lid, lord in state.lords.items():
         if not lord.is_taifa or lord.side != "muslim":
             continue
@@ -993,7 +1023,8 @@ def _m18_refugees(state, side, card_id, payload):
 
 
 @register("M22")  # Massacre
-def _m22_massacre(state, side, card_id, payload):
+def _m22_massacre(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M22: If Eudes or Crusaders on map, Muster a Taifa Lord OR add 3
     Jihad. If not, add 1 Jihad.
 
@@ -1047,7 +1078,8 @@ def _m22_massacre(state, side, card_id, payload):
 # ---------------------------------------------------------------------------
 
 
-def _yusuf_or_sir_in_status(state, statuses: tuple[str, ...]) -> bool:
+def _yusuf_or_sir_in_status(state: GameState,
+                            statuses: tuple[str, ...]) -> bool:
     """Check whether Yusuf or Sir is at a locale whose Taifa is in
     `statuses`."""
     for lid in ("yusuf", "sir"):
@@ -1060,12 +1092,13 @@ def _yusuf_or_sir_in_status(state, statuses: tuple[str, ...]) -> bool:
     return False
 
 
-def _yusuf_or_sir_in_kingdom(state) -> bool:
+def _yusuf_or_sir_in_kingdom(state: GameState) -> bool:
     """Yusuf or Sir at a Christian Kingdom locale."""
     for lid in ("yusuf", "sir"):
         lord = state.lords.get(lid)
         if lord is None or lord.cylinder.kind != "locale":
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales.get(lord.cylinder.locale_id)
         if loc and loc.territory in ("leon", "aragon"):
             return True
@@ -1073,7 +1106,8 @@ def _yusuf_or_sir_in_kingdom(state) -> bool:
 
 
 @register("M9")  # Maliki Islam
-def _m9_maliki_islam(state, side, card_id, payload):
+def _m9_maliki_islam(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M9 (Hold): +2 Jihad if Yusuf/Sir in Reconquista Taifa, OR
     +4 Jihad if in a Kingdom."""
     add = 0
@@ -1094,7 +1128,8 @@ def _m9_maliki_islam(state, side, card_id, payload):
 
 
 @register("M10")  # Fatwa
-def _m10_fatwa(state, side, card_id, payload):
+def _m10_fatwa(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M10 (Hold): +1 Jihad OR +1 per (Yusuf/Sir in Kingdom, Eudes on
     map, each Crusader Vassal Mustered on a Christian Lord)."""
     bonus = 0
@@ -1117,7 +1152,8 @@ def _m10_fatwa(state, side, card_id, payload):
 
 
 @register("M20")  # Mudejares
-def _m20_mudejares(state, side, card_id, payload):
+def _m20_mudejares(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M20 (Hold): +1 Jihad in Reconquista Taifa, +2 at Jihad there,
     +3 if Yusuf/Sir there."""
     eligible = _jihad_eligible_locales(state, statuses=("reconquista",))
@@ -1143,7 +1179,8 @@ def _m20_mudejares(state, side, card_id, payload):
 
 
 @register("M21")  # Al-Sumaisir
-def _m21_al_sumaisir(state, side, card_id, payload):
+def _m21_al_sumaisir(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M21 (Hold): Muster a Taifa Lord from Calendar OR add 2 Jihad
     in Parias Taifa — 4 Jihad if Yusuf/Sir there.
 
@@ -1195,7 +1232,8 @@ def _m21_al_sumaisir(state, side, card_id, payload):
 
 
 @register("C16")  # Bernard de Sedirac
-def _c16_bernard_de_sedirac(state, side, card_id, payload):
+def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C16: Shift a Lord's Service 1 box right OR Muster a Lord from
     Calendar now. (Cathedrals capability levy is a separate Capability
     half handled at Muster.)
@@ -1251,7 +1289,8 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
 
 
 @register("C17")  # Genoa & Pisa
-def _c17_genoa_pisa(state, side, card_id, payload):
+def _c17_genoa_pisa(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C17 (Immediate): Place Ravaged at 2 Unravaged Enemy Ports where
     no Muslim Lords. Total +1 Christian VP per card text Tips."""
     from almoravid.effective import is_friendly_locale
@@ -1284,14 +1323,15 @@ def _c17_genoa_pisa(state, side, card_id, payload):
 
 
 @register("C18")  # Runaway Slaves
-def _c18_runaway_slaves(state, side, card_id, payload):
+def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C18 (Hold played in Muster): Christian Lords restore Lost Foot
     units + add Transport. Mirror of M18 Refugees for the Christian
     Foot triumvirate (men_at_arms, militia, serfs)."""
     from almoravid.effective import is_besieged
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
-    restored: list[dict] = []
+    restored: list[dict[str, Any]] = []
     for lid, lord in state.lords.items():
         if lord.side != "christian":
             continue
@@ -1325,7 +1365,8 @@ def _c18_runaway_slaves(state, side, card_id, payload):
 
 
 @register("C19")  # Fitna
-def _c19_fitna(state, side, card_id, payload):
+def _c19_fitna(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C19 (Immediate): Choose 2 Taifa Lords; Service -1 left each;
     this Levy, no Muster of/by them."""
     from almoravid.actions import _shift_service_left
@@ -1348,7 +1389,8 @@ def _c19_fitna(state, side, card_id, payload):
 
 
 @register("C20")  # Al-Qadir
-def _c20_al_qadir(state, side, card_id, payload):
+def _c20_al_qadir(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C20 (Hold): Remove 2 Jihad from a Reconquista or Parias Taifa
     free of Muslim Lords."""
     eligible = []
@@ -1383,7 +1425,8 @@ _C22_LORDS = ("al_mutawakkil", "abd_allah", "yusuf", "sir")
 
 
 @register("C22")  # Berbers
-def _c22_berbers(state, side, card_id, payload):
+def _c22_berbers(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C22: Shift Service of al-Mutawakkil/Abd Allah/Yusuf/Sir 1 box;
     this Levy, no Muster of/by any of them."""
     from almoravid.actions import _shift_service_left
@@ -1412,7 +1455,8 @@ _C23_LORDS = ("abu_bakr", "al_mustain")
 
 
 @register("C23")  # Illness of the Emir
-def _c23_illness(state, side, card_id, payload):
+def _c23_illness(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C23: On Calendar, shift cylinder OR Service of Abu Bakr OR
     al-Mustain by 1 box; this Levy, no Muster of/by him.
 
@@ -1432,8 +1476,8 @@ def _c23_illness(state, side, card_id, payload):
     if target is None:
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Lord on Calendar")
-    result: dict = {"card_id": card_id, "side": side, "target": target,
-                    "mode": mode}
+    result: dict[str, Any] = {"card_id": card_id, "side": side,
+                              "target": target, "mode": mode}
     if mode == "cylinder":
         lord = state.lords[target]
         if lord.cylinder.kind == "calendar":
@@ -1455,7 +1499,8 @@ def _c23_illness(state, side, card_id, payload):
 
 
 @register("C24")  # Abu Bakr ibn Umar
-def _c24_abu_bakr(state, side, card_id, payload):
+def _c24_abu_bakr(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C24: On Calendar, shift Service of Yusuf AND Sir each 1 box
     left; this Levy, no Muster of/by either."""
     from almoravid.actions import _shift_service_left
@@ -1478,7 +1523,8 @@ def _c24_abu_bakr(state, side, card_id, payload):
 
 
 @register("M24")  # Al-Maghawir
-def _m24_al_maghawir(state, side, card_id, payload):
+def _m24_al_maghawir(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M24 (Immediate): Unless C19 Caballeria Villana, place Ravaged at
     2 Unravaged Enemy Locales adjacent to Friendly Locales."""
     from almoravid.effective import is_friendly_locale
@@ -1519,7 +1565,8 @@ def _m24_al_maghawir(state, side, card_id, payload):
 # 6j (would require a payload from the holder at the moment of the
 # Surrender roll). Stays as immediate-discard-no-op for now.
 @register("C21")  # Mozarabes
-def _c21_mozarabes(state, side, card_id, payload):
+def _c21_mozarabes(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """C21 (Hold): Play for a Surrender roll in a Reconquista Taifa to
     succeed automatically. Phase 6j: parks in this_levy_events for
     consumption by a future cmd_siege Mozarabes hook."""
@@ -1528,7 +1575,8 @@ def _c21_mozarabes(state, side, card_id, payload):
 
 
 @register("M19")  # African Fleet
-def _m19_african_fleet(state, side, card_id, payload):
+def _m19_african_fleet(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
     """M19 (Hold): Play for a Lord to use his Command card to March
     Port-to-Port where no Christian Lord at destination.
 

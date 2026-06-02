@@ -36,7 +36,7 @@ FUTURE_PROJECTS_LESSONS.md:
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -468,7 +468,7 @@ class PendingDecision(StrictModel):
 
     kind: str
     waiting_on: Side
-    payload: dict[str, object] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class HistoryEntry(StrictModel):
