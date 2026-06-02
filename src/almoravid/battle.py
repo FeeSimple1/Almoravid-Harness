@@ -2258,6 +2258,66 @@ def _relief_declare_concede(rs: _ReliefState, *, atk_concedes: bool,
                 ds.conceded = True
 
 
+def _relief_to_snapshot(rs: _ReliefState) -> dict[str, Any]:
+    """JSON-able snapshot of a Relief-Sally state for suspend/resume."""
+    return {
+        "marchers": battle_side_to_snapshot(rs.marchers),
+        "sallyers": battle_side_to_snapshot(rs.sallyers),
+        "def_front": (battle_side_to_snapshot(rs.def_front)
+                      if rs.def_front is not None else None),
+        "def_rear": (battle_side_to_snapshot(rs.def_rear)
+                     if (rs.def_rear is not None and not rs.shared)
+                     else None),
+        "shared": rs.shared,
+        "result_attacker": battle_side_to_snapshot(rs.result.attacker),
+        "result_defender": battle_side_to_snapshot(rs.result.defender),
+        "result_notes": list(rs.result.notes),
+        "rounds_done": len(rs.result.rounds),
+        "lf": rs.lf,
+        "lr": rs.lr,
+        "excess_ids": list(rs.excess_ids),
+        "defender_ids": list(rs.defender_ids),
+        "n_front": rs.n_front,
+        "walls": list(rs.walls) if rs.walls else None,
+        "active_side": rs.active_side,
+        "other": rs.other,
+        "max_rounds": rs.max_rounds,
+        "locale_id": rs.locale_id,
+    }
+
+
+def _relief_from_snapshot(state: GameState,
+                          snap: dict[str, Any]) -> _ReliefState:
+    marchers = battle_side_from_snapshot(snap["marchers"])
+    sallyers = battle_side_from_snapshot(snap["sallyers"])
+    def_front = (battle_side_from_snapshot(snap["def_front"])
+                 if snap["def_front"] is not None else None)
+    shared = snap["shared"]
+    if shared:
+        def_rear: BattleSide | None = def_front
+    else:
+        def_rear = (battle_side_from_snapshot(snap["def_rear"])
+                    if snap["def_rear"] is not None else None)
+    result = BattleResult(
+        engagement="battle",
+        attacker=battle_side_from_snapshot(snap["result_attacker"]),
+        defender=battle_side_from_snapshot(snap["result_defender"]))
+    result.notes = list(snap["result_notes"])
+    result.rounds = [BattleRound(index=k)
+                     for k in range(1, snap["rounds_done"] + 1)]
+    wr = snap["walls"]
+    walls = (int(wr[0]), int(wr[1])) if wr else None
+    return _ReliefState(
+        marchers=marchers, sallyers=sallyers, def_front=def_front,
+        def_rear=def_rear, shared=shared, result=result,
+        lf=dict(snap["lf"]), lr=dict(snap["lr"]),
+        excess_ids=list(snap["excess_ids"]),
+        defender_ids=list(snap["defender_ids"]),
+        n_front=snap["n_front"], walls=walls,
+        active_side=snap["active_side"], other=snap["other"],
+        max_rounds=snap["max_rounds"], locale_id=snap["locale_id"])
+
+
 def resolve_relief_sally(
     state: GameState,
     marcher_ids: list[str],

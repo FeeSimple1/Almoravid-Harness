@@ -85,16 +85,20 @@ share `_battle_one_round` and a single per-engagement aftermath, and
 interactive-no-concede is verified byte-identical (same RNG, same result)
 to the synchronous resolution.
 
-**Scope:** open-field Battle (`cmd_battle`) and besieged-Lord Sally
-(`cmd_sally`, which resolves as a Battle) support interactive reactive
-concede now. Storm (`resolve_storm`) and Relief Sally
-(`resolve_relief_sally`) carry per-Lord Front/Reserve lane state across
-Rounds (closures over `a_lord_forces` / `d_front` / lane objects), so a
-re-entrant rewrite of those two is a substantially larger change; they
-currently retain the DECISION-001 pre-declared concede (Storm correctly
-Attacker-only, 4.5.2). The harness surfaces the per-Round choice in
-legal_moves; self-play never opts into interactive mode.
+**Scope:** ALL four Battle-family resolvers now support interactive
+reactive concede, each via its own per-Round pending decision:
+- open-field Battle (`cmd_battle`) and besieged-Lord Sally (`cmd_sally`)
+  -> `battle_concede` (either side, from Round 1);
+- Storm (`cmd_storm`) -> `storm_concede` (S10 Attacker-only, Round 2+);
+- Relief Sally (`respond_stand_battle`) -> `relief_concede` (either side,
+  from Round 1).
+The per-Lord lane state of Storm (`_storm_setup`/`_storm_run_round`/
+`_storm_finalize`) and Relief Sally (`_ReliefState` with lane-name-keyed
+Forces/Routed) was refactored into serializable contexts shared by the
+synchronous and interactive paths, so the two cannot diverge; interactive-
+no-concede is verified result-identical to synchronous across seeds. The
+pre-declared `*_concede_round` arguments (DECISION-001) remain on the
+synchronous path. The harness surfaces each per-Round choice in legal_moves;
+self-play never opts into interactive mode.
 
-**Revisit:** when `resolve_storm` / `resolve_relief_sally` are refactored to
-thread their per-Lord lane state through a serializable context (which would
-let them adopt the same round-stepped interactive concede).
+**Revisit:** never (full reactive coverage achieved).

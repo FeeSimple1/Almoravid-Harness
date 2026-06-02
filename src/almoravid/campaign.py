@@ -3977,6 +3977,112 @@ def _h_respond_bypass(state: GameState, action: dict[str, Any]) -> dict[str, Any
             "actions_remaining": state.meta.actions_remaining}
 
 
+def _finish_relief_sally(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    result: Any,
+    atk: Any,
+    dfd: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Relief-Sally aftermath + the shared stand-battle tail (besiege/bypass
+    or restore control, end card). Used by the synchronous and interactive
+    relief-sally paths."""
+    from almoravid.battle import apply_relief_sally_aftermath
+    locale_id: str = pl["locale_id"]
+    active_side: Side = pl["active_side"]
+    side: Side = pl["side"]
+    retreat_summary = apply_relief_sally_aftermath(
+        state, result, locale_id=locale_id, besieger_side=pl["other"],
+        approach_from_locale=pl.get("from_locale_id"),
+        approach_way_type=pl.get("via_way_type"))
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    if not _set_besiege_or_bypass_pending(
+            state, locale_id, active_side, pl.get("active_lord_id")):
+        _clear_approach_pending(state, active_side)
+    _record(state, action,
+            f"{side} stands; Battle at {locale_id}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}")
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
+    }
+
+
+def _begin_interactive_relief(
+    state: GameState,
+    action: dict[str, Any],
+    marcher_ids: list[str],
+    sallyer_ids: list[str],
+    defender_lord_ids: list[str],
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Start a reactive Relief Sally: build the lane state and pause on a
+    relief_concede decision before Round 1 (either side may Concede)."""
+    from almoravid.battle import _relief_setup, _relief_to_snapshot
+    rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_lord_ids,
+                       besieger_side=pl["other"], locale_id=pl["locale_id"],
+                       max_rounds=6)
+    pl = dict(pl)
+    pl["rs"] = _relief_to_snapshot(rs)
+    pl["round_idx"] = 1
+    pl["max_rounds"] = 6
+    state.pending = PendingDecision(
+        kind="relief_concede", waiting_on=pl["active_side"], payload=pl)
+    state.meta.active_player = pl["active_side"]
+    return {"relief_sally": "awaiting_concede", "round": 1}
+
+
+def _h_relief_concede(state: GameState,
+                      action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one Relief-Sally Round after its start-of-Round Concede
+    declaration (4.4.2; either side, from Round 1). Runs the Round, then
+    finishes (Concede / Rout / Round cap) or re-pends for the next Round."""
+    from almoravid.battle import (
+        _relief_declare_concede,
+        _relief_finalize,
+        _relief_from_snapshot,
+        _relief_over,
+        _relief_run_round,
+        _relief_to_snapshot,
+    )
+    side = _require_side(action)
+    pd = _require_pending(state, "relief_concede", side)
+    pl = pd.payload
+    rs = _relief_from_snapshot(state, pl["rs"])
+    rnd_i: int = pl["round_idx"]
+    atk_concedes = bool(action.get("attacker_concede"))
+    dfd_concedes = bool(action.get("defender_concede"))
+    _relief_declare_concede(rs, atk_concedes=atk_concedes,
+                            dfd_concedes=dfd_concedes)
+    rs.result.rounds.append(_relief_run_round(state, rs, rnd_i))
+    ended = (atk_concedes or dfd_concedes
+             or _relief_over(state, rs)
+             or rnd_i >= pl["max_rounds"])
+    if not ended:
+        pl = dict(pl)
+        pl["rs"] = _relief_to_snapshot(rs)
+        pl["round_idx"] = rnd_i + 1
+        state.pending = PendingDecision(
+            kind="relief_concede", waiting_on=side, payload=pl)
+        return {"relief_sally": "in_progress", "round_resolved": rnd_i,
+                "rounds_done": len(rs.result.rounds)}
+    if atk_concedes or dfd_concedes:
+        rs.result.notes.append(
+            f"Round {rnd_i} ended with Concede; Relief Sally ends")
+    _relief_finalize(state, rs)
+    state.pending = None
+    return _finish_relief_sally(state, action, result=rs.result,
+                                atk=rs.result.attacker,
+                                dfd=rs.result.defender, pl=pl)
+
+
 def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
     on both sides at the Approach Locale. Battle ends the active side's
@@ -4035,6 +4141,20 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
+        relief_pl: dict[str, Any] = {
+            "side": side,
+            "locale_id": locale_id,
+            "active_side": active_side,
+            "other": other,
+            "from_locale_id": payload.get("from_locale_id"),
+            "via_way_type": payload.get("via_way_type"),
+            "active_lord_id": payload.get("active_lord_id"),
+        }
+        # Reactive (round-stepped) Concede for the Relief Sally (opt-in).
+        if bool(action.get("interactive_concede")):
+            return _begin_interactive_relief(
+                state, action, marcher_ids, sallyer_ids,
+                defender_lord_ids, relief_pl)
         from almoravid.battle import (
             apply_relief_sally_aftermath,
             resolve_relief_sally,
@@ -5390,6 +5510,7 @@ CAMPAIGN_HANDLERS = {
     "respond_bypass": _h_respond_bypass,
     "battle_concede": _h_battle_concede,
     "storm_concede": _h_storm_concede,
+    "relief_concede": _h_relief_concede,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
     "play_al_qadir": _h_play_al_qadir,
