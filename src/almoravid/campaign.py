@@ -2795,6 +2795,193 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _finish_sally(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    atk: Any,
+    dfd: Any,
+    result: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Post-Sally aftermath (4.5.3), shared by the synchronous cmd_sally
+    path and the interactive battle_concede driver."""
+    from almoravid.battle import apply_sally_aftermath, commit_forces_after_battle
+    side: Side = pl["side"]
+    here: str = pl["here"]
+    commit_forces_after_battle(state, atk)
+    if len(dfd.lord_ids) == 1:
+        commit_forces_after_battle(state, dfd)
+    apply_sally_aftermath(state, result, here)
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {pl['lord_id']} Sallies at {here}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}; "
+            f"card spent ({consumed} actions)")
+    return {"winner": result.winner, "rounds": len(result.rounds),
+            "actions_consumed": consumed}
+
+
+def _finish_open_field_battle(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    atk: Any,
+    dfd: Any,
+    result: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Post-Battle aftermath for an open-field Battle (4.4.3-.5), shared by
+    the synchronous `cmd_battle` path and the interactive (round-stepped)
+    battle_concede driver so the two cannot diverge."""
+    from almoravid.battle import (
+        apply_aftermath,
+        apply_battle_losses,
+        apply_retreat_aftermath,
+        commit_forces_after_battle,
+    )
+    side: Side = pl["side"]
+    here: str = pl["here"]
+    commit_forces_after_battle(state, atk)
+    commit_forces_after_battle(state, dfd)
+    # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
+    retreat_summary = apply_retreat_aftermath(state, result)
+    apply_battle_losses(state, result, retreat_summary)
+    apply_aftermath(state, result)
+    # Battle ends the card (rule 4.4.5).
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    # C1b (4.3.5): force Besiege-or-Bypass if the loser Withdrew inside.
+    bb = _set_besiege_or_bypass_pending(state, here, side,
+                                        pl.get("active_lord_id"))
+    _record(state, action,
+            f"{side} {pl['our_at_here']} Battles {pl['enemy_lord_ids']} at "
+            f"{here}: winner={result.winner}, rounds={len(result.rounds)}; "
+            f"card spent ({consumed} actions)"
+            + ("; Besiege-or-Bypass pending" if bb else ""))
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
+    }
+
+
+def _begin_interactive_battle(
+    state: GameState,
+    action: dict[str, Any],
+    atk: Any,
+    dfd: Any,
+    pl: dict[str, Any],
+    *,
+    defender_walls_range: tuple[int, int] | None = None,
+    max_rounds: int = 6,
+) -> dict[str, Any]:
+    """Start a reactive (round-stepped) Battle: do the once-per-Battle
+    start consumption, snapshot both sides into a `battle_concede` pending
+    decision, and pause for the Round-1 Concede declaration (4.4.2)."""
+    from almoravid.battle import (
+        BattleResult,
+        _consume_camp_attack,
+        battle_side_to_snapshot,
+        init_m7_cap,
+    )
+    init_m7_cap(state, atk)
+    init_m7_cap(state, dfd)
+    _consume_camp_attack(
+        state, atk, dfd,
+        BattleResult(engagement=pl["engagement_label"], attacker=atk,
+                     defender=dfd))
+    pl = dict(pl)
+    pl["round_idx"] = 1
+    pl["max_rounds"] = max_rounds
+    pl["rounds_done"] = 0
+    pl["attacker"] = battle_side_to_snapshot(atk)
+    pl["defender"] = battle_side_to_snapshot(dfd)
+    pl["defender_walls_range"] = (list(defender_walls_range)
+                                  if defender_walls_range else None)
+    state.pending = PendingDecision(
+        kind="battle_concede", waiting_on=pl["side"], payload=pl)
+    state.meta.active_player = pl["side"]
+    return {"battle": "awaiting_concede", "round": 1,
+            "engagement": pl["engagement_label"]}
+
+
+def _h_battle_concede(state: GameState,
+                      action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one Round of a reactive Battle after its start-of-Round
+    Concede declaration (rule 4.4.2). The response carries this Round's
+    `attacker_concede` / `defender_concede` booleans (Attacker then
+    Defender). Runs the Round; if a side Conceded, the Battle is over by
+    Rout, or the Round cap is hit, finishes via the shared aftermath;
+    otherwise re-pends for the next Round's declaration."""
+    from almoravid.battle import (
+        BattleResult,
+        BattleRound,
+        _battle_one_round,
+        _battle_over,
+        _side_all_lords_routed,
+        battle_side_from_snapshot,
+        battle_side_to_snapshot,
+    )
+    side = _require_side(action)
+    pd = _require_pending(state, "battle_concede", side)
+    pl = pd.payload
+    atk = battle_side_from_snapshot(pl["attacker"])
+    dfd = battle_side_from_snapshot(pl["defender"])
+    round_idx: int = pl["round_idx"]
+    dwr_raw = pl.get("defender_walls_range")
+    dwr: tuple[int, int] | None = (
+        (int(dwr_raw[0]), int(dwr_raw[1])) if dwr_raw else None)
+    # Apply this Round's Concede declarations (Attacker then Defender).
+    if bool(action.get("attacker_concede")):
+        atk.conceded = True
+    if bool(action.get("defender_concede")):
+        dfd.conceded = True
+    _battle_one_round(state, atk, dfd, round_idx, defender_walls_range=dwr)
+    rounds_done: int = pl["rounds_done"] + 1
+    ended = (atk.conceded or dfd.conceded
+             or _battle_over(atk, dfd)
+             or round_idx >= pl["max_rounds"])
+    if not ended:
+        atk.conceded = False
+        dfd.conceded = False
+        pl = dict(pl)
+        pl["attacker"] = battle_side_to_snapshot(atk)
+        pl["defender"] = battle_side_to_snapshot(dfd)
+        pl["round_idx"] = round_idx + 1
+        pl["rounds_done"] = rounds_done
+        state.pending = PendingDecision(
+            kind="battle_concede", waiting_on=side, payload=pl)
+        return {"battle": "in_progress", "round_resolved": round_idx,
+                "rounds_done": rounds_done}
+    # Battle ended this Round -> winner + aftermath.
+    result = BattleResult(engagement=pl["engagement_label"],
+                          attacker=atk, defender=dfd)
+    result.rounds = [BattleRound(index=i) for i in range(1, rounds_done + 1)]
+    if atk.conceded and not dfd.conceded:
+        result.winner = dfd.side
+    elif dfd.conceded and not atk.conceded:
+        result.winner = atk.side
+    elif (not _side_all_lords_routed(atk)
+          and _side_all_lords_routed(dfd)):
+        result.winner = atk.side
+    elif (not _side_all_lords_routed(dfd)
+          and _side_all_lords_routed(atk)):
+        result.winner = dfd.side
+    else:
+        result.winner = None
+    state.pending = None
+    if pl.get("finish") == "sally":
+        return _finish_sally(state, action, atk=atk, dfd=dfd,
+                             result=result, pl=pl)
+    return _finish_open_field_battle(state, action, atk=atk, dfd=dfd,
+                                     result=result, pl=pl)
+
+
 def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.4 Battle: end-of-card action.
 
@@ -2808,9 +2995,7 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         _front_lord_count,
-        apply_aftermath,
         battleside_for_lords,
-        commit_forces_after_battle,
         resolve_battle,
     )
     from almoravid.effective import is_besieged
@@ -2866,44 +3051,26 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # at the Attacker's populated Front-Lord count.
     dfd = battleside_for_lords(state, enemy_lord_ids, other, "defender",
                                front_limit=_front_lord_count(atk))
+    pl: dict[str, Any] = {
+        "engagement_label": "battle",
+        "side": side,
+        "here": here,
+        "our_at_here": our_at_here,
+        "enemy_lord_ids": enemy_lord_ids,
+        "active_lord_id": state.meta.active_lord_id,
+    }
+    # Reactive (round-stepped) Concede: pause for a per-Round Concede
+    # declaration (4.4.2). Opt-in so the synchronous default is unchanged.
+    if bool(action.get("interactive_concede")):
+        return _begin_interactive_battle(state, action, atk, dfd, pl)
     result = resolve_battle(
         state, atk, dfd,
         attacker_concede_round=_concede_round_arg(
             action, "attacker_concede_round"),
         defender_concede_round=_concede_round_arg(
             action, "defender_concede_round"))
-    commit_forces_after_battle(state, atk)
-    commit_forces_after_battle(state, dfd)
-    # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
-    from almoravid.battle import (
-        apply_battle_losses,
-        apply_retreat_aftermath,
-    )
-    retreat_summary = apply_retreat_aftermath(state, result)
-    apply_battle_losses(state, result, retreat_summary)
-    apply_aftermath(state, result)
-
-    # Battle ends the card (rule 4.4.5).
-    consumed = state.meta.actions_remaining
-    state.meta.actions_remaining = 0
-    # C1b (4.3.5): if the losing Enemy Withdrew into the Stronghold here
-    # and our (winning) Lord(s) are outside it Unbesieged/Unbypassed, we
-    # must Besiege or Bypass before Feed/Pay/Disband.
-    bb = _set_besiege_or_bypass_pending(state, here, side,
-                                        state.meta.active_lord_id)
-    _record(state, action,
-            f"{side} {our_at_here} Battles {enemy_lord_ids} at {here}: "
-            f"winner={result.winner}, rounds={len(result.rounds)}; "
-            f"card spent ({consumed} actions)"
-            + ("; Besiege-or-Bypass pending" if bb else ""))
-    return {
-        "winner": result.winner,
-        "rounds": len(result.rounds),
-        "attacker_routed": dict(atk.routed_units),
-        "defender_routed": dict(dfd.routed_units),
-        "actions_consumed": consumed,
-        "retreat_summary": retreat_summary,
-    }
+    return _finish_open_field_battle(state, action, atk=atk, dfd=dfd,
+                                     result=result, pl=pl)
 
 
 
@@ -3125,9 +3292,7 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         BattleSide,
-        apply_sally_aftermath,
         battleside_for_lord,
-        commit_forces_after_battle,
         resolve_sally,
     )
     from almoravid.effective import is_besieged
@@ -3178,24 +3343,28 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         forces=dfd_forces,
         capabilities_in_play=dfd_caps,
     )
+    pl: dict[str, Any] = {
+        "engagement_label": "sally",
+        "finish": "sally",
+        "side": side,
+        "here": here,
+        "lord_id": lord_id,
+    }
+    if bool(action.get("interactive_concede")):
+        loc = state.locales[here]
+        siege = (loc.siege_yellow if other == "christian"
+                 else loc.siege_green)
+        walls = (1, siege) if siege > 0 else None
+        return _begin_interactive_battle(state, action, atk, dfd, pl,
+                                         defender_walls_range=walls)
     result = resolve_sally(
         state, atk, dfd,
         attacker_concede_round=_concede_round_arg(
             action, "attacker_concede_round"),
         defender_concede_round=_concede_round_arg(
             action, "defender_concede_round"))
-    commit_forces_after_battle(state, atk)
-    if len(dfd.lord_ids) == 1:
-        commit_forces_after_battle(state, dfd)
-    apply_sally_aftermath(state, result, here)
-
-    consumed = state.meta.actions_remaining
-    state.meta.actions_remaining = 0
-    _record(state, action,
-            f"{side} {lord_id} Sallies at {here}: winner={result.winner}, "
-            f"rounds={len(result.rounds)}; card spent ({consumed} actions)")
-    return {"winner": result.winner, "rounds": len(result.rounds),
-            "actions_consumed": consumed}
+    return _finish_sally(state, action, atk=atk, dfd=dfd, result=result,
+                         pl=pl)
 
 
 
@@ -5077,6 +5246,7 @@ CAMPAIGN_HANDLERS = {
     "respond_stand_battle": _h_respond_stand_battle,
     "respond_besiege": _h_respond_besiege,
     "respond_bypass": _h_respond_bypass,
+    "battle_concede": _h_battle_concede,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
     "play_al_qadir": _h_play_al_qadir,

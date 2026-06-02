@@ -228,3 +228,160 @@ def test_relief_sally_no_concede_by_default() -> None:
         besieger_side="muslim", locale_id="sahagun")
     assert not result.attacker.conceded and not result.defender.conceded
     assert result.winner == "christian"
+
+
+# ---- Interactive (reactive, round-stepped) Concede ------------------------
+
+def _drive_interactive(s, *, concede_at=None, conceder="defender"):
+    """Drive an interactive Battle to completion. `concede_at` = the Round
+    at which `conceder` declares Concede (reactively, after seeing prior
+    Rounds); None = never concede. Returns the final result dict."""
+    from almoravid.actions import apply_action
+    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+                         "interactive_concede": True})
+    assert r["battle"] == "awaiting_concede"
+    while s.pending is not None and s.pending.kind == "battle_concede":
+        cur = s.pending.payload["round_idx"]
+        act = {"type": "battle_concede", "side": "christian"}
+        if concede_at is not None and cur == concede_at:
+            act[f"{conceder}_concede"] = True
+        r = apply_action(s, act)
+        if "winner" in r:
+            return r
+    return r
+
+
+def test_interactive_battle_pauses_for_concede() -> None:
+    from almoravid.actions import apply_action
+    s = _activate_alfonso(seed=3)
+    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+                         "interactive_concede": True})
+    assert r["battle"] == "awaiting_concede"
+    assert s.pending is not None and s.pending.kind == "battle_concede"
+    assert s.pending.waiting_on == "christian" == s.meta.active_player
+
+
+def test_interactive_legal_moves_offers_concede() -> None:
+    from almoravid.actions import apply_action
+    from almoravid.legal_moves import legal_moves
+    s = _activate_alfonso(seed=3)
+    apply_action(s, {"type": "cmd_battle", "side": "christian",
+                     "interactive_concede": True})
+    kinds = [m for m in legal_moves(s) if m["type"] == "battle_concede"]
+    assert len(kinds) == 3
+    assert any("attacker_concede" in m for m in kinds)
+    assert any("defender_concede" in m for m in kinds)
+
+
+def test_interactive_no_concede_matches_synchronous() -> None:
+    """Driving the interactive Battle without ever conceding is byte-for-
+    byte identical to the synchronous resolution (same RNG, same result)."""
+    from almoravid.actions import apply_action
+    for seed in (1, 3, 7, 11):
+        s_sync = _activate_alfonso(seed=seed)
+        r_sync = apply_action(s_sync, {"type": "cmd_battle",
+                                       "side": "christian"})
+        s_int = _activate_alfonso(seed=seed)
+        r_int = _drive_interactive(s_int, concede_at=None)
+        assert r_int["winner"] == r_sync["winner"]
+        assert r_int["rounds"] == r_sync["rounds"]
+        assert r_int["attacker_routed"] == r_sync["attacker_routed"]
+        assert r_int["defender_routed"] == r_sync["defender_routed"]
+
+
+def test_interactive_reactive_defender_concede_later_round() -> None:
+    """The defender, having watched Rounds 1-2, reactively Concedes at the
+    start of Round 3 -> the attacker (Christian) wins after 3 Rounds."""
+    s = _activate_alfonso(seed=3)
+    s.lords["alfonso"].forces = {"men_at_arms": 6}
+    s.lords["al_mutamid"].forces = {"men_at_arms": 6}
+    r = _drive_interactive(s, concede_at=3, conceder="defender")
+    assert r["winner"] == "christian"
+    assert r["rounds"] == 3
+    assert s.pending is None or s.pending.kind != "battle_concede"
+
+
+def test_interactive_reactive_attacker_concede_round1() -> None:
+    s = _activate_alfonso(seed=3)
+    s.lords["alfonso"].forces = {"men_at_arms": 6}
+    s.lords["al_mutamid"].forces = {"men_at_arms": 6}
+    r = _drive_interactive(s, concede_at=1, conceder="attacker")
+    assert r["winner"] == "muslim"
+    assert r["rounds"] == 1
+
+
+# ---- Interactive Concede for a besieged-Lord Sally (4.5.3) -----------------
+
+def _activate(scenario, lord_id, seed=1):
+    from almoravid.actions import apply_action
+    s = load_scenario(scenario, seed=seed)
+    side = s.lords[lord_id].side
+    apply_action(s, {"type": "begin_levy"})
+    for _ in range(15):
+        if s.meta.phase != "levy":
+            break
+        step_levy(s)
+    apply_action(s, {"type": "plan_add_card", "side": side,
+                     "plan_kind": "command", "lord_id": lord_id})
+    legal_pad(s, side)
+    legal_pad(s, "muslim" if side == "christian" else "christian")
+    apply_action(s, {"type": "finalize_plan", "side": "christian"})
+    apply_action(s, {"type": "finalize_plan", "side": "muslim"})
+    for _ in range(20):
+        if s.meta.active_lord_id == lord_id:
+            return s
+        apply_action(s, {"type": "command_reveal", "side": s.meta.active_player})
+        if s.meta.active_lord_id and s.meta.active_lord_id != lord_id:
+            apply_action(s, {"type": "end_card", "side": s.meta.active_player})
+    raise RuntimeError(f"could not activate {lord_id}")
+
+
+def _sally_setup(seed=3):
+    s = _activate("scenario_a_toledo_beset", "al_mutamid", seed=seed)
+    s.lords["al_mutamid"].in_stronghold = True
+    s.lords["al_mutamid"].forces = {"men_at_arms": 6}
+    s.locales["sevilla"].siege_yellow = 1
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale",
+                                               locale_id="sevilla")
+    s.lords["alvar_fanez"].in_stronghold = False
+    s.lords["alvar_fanez"].forces = {"men_at_arms": 6}
+    return s
+
+
+def test_interactive_sally_pauses_and_parity() -> None:
+    from almoravid.actions import apply_action
+    # Synchronous baseline.
+    s_sync = _sally_setup()
+    r_sync = apply_action(s_sync, {"type": "cmd_sally", "side": "muslim"})
+    # Interactive, never concede -> identical outcome.
+    s_int = _sally_setup()
+    r = apply_action(s_int, {"type": "cmd_sally", "side": "muslim",
+                             "interactive_concede": True})
+    assert r["battle"] == "awaiting_concede"
+    assert s_int.pending.kind == "battle_concede"
+    while s_int.pending is not None and s_int.pending.kind == "battle_concede":
+        r = apply_action(s_int, {"type": "battle_concede", "side": "muslim"})
+    assert r["winner"] == r_sync["winner"]
+    assert r["rounds"] == r_sync["rounds"]
+
+
+def test_interactive_sally_besieger_concede() -> None:
+    """In a Sally the besieger (Defender) may Concede -> sallying side wins."""
+    from almoravid.actions import apply_action
+    s = _sally_setup()
+    apply_action(s, {"type": "cmd_sally", "side": "muslim",
+                     "interactive_concede": True})
+    r = apply_action(s, {"type": "battle_concede", "side": "muslim",
+                         "defender_concede": True})
+    assert r["winner"] == "muslim"   # sallying (attacker) side
+
+
+def test_interactive_sally_sallying_lord_concede() -> None:
+    """The sallying (Besieged) Lord may Concede -> the besieger wins."""
+    from almoravid.actions import apply_action
+    s = _sally_setup()
+    apply_action(s, {"type": "cmd_sally", "side": "muslim",
+                     "interactive_concede": True})
+    r = apply_action(s, {"type": "battle_concede", "side": "muslim",
+                         "attacker_concede": True})
+    assert r["winner"] == "christian"   # besieger (defender) side
