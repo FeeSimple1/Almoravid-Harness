@@ -911,11 +911,13 @@ def apply_curias(state: GameState, box: int) -> dict[str, Any]:
     # Advance Levy marker to box 7
     state.calendar.current_box = 7
 
-    # Shift Beyond-Service Lords (Service marker at box <= prior current
-    # box) forward to box 7.
+    # 6.2.2: shift the Service markers of any Lords "Beyond Service (in box
+    # 6 or lower)" to the current 40 Days (box 7). The threshold is a FIXED
+    # box 6 (relative to the post-Curias Levy marker at box 7), regardless
+    # of whether Curias fires at box 5 or box 6.
     shifted = []
     for sm in list(state.calendar.service_markers):
-        if sm.box <= box:
+        if sm.box <= 6:
             sm.box = 7
             shifted.append(sm.lord_id)
 
@@ -1406,6 +1408,25 @@ def _h_winter_siege_pay(state: GameState, action: dict[str, Any]) -> dict[str, A
 # ---------------------------------------------------------------------------
 
 
+def _taifa_ravaged_count(state: GameState, taifa_id: str) -> int:
+    """Count Ravaged markers (either color) in a Taifa's Locales."""
+    taifa = state.taifas.get(taifa_id)
+    if taifa is None:
+        return 0
+    return sum(1 for lid in taifa.locale_ids
+               if state.locales[lid].ravaged != "none")
+
+
+def _parias_coin_amount(state: GameState, taifa_id: str | None,
+                        base: int) -> int:
+    """1.4.3 Parias Coin amount. Under the Ruined Land special rule
+    (Scenarios E & F) it is Service LESS the number of Ravaged markers
+    (either side) in the Taifa, floored at zero."""
+    if state.meta.ruined_land and taifa_id is not None:
+        return max(0, base - _taifa_ravaged_count(state, taifa_id))
+    return base
+
+
 def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
                         *, award_parias_coin: bool = True,
                         neutrality_choices: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1477,7 +1498,8 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
     if (old_status == "independent" and new_status == "parias"
             and award_parias_coin):
         from almoravid.actions import _award_parias_coin
-        amount = 6 if taifa_id == "sevilla" else 4
+        base = 6 if taifa_id == "sevilla" else 4
+        amount = _parias_coin_amount(state, taifa_id, base)
         results["parias_coin"] = _award_parias_coin(state, amount, None)
 
     # Determine the transition and apply the cascade.

@@ -132,6 +132,10 @@ class Meta(StrictModel):
     # Mustered Vassals get their own Calendar Service markers and Lord
     # Service shifts cascade to them.
     advanced_vassal_service: bool = False
+    # Ruined Land special rule (Scenarios E & F): Parias Coin (1.4.3) awards
+    # Coin equal to Service LESS the number of Ravaged markers (either side)
+    # in the Taifa.
+    ruined_land: bool = False
     # Optional Hidden Mats fog-of-war (1.5.2). When True, redacted_view()
     # hides a side's Lord Forces/Assets/This-Lord Capabilities from the
     # opponent (except Lords engaged in Battle/Storm). Rules/legal moves

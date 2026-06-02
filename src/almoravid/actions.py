@@ -1516,6 +1516,9 @@ def _award_parias_coin(state: GameState, amount: int,
     targets. If no Unbesieged Christian Lord exists, the Coin cannot be
     placed (stays in the pool).
     """
+    if amount <= 0:
+        # Ruined Land can reduce Parias Coin to zero -> award nothing.
+        return {"amount": amount, "placed": {}, "unplaced": 0}
     from almoravid.effective import is_besieged
     eligible = [lid for lid, lord_obj in state.lords.items()
                 if lord_obj.side == "christian" and lord_obj.cylinder.kind == "locale"
@@ -1619,8 +1622,11 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         taifa_adjust = adjust_taifa_status(
             state, lord.home_taifa, "parias", award_parias_coin=False,
             neutrality_choices=action.get("neutrality_choices"))
+        from almoravid.campaign import _parias_coin_amount
+        _pc_amount = _parias_coin_amount(
+            state, lord.home_taifa, lord.service_rating)
         parias_coin = _award_parias_coin(
-            state, lord.service_rating, action.get("parias_coin_targets"))
+            state, _pc_amount, action.get("parias_coin_targets"))
         # Running-score tracker; final VP is recomputed from Parias status.
         state.score.christian += 1.0
         # T4 (1.4.3): if no explicit neutrality_choices were given and a

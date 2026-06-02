@@ -885,6 +885,11 @@
           "title": "Advanced Vassal Service",
           "type": "boolean"
         },
+        "ruined_land": {
+          "default": false,
+          "title": "Ruined Land",
+          "type": "boolean"
+        },
         "hidden_mats": {
           "default": false,
           "title": "Hidden Mats",
