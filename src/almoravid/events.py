@@ -316,9 +316,9 @@ def _c10_devaluation_christian(state: GameState, side: Side, card_id: str,
     """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
     and Lords to 2/3 of the total (rounded up).'
 
-    Phase 6d: drains all Muslim Lords' Coin down to ceil(total * 2/3).
-    Taifas-box Coin is not modeled in state (no Taifa.assets field) so
-    only Lord-held Coin is affected. Pattern 10: no Coin -> no-op.
+    Reduces the Muslim total (Taifas box + all Muslim Lords' Coin) down to
+    ceil(total * 2/3), draining the Taifas box (state.taifas_box_coin) first
+    then Lord mats deterministically. Pattern 10: no Coin -> no-op.
     """
     muslim_lords = [lord for lord in state.lords.values() if lord.side == "muslim"]
     box = state.taifas_box_coin
@@ -706,9 +706,9 @@ def _m16_galician_revolt(state: GameState, side: Side, card_id: str,
 
     Phase 6d: targets one of the 3 listed Lords via payload['lord_id'].
     Defaults to whichever has the leftmost Service marker on the
-    Calendar. Bans Alfonso from being Mustered (the 'of' clause); the
-    'by' clause (Alfonso musters others) is approximated by the same
-    ban since our muster handler is the only Muster code path.
+    Calendar. Bans Alfonso from being Mustered (the 'of' clause) AND from
+    acting as the Levying Lord to Muster others (the 'by' clause); both are
+    enforced via muster_banned_this_levy_lord_ids in the muster_lord handler.
     """
     eligible = [lid for lid in _M16_LORDS
                 if lid in state.lords
@@ -1559,11 +1559,9 @@ def _m24_al_maghawir(state: GameState, side: Side, card_id: str,
     return {"card_id": card_id, "side": side, "ravaged": placed}
 
 
-# C21 Mozarabes — Hold, consumed during Surrender roll (auto-success).
-# Park in this_levy_events; campaign.py cmd_siege Surrender path
-# already checks Spoils etc. but we don't wire auto-success here in
-# 6j (would require a payload from the holder at the moment of the
-# Surrender roll). Stays as immediate-discard-no-op for now.
+# C21 Mozarabes — Hold: parked in this_levy_events; the auto-success on a
+# Reconquista-Taifa Surrender roll is consumed by the cmd_siege Surrender
+# path (it checks for a held C21 and discards it on auto-success).
 @register("C21")  # Mozarabes
 def _c21_mozarabes(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:

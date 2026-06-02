@@ -585,6 +585,12 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     levier = state.lords[levying_lord_id]
     _require(levier.side == side,
              f"{levying_lord_id} is not on {side}'s side", code="wrong_side")
+    # M16/M17 Revolt ban "Muster of OR BY" the named Lord: a banned Lord
+    # may neither be Mustered nor act as the Levying (Mustering) Lord.
+    _require(levying_lord_id not in state.meta.muster_banned_this_levy_lord_ids,
+             f"{levying_lord_id} cannot Muster others this Levy "
+             f"(M16/M17 Revolt 'by' ban active)",
+             code="muster_banned")
     _require(not levier.just_arrived_this_levy,
              f"{levying_lord_id} was newly Mustered this segment and cannot "
              f"use Lordship now (3.4.1)", code="levier_just_arrived")

@@ -102,3 +102,35 @@ synchronous path. The harness surfaces each per-Round choice in legal_moves;
 self-play never opts into interactive mode.
 
 **Revisit:** never (full reactive coverage achieved).
+
+
+## DECISION-003 — one_round_only Strikes fire on Round 1 (owner round-choice)
+
+**Date:** 2026-06-02
+**Type:** [HOUSE RULE]
+**Trigger:** Rules-accuracy audit (sweep for simplifications at the expense
+of accuracy).
+
+**Decision:** Strikes flagged `one_round_only` (Javelins / Harbah C7/M3/M6
+"any 1 Battle Round") fire on Round 1 — full-strength, before any Rout — and
+are dropped thereafter, rather than letting the owner choose which Round.
+
+**Reasoning:** The rules let the owner pick the single Round; Round 1 is the
+maximal-effect choice a rational player picks in the overwhelming majority of
+cases, so the deviation is minimal. Modeling owner round-choice is a
+per-combat policy on the Javelins-marker subsystem (a broader piece of work,
+also tracked in RULES_QUESTIONS). This is the ONLY remaining simplification
+the audit found that trades any rules accuracy.
+
+**Scope:** `_resolve_step` one_round_only handling (src/almoravid/battle.py).
+Everything else flagged with "simplification/stub/approximate/not-yet"
+comments was verified to be STALE wording over code that is actually
+rules-complete (per-Lord losses, C8 shared cap, C10 Taifas-box drain, full
+Table-4 Conquest, Enforcing-Parias shift, multi-Lord Battle, M10 Evade,
+C21 Surrender auto-success); those comments were corrected.
+
+**Also fixed by the audit (not a deviation — a genuine bug):** M16/M17
+Revolt "no Muster of OR BY <Lord>" — the ban now also blocks the named Lord
+from acting as the Levying Lord (it previously only blocked being Mustered).
+
+**Revisit:** when the Javelins-marker subsystem gains owner round-choice.

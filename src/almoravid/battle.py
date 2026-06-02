@@ -547,8 +547,8 @@ def _resolve_protection_roll(
         # include an 'evade' clause with its own range that supplements
         # Unarmored, but ONLY for Battle Melee Hits (not Missiles, not
         # Storm). African Horse: Evade 1-2; Light Horse + M10
-        # Andalusians: Evade 1-3 (M10 not yet wired). Apply when
-        # context='battle' and striker_kind=='melee'.
+        # Andalusians: Evade 1-3 (the M10 side-wide capability is wired
+        # just below). Apply when context='battle' and striker_kind=='melee'.
         if (not canceled
                 and context == "battle"
                 and striker_kind == "melee"
@@ -3218,11 +3218,10 @@ def _resolve_step_per_pair(
                                  "slingers", "javelins"):
                             by_kind[k] += bonus * by_kind[k] / cmt
 
-        # Phase 6a C8 Cantador (Round 1, Christian, melee, up to 4 K+S).
-        # In per-pair mode each actor Lord gets up to its own contribution,
-        # but the SIDE-WIDE cap of 4 still applies. We approximate by
-        # giving each Lord up to min(4, its own K+S count) -- slightly
-        # over-counts when multiple Lords each have 4+ K+S, but defensible.
+        # C8 Cantador (Round 1, Christian, melee, up to 4 K+S). The
+        # SIDE-WIDE cap of 4 is enforced exactly across the per-pair Lords
+        # via the shared, decremented `cantador_budget` (each Lord draws
+        # from the same pool of 4 in Front-position order).
         if (step_type == "melee" and round_index == 1
                 and actor.side == "christian"
                 and "C8" in state.decks.this_levy_events.get("christian", [])):
