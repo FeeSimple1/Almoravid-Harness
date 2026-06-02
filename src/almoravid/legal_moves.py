@@ -83,6 +83,15 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "defender_concede": True})
         return moves
 
+    # S10 Storm Concede — Attacker only (4.5.2), reactive per Round (2+).
+    if (state.pending is not None
+            and state.pending.kind == "storm_concede"):
+        side = state.pending.waiting_on
+        moves.append({"type": "storm_concede", "side": side})
+        moves.append({"type": "storm_concede", "side": side,
+                      "attacker_concede": True})
+        return moves
+
     # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord
     # at a time (Supply / Ravage / pass), then Christian-then-Muslim Pay
     # (or done) at Sieges. Pattern 11: only the waiting_on side may act.

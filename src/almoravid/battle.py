@@ -1610,37 +1610,7 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     return rnd
 
 
-def _storm_finalize(ss: dict[str, Any], attacker: BattleSide,
-                    defender: BattleSide, result: BattleResult) -> None:
-    """Commit surviving per-Lord Storm forces to the sides + result."""
-    final_forces: dict[UnitType, int] = {}
-    for lid in ss["d_front"] + ss["d_reserve"]:
-        for ut, n in ss["d_lord_forces"][lid].items():
-            if n > 0:
-                final_forces[ut] = final_forces.get(ut, 0) + n
-    defender.forces = final_forces
-    defender.garrison_forces = {}
-    a_final: dict[UnitType, int] = {}
-    for lid in ss["a_front"] + ss["a_reserve"]:
-        for ut, n in ss["a_lord_forces"][lid].items():
-            if n > 0:
-                a_final[ut] = a_final.get(ut, 0) + n
-    attacker.forces = a_final
-    result.attacker_lord_forces = {
-        lid: {ut: n for ut, n in ss["a_lord_forces"][lid].items() if n > 0}
-        for lid in attacker.lord_ids}
-    result.defender_lord_forces = {
-        lid: {ut: n for ut, n in ss["d_lord_forces"][lid].items() if n > 0}
-        for lid in defender.lord_ids}
-    result.attacker_lord_routed = {
-        lid: {ut: n for ut, n in ss["a_lord_routed"][lid].items() if n > 0}
-        for lid in attacker.lord_ids}
-    result.defender_lord_routed = {
-        lid: {ut: n for ut, n in ss["d_lord_routed"][lid].items() if n > 0}
-        for lid in defender.lord_ids}
-
-
-def resolve_storm(
+def _storm_setup(
     state: GameState,
     attacker: BattleSide,
     defender: BattleSide,
@@ -1649,27 +1619,10 @@ def resolve_storm(
     walls_range_override: tuple[int, int] | None = None,
     reposition_defender: bool = True,
     reposition_attacker: bool = True,
-    concede_after_round: int | None = None,
-) -> BattleResult:
-    """4.5.2 Storm with per-Lord Array (S8/S10/S11).
-
-    Front begins with at most one Lord per side (the Attacker's Active
-    Lord); other Lords start in Reserve. Front never exceeds the
-    Stronghold's Capacity. Only Front Lords (plus the Garrison, for the
-    Defender) Strike and absorb Hits each Round; Reserve Lords sit out
-    until Repositioned. Each Lord adds at most six Melee Hits per Round
-    (combined horse + foot). After Round 1 the Defender may bring one
-    Reserve Lord to the Front (Reposition); if all Front Lords Rout, a
-    Reserve must advance. The Attacker may Concede at the start of any
-    Round after the first (concede_after_round); the Storm also ends
-    when Rounds completed equals the Siege-marker count.
-
-    S11b: the Attacker also has a per-Lord Front/Reserve array — the
-    Active Lord begins at Front, other besieging Lords start in Reserve
-    and Advance via Reposition (forced when all Front Rout), Front capped
-    by Stronghold Capacity. Per-Lord post-Storm forces are exposed on the
-    result (attacker_lord_forces / defender_lord_forces).
-    """
+) -> tuple[dict[str, Any], int]:
+    """Build the serializable per-Lord Storm context `ss` (Locale walls,
+    Garrison, Front/Reserve, per-Lord force/rout dicts). Shared by
+    resolve_storm and the interactive Storm driver."""
     from almoravid.capabilities import any_lord_with_capability
     from almoravid.static_data import load_strongholds
 
@@ -1764,6 +1717,92 @@ def resolve_storm(
         "reposition_defender": reposition_defender,
         "reposition_attacker": reposition_attacker,
     }
+    return ss, max_rounds
+
+
+def _storm_winner(result: BattleResult, ss: dict[str, Any],
+                  attacker: BattleSide, defender: BattleSide, *,
+                  conceded: bool, max_rounds: int) -> None:
+    """Decide the Storm winner (4.5.2). Attacker loses on Concede, on
+    elimination, or when the Round cap is reached with Defenders alive."""
+    if conceded:
+        result.winner = defender.side
+        result.notes.append("Attacker Conceded; attacker loses")
+    elif not _storm_attacker_alive(ss):
+        result.winner = defender.side
+    elif not _storm_defender_alive(ss, defender):
+        result.winner = attacker.side
+    else:
+        result.winner = defender.side
+        result.notes.append(
+            f"Storm round-cap reached ({max_rounds}); attacker loses")
+
+
+def _storm_finalize(ss: dict[str, Any], attacker: BattleSide,
+                    defender: BattleSide, result: BattleResult) -> None:
+    """Commit surviving per-Lord Storm forces to the sides + result."""
+    final_forces: dict[UnitType, int] = {}
+    for lid in ss["d_front"] + ss["d_reserve"]:
+        for ut, n in ss["d_lord_forces"][lid].items():
+            if n > 0:
+                final_forces[ut] = final_forces.get(ut, 0) + n
+    defender.forces = final_forces
+    defender.garrison_forces = {}
+    a_final: dict[UnitType, int] = {}
+    for lid in ss["a_front"] + ss["a_reserve"]:
+        for ut, n in ss["a_lord_forces"][lid].items():
+            if n > 0:
+                a_final[ut] = a_final.get(ut, 0) + n
+    attacker.forces = a_final
+    result.attacker_lord_forces = {
+        lid: {ut: n for ut, n in ss["a_lord_forces"][lid].items() if n > 0}
+        for lid in attacker.lord_ids}
+    result.defender_lord_forces = {
+        lid: {ut: n for ut, n in ss["d_lord_forces"][lid].items() if n > 0}
+        for lid in defender.lord_ids}
+    result.attacker_lord_routed = {
+        lid: {ut: n for ut, n in ss["a_lord_routed"][lid].items() if n > 0}
+        for lid in attacker.lord_ids}
+    result.defender_lord_routed = {
+        lid: {ut: n for ut, n in ss["d_lord_routed"][lid].items() if n > 0}
+        for lid in defender.lord_ids}
+
+
+def resolve_storm(
+    state: GameState,
+    attacker: BattleSide,
+    defender: BattleSide,
+    *,
+    max_rounds: int | None = None,
+    walls_range_override: tuple[int, int] | None = None,
+    reposition_defender: bool = True,
+    reposition_attacker: bool = True,
+    concede_after_round: int | None = None,
+) -> BattleResult:
+    """4.5.2 Storm with per-Lord Array (S8/S10/S11).
+
+    Front begins with at most one Lord per side (the Attacker's Active
+    Lord); other Lords start in Reserve. Front never exceeds the
+    Stronghold's Capacity. Only Front Lords (plus the Garrison, for the
+    Defender) Strike and absorb Hits each Round; Reserve Lords sit out
+    until Repositioned. Each Lord adds at most six Melee Hits per Round
+    (combined horse + foot). After Round 1 the Defender may bring one
+    Reserve Lord to the Front (Reposition); if all Front Lords Rout, a
+    Reserve must advance. The Attacker may Concede at the start of any
+    Round after the first (concede_after_round); the Storm also ends
+    when Rounds completed equals the Siege-marker count.
+
+    S11b: the Attacker also has a per-Lord Front/Reserve array — the
+    Active Lord begins at Front, other besieging Lords start in Reserve
+    and Advance via Reposition (forced when all Front Rout), Front capped
+    by Stronghold Capacity. Per-Lord post-Storm forces are exposed on the
+    result (attacker_lord_forces / defender_lord_forces).
+    """
+    ss, max_rounds = _storm_setup(
+        state, attacker, defender, max_rounds=max_rounds,
+        walls_range_override=walls_range_override,
+        reposition_defender=reposition_defender,
+        reposition_attacker=reposition_attacker)
     result = BattleResult(engagement="storm", attacker=attacker,
                           defender=defender)
     conceded = False
@@ -1782,18 +1821,8 @@ def resolve_storm(
                 or not _storm_defender_alive(ss, defender)):
             break
     _storm_finalize(ss, attacker, defender, result)
-    # ---- Winner (4.5.2 Ending the Storm) ------------------------------
-    if conceded:
-        result.winner = defender.side
-        result.notes.append("Attacker Conceded; attacker loses")
-    elif not _storm_attacker_alive(ss):
-        result.winner = defender.side
-    elif not _storm_defender_alive(ss, defender):
-        result.winner = attacker.side
-    else:
-        result.winner = defender.side
-        result.notes.append(
-            f"Storm round-cap reached ({max_rounds}); attacker loses")
+    _storm_winner(result, ss, attacker, defender, conceded=conceded,
+                  max_rounds=max_rounds)
     return result
 def resolve_sally(
     state: GameState,

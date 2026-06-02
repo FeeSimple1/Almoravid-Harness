@@ -385,3 +385,69 @@ def test_interactive_sally_sallying_lord_concede() -> None:
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
                          "attacker_concede": True})
     assert r["winner"] == "christian"   # besieger (defender) side
+
+
+# ---- Interactive Concede for a Storm (4.5.2, Attacker-only, Round 2+) ------
+
+def _storm_setup(seed=3, siege=3):
+    s = _activate("scenario_a_toledo_beset", "alvar_fanez", seed=seed)
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale",
+                                               locale_id="zaragoza")
+    s.lords["alvar_fanez"].in_stronghold = False
+    s.locales["zaragoza"].siege_yellow = siege
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale",
+                                              locale_id="zaragoza")
+    s.lords["al_mustain"].in_stronghold = True
+    return s
+
+
+def test_interactive_storm_pauses_before_round2() -> None:
+    from almoravid.actions import apply_action
+    s = _storm_setup(siege=3)
+    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+                         "interactive_concede": True})
+    # Round 1 runs immediately; pause before Round 2 (Storm Concede is 2+).
+    assert r["storm"] == "awaiting_concede" and r["round"] == 2
+    assert s.pending is not None and s.pending.kind == "storm_concede"
+
+
+def test_interactive_storm_legal_moves_attacker_only() -> None:
+    from almoravid.actions import apply_action
+    from almoravid.legal_moves import legal_moves
+    s = _storm_setup(siege=3)
+    apply_action(s, {"type": "cmd_storm", "side": "christian",
+                     "interactive_concede": True})
+    sc = [m for m in legal_moves(s) if m["type"] == "storm_concede"]
+    assert len(sc) == 2  # continue + attacker concede (no defender concede)
+    assert all("defender_concede" not in m for m in sc)
+
+
+def test_interactive_storm_parity_with_synchronous() -> None:
+    from almoravid.actions import apply_action
+    for seed in (1, 3, 11):
+        s_sync = _storm_setup(seed=seed, siege=3)
+        r_sync = apply_action(s_sync, {"type": "cmd_storm",
+                                       "side": "christian"})
+        s_int = _storm_setup(seed=seed, siege=3)
+        r_int = apply_action(s_int, {"type": "cmd_storm", "side": "christian",
+                                     "interactive_concede": True})
+        while s_int.pending is not None and s_int.pending.kind == "storm_concede":
+            r_int = apply_action(s_int, {"type": "storm_concede",
+                                         "side": "christian"})
+        assert r_int["winner"] == r_sync["winner"]
+        assert r_int["rounds"] == r_sync["rounds"]
+        assert r_int["sack"] == r_sync["sack"]
+
+
+def test_interactive_storm_attacker_reactive_concede() -> None:
+    """The besieging Attacker, after Round 1, reactively Concedes at the
+    start of Round 2 -> the Storm ends and the Attacker (Christian) loses."""
+    from almoravid.actions import apply_action
+    s = _storm_setup(seed=3, siege=4)
+    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+                         "interactive_concede": True})
+    assert r["round"] == 2
+    r = apply_action(s, {"type": "storm_concede", "side": "christian",
+                         "attacker_concede": True})
+    assert r["winner"] == "muslim"      # defender wins; attacker conceded
+    assert r["rounds"] == 1             # only Round 1 ran
