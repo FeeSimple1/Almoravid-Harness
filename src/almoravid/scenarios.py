@@ -433,7 +433,7 @@ def build_sagrajas(seed: int = 0) -> GameState:
     # Reset campaign clutter inherited from the Scenario F skeleton: a
     # battle-only minigame has no Taifa politics / VP markers / Sieges.
     s.taifas_box_vp = 0.0
-    s.taifas_box_coin = 0.0
+    s.taifas_box_coin = 0
     for loc in s.locales.values():
         loc.siege_yellow = 0
         loc.siege_green = 0
