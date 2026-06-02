@@ -1755,6 +1755,9 @@ def resolve_sally(
     state: GameState,
     attacker: BattleSide,    # the BESIEGED Lord(s) — sallying out
     defender: BattleSide,    # the besieger
+    *,
+    attacker_concede_round: int | None = None,
+    defender_concede_round: int | None = None,
 ) -> BattleResult:
     """4.5.3 Sally. The Besieged Lord attacks the besieger.
 
@@ -1783,7 +1786,9 @@ def resolve_sally(
         if siege > 0:
             defender_walls = (1, siege)
     result = resolve_battle(state, attacker, defender,
-                            defender_walls_range=defender_walls)
+                            defender_walls_range=defender_walls,
+                            attacker_concede_round=attacker_concede_round,
+                            defender_concede_round=defender_concede_round)
     result.engagement = "sally"
     # Sally-specific aftermath flag — actual Withdraw-back and Siege
     # marker reduction happen in apply_sally_aftermath called from the
@@ -1889,6 +1894,8 @@ def resolve_relief_sally(
     besieger_side: Side,
     locale_id: str,
     max_rounds: int = 6,
+    attacker_concede_round: int | None = None,
+    defender_concede_round: int | None = None,
 ) -> tuple[BattleResult, tuple[
     BattleSide, BattleSide, BattleSide | None,
     BattleSide | None, bool]]:
@@ -2081,6 +2088,26 @@ def resolve_relief_sally(
 
     for rnd_i in range(1, max_rounds + 1):
         rnd = BattleRound(index=rnd_i)
+        # 4.4.2 CONCEDE THE FIELD? Either side may Concede at the start of
+        # a Round. The relieving side (Marcher + Sallyer lanes) is the
+        # Attacker; the besieger (Defender lanes) is the Defender. Set the
+        # flag on each lane object (so _resolve_step halves that side's
+        # Hits this Round — the pursuit penalty) AND on the pooled result
+        # sides (so the aftermath treats the conceding loser as "Conceded
+        # then Retreated", 4.4.3).
+        atk_concedes = (attacker_concede_round is not None
+                        and rnd_i >= attacker_concede_round)
+        dfd_concedes = (defender_concede_round is not None
+                        and rnd_i >= defender_concede_round)
+        if atk_concedes:
+            result.attacker.conceded = True
+            marchers.conceded = True
+            sallyers.conceded = True
+        if dfd_concedes:
+            result.defender.conceded = True
+            for _ds in (def_front, def_rear):
+                if _ds is not None:
+                    _ds.conceded = True
         # 4.4.2 Reposition (Round 2+): advance excess Reserve Defenders
         # into emptied Front (Marcher lane) then Reserve-as-Front (Sallyer
         # lane) positions, up to each lane's capacity.
@@ -2138,6 +2165,10 @@ def resolve_relief_sally(
             _discard_round1_events(state, ["C8", "M7", "C1", "M1"])
         if rnd_i == 2:
             _discard_round1_events(state, ["M6"])
+        if atk_concedes or dfd_concedes:
+            result.notes.append(
+                f"Round {rnd_i} ended with Concede; Relief Sally ends")
+            break
         if _over():
             break
 
@@ -2159,8 +2190,14 @@ def resolve_relief_sally(
                 state.lords[lid].routed_units = {ut: n for ut, n
                                                  in lr[lid].items() if n > 0}
 
-    # Winner: a side is defeated when all its participants are Routed.
-    if not _atk_alive() and _def_alive():
+    # 4.4.2/4.4.3: a side that Conceded the Field loses (checked BEFORE
+    # Rout; mutual Concede leaves no winner). Otherwise a side is defeated
+    # when all its participants are Routed.
+    if result.attacker.conceded and not result.defender.conceded:
+        result.winner = other
+    elif result.defender.conceded and not result.attacker.conceded:
+        result.winner = active_side
+    elif not _atk_alive() and _def_alive():
         result.winner = other
     elif _atk_alive() and not _def_alive():
         result.winner = active_side

@@ -47,13 +47,19 @@ abstraction for concede, so Battles follow the same model for consistency
 and lower risk. Unlike the Storm (Attacker only, Round 2+), a Battle allows
 EITHER side to Concede, from Round 1, per 4.4.2.
 
-**Scope:** `resolve_battle` (src/almoravid/battle.py); the `cmd_battle`,
-`respond_stand_battle` (standard Approach Battle), and Sagrajas resolve
-handlers (src/almoravid/campaign.py). NOT yet wired: the Relief-Sally
-resolver (`resolve_relief_sally`) and the internal besieged-Lord sally
-path, which use separate resolvers — concede there is a future enhancement.
-The pre-declared (vs interactive) model is the only simplification.
+**Scope:** all Battle-family resolvers and their handlers
+(src/almoravid/battle.py, src/almoravid/campaign.py):
+- open-field Battle — `resolve_battle`, via `cmd_battle`,
+  `respond_stand_battle` (standard Approach Battle), and Sagrajas;
+- besieged-Lord Sally (4.5.3) — `resolve_sally`, via `cmd_sally`;
+- Relief Sally (4.4.1) — `resolve_relief_sally`, via the relief-sally
+  branch of `respond_stand_battle` (relieving side = Marcher + Sallyer
+  lanes = Attacker; besieger = Defender; the conceded flag is set on the
+  per-lane sides for Strike-halving AND on the pooled result sides for
+  the aftermath's "Conceded then Retreated" treatment).
+The Storm's Attacker-only concede (4.5.2) is unchanged (already correct).
+The pre-declared (vs fully interactive) model is the only simplification.
 
-**Revisit:** when `resolve_battle` is made re-entrant (would allow a true
-interactive per-Round Attacker-then-Defender concede prompt), or when
-Relief-Sally concede is needed.
+**Revisit:** when `resolve_battle` / `resolve_relief_sally` are made
+re-entrant (would allow a true interactive per-Round Attacker-then-Defender
+concede prompt instead of the pre-declared rounds).

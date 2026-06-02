@@ -138,3 +138,93 @@ def test_cmd_battle_bad_concede_arg_rejected() -> None:
         assert "concede" in str(e).lower()
     else:
         raise AssertionError("expected rejection of concede round 0")
+
+
+# ---- Besieged-Lord Sally (4.5.3): either side may Concede ------------------
+
+def test_sally_besieged_lord_can_concede() -> None:
+    """The sallying (Besieged) side Concedes -> the besieger wins."""
+    from almoravid.battle import resolve_sally
+    s = load_scenario("scenario_a_toledo_beset", seed=7)
+    atk = BattleSide(side="muslim", role="attacker",
+                     lord_ids=["al_mutamid"], forces={"knights": 4})
+    dfd = BattleSide(side="christian", role="defender",
+                     lord_ids=["alfonso"], forces={"knights": 4})
+    result = resolve_sally(s, atk, dfd, attacker_concede_round=1)
+    assert result.engagement == "sally"
+    assert result.winner == "christian"
+    assert len(result.rounds) == 1
+
+
+def test_sally_besieger_can_concede() -> None:
+    """The besieger (Defender) Concedes -> the sallying side wins."""
+    from almoravid.battle import resolve_sally
+    s = load_scenario("scenario_a_toledo_beset", seed=7)
+    atk = BattleSide(side="muslim", role="attacker",
+                     lord_ids=["al_mutamid"], forces={"knights": 4})
+    dfd = BattleSide(side="christian", role="defender",
+                     lord_ids=["alfonso"], forces={"knights": 4})
+    result = resolve_sally(s, atk, dfd, defender_concede_round=1)
+    assert result.winner == "muslim"
+    assert len(result.rounds) == 1
+
+
+# ---- Relief Sally (4.4.1): either side may Concede -------------------------
+
+def _relief_setup(seed: int = 5):
+    s = load_scenario("scenario_a_toledo_beset", seed=seed)
+    s.lords["alfonso"].forces = {"knights": 4}        # relieving Marcher
+    s.lords["al_mutamid"].forces = {"sergeants": 4}   # besieger
+    return s
+
+
+def test_relief_sally_relieving_side_can_concede() -> None:
+    """Relieving side (Marchers + Sallyers = Attacker) Concedes ->
+    the besieger wins."""
+    from almoravid.battle import resolve_relief_sally
+    s = _relief_setup()
+    result, _lanes = resolve_relief_sally(
+        s, ["alfonso"], [], ["al_mutamid"],
+        besieger_side="muslim", locale_id="sahagun",
+        attacker_concede_round=1)
+    assert result.winner == "muslim"
+    assert len(result.rounds) == 1
+
+
+def test_relief_sally_besieger_can_concede() -> None:
+    """Besieger (Defender) Concedes -> the relieving side wins."""
+    from almoravid.battle import resolve_relief_sally
+    s = _relief_setup()
+    result, _lanes = resolve_relief_sally(
+        s, ["alfonso"], [], ["al_mutamid"],
+        besieger_side="muslim", locale_id="sahagun",
+        defender_concede_round=1)
+    assert result.winner == "christian"
+    assert len(result.rounds) == 1
+
+
+def test_relief_sally_concede_symmetric() -> None:
+    """Opposite conceder -> opposite winner (both sides can Concede)."""
+    from almoravid.battle import resolve_relief_sally
+    s1 = _relief_setup()
+    s2 = _relief_setup()
+    w_atk, _ = resolve_relief_sally(
+        s1, ["alfonso"], [], ["al_mutamid"], besieger_side="muslim",
+        locale_id="sahagun", attacker_concede_round=1)
+    w_dfd, _ = resolve_relief_sally(
+        s2, ["alfonso"], [], ["al_mutamid"], besieger_side="muslim",
+        locale_id="sahagun", defender_concede_round=1)
+    assert {w_atk.winner, w_dfd.winner} == {"christian", "muslim"}
+
+
+def test_relief_sally_no_concede_by_default() -> None:
+    """Without a concede arg the relief sally runs to its normal end."""
+    from almoravid.battle import resolve_relief_sally
+    s = _relief_setup()
+    s.lords["alfonso"].forces = {"knights": 8, "men_at_arms": 6}  # crush
+    s.lords["al_mutamid"].forces = {"sergeants": 1}
+    result, _lanes = resolve_relief_sally(
+        s, ["alfonso"], [], ["al_mutamid"],
+        besieger_side="muslim", locale_id="sahagun")
+    assert not result.attacker.conceded and not result.defender.conceded
+    assert result.winner == "christian"
