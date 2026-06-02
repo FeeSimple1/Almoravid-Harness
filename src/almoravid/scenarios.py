@@ -37,9 +37,9 @@ from almoravid.state import (
     Season,
     ServiceMarker,
     Side,
+    Taifa,
     TurnType,
     UnitType,
-    Taifa,
     Vassal,
     Way,
 )

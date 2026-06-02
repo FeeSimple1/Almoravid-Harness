@@ -1875,8 +1875,8 @@ def resolve_relief_sally(
     locale_id: str,
     max_rounds: int = 6,
 ) -> tuple[BattleResult, tuple[
-    BattleSide, BattleSide, "BattleSide | None",
-    "BattleSide | None", bool]]:
+    BattleSide, BattleSide, BattleSide | None,
+    BattleSide | None, bool]]:
     """Rule 4.4.1 RELIEF SALLY. The Approaching (relieving) side's
     Besieged Lords Sally out to join the Attack against the besiegers.
 

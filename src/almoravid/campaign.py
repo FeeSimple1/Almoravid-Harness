@@ -18,7 +18,7 @@ Architectural choices driven by FUTURE_PROJECTS_LESSONS.md:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from almoravid.actions import (
     ACTOR_ORDER,
@@ -30,11 +30,14 @@ from almoravid.actions import (
     _require_side,
 )
 from almoravid.state import (
+    AssetType,
     GameState,
     Lord,
     PendingDecision,
     PlanEntry,
     Side,
+    TaifaStatus,
+    UnitType,
 )
 
 # Plan size per season (SoP §4.1 / hard-coded seasonal command_cards).
@@ -157,6 +160,7 @@ def _h_plan_add_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]
              f"plan_kind must be 'command' or 'pass', got {kind!r}",
              code="bad_arg")
     lord_id = action.get("lord_id")
+    lord_id = cast(str, lord_id)
     if kind == "command":
         _require(isinstance(lord_id, str),
                  "command plan entries require lord_id",
@@ -1157,6 +1161,7 @@ def _winter_besiegers(state: GameState) -> list[str]:
     for lid, lord in state.lords.items():
         if lord.cylinder.kind != "locale" or lord.in_stronghold:
             continue
+        assert lord.cylinder.locale_id is not None
         loc = state.locales[lord.cylinder.locale_id]
         if lord.side == "christian" and loc.siege_yellow > 0:
             out.append(lid)
@@ -1174,7 +1179,7 @@ class _MetaCtx:
         self.state = state
         self.overrides = overrides
 
-    def __enter__(self) -> "_MetaCtx":
+    def __enter__(self) -> _MetaCtx:
         m = self.state.meta
         self._saved = {k: getattr(m, k) for k in (
             "phase", "campaign_step", "levy_step", "active_player",
@@ -1190,7 +1195,7 @@ class _MetaCtx:
         for k, v in self._saved.items():
             setattr(m, k, v)
         self.state.pending = self._pending
-        return False
+        return None
 
 
 def _winter_feed(state: GameState) -> dict[str, Any]:
@@ -1430,7 +1435,7 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
                "ravaged_flips": [], "auto_conquered": [],
                "siege_removed": [], "jihad_added": [],
                "deferred_neutrality": []}
-    taifa.status = new_status
+    taifa.status = cast("TaifaStatus", new_status)
 
     # T5 (rule 1.4.3 PARIAS COIN): changing from Independent to Parias,
     # the Christians add Coin from the pool = the departing Taifa Lord's
@@ -1774,6 +1779,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     assert from_loc is not None
 
     target = action.get("target_locale_id")
+    target = cast(str, target)
     way_type = action.get("way_type", "road")
     _require(isinstance(target, str), "target_locale_id required (str)",
              code="bad_arg")
@@ -2030,7 +2036,7 @@ def _route_blocked_by_enemy(state: GameState, route: list[str],
     /Besieged exemptions consult effective.is_besieged / is_bypassed.
     """
     from almoravid.effective import is_besieged, is_bypassed, is_friendly_locale
-    other = "muslim" if side == "christian" else "christian"
+    other: Side = "muslim" if side == "christian" else "christian"
     for locale_id in route:
         # Enemy Lord present unless Besieged/Bypassed
         for lord in state.lords.values():
@@ -2532,10 +2538,9 @@ def _conquer_stronghold(state: GameState, locale_id: str,
     # there. Christian Conquest (anywhere), and Muslim Conquest of a
     # Christian Kingdom, place Conquered markers AND remove all Jihad.
     # A Locale never holds both Conquered and Jihad markers.
-    is_taifa = taifa is not None
-    place_jihad = (conquering_side == "muslim" and is_taifa
+    place_jihad = (conquering_side == "muslim" and taifa is not None
                    and taifa.status in ("parias", "reconquista"))
-    removed = {}
+    removed: dict[str, Any] = {}
     if place_jihad:
         if loc.conquered_markers:
             removed["conquered"] = loc.conquered_markers
@@ -2813,7 +2818,7 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     assert here is not None
 
     # Find enemy Lord(s) at this Locale
-    other = "muslim" if side == "christian" else "christian"
+    other: Side = "muslim" if side == "christian" else "christian"
     enemy_lord_ids = [
         lord_obj.id for lord_obj in state.lords.values()
         if lord_obj.side == other
@@ -2950,7 +2955,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     if len(besieger_ids) == 1:
         atk = battleside_for_lord(state, lord_id, "attacker")
     else:
-        a_forces: dict[str, Any] = {}
+        a_forces: dict[UnitType, int] = {}
         a_caps: list[str] = []
         for bid in besieger_ids:
             for ut, n in state.lords[bid].forces.items():
@@ -2960,7 +2965,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                          forces=a_forces, capabilities_in_play=a_caps)
     # Build defender side. If multiple Lords inside, aggregate (Phase 5f).
     if enemy_inside:
-        dfd_forces: dict[str, Any] = {}
+        dfd_forces: dict[UnitType, int] = {}
         dfd_caps: list[str] = []
         for eid in enemy_inside:
             for ut, n in state.lords[eid].forces.items():
@@ -3041,7 +3046,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
             and lord_obj.cylinder.locale_id == here
         ]
-        sack_spoils: dict[str, int] = {}
+        sack_spoils: dict[AssetType, int] = {}
         removed_lords: list[str] = []
         # (a) Permanently remove all losing Lords (3.3.1); award all
         #     their Assets as Spoils (4.4.3) — capture BEFORE cleanup.
@@ -3118,10 +3123,11 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="wrong_side")
     _require(is_besieged(state, lord_id),
              "Sally requires Besieged Lord (4.5.3)", code="not_besieged")
-    here = lord.cylinder.locale_id  # type: ignore[union-attr]
+    here = lord.cylinder.locale_id
+    assert here is not None
 
     # Find besieging Lord(s) outside the Stronghold at this Locale
-    other = "muslim" if side == "christian" else "christian"
+    other: Side = "muslim" if side == "christian" else "christian"
     besiegers = [
         lord_obj.id for lord_obj in state.lords.values()
         if lord_obj.side == other
@@ -3137,7 +3143,7 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     state.lords[lord_id].in_stronghold = False
 
     # Build defender side (besiegers)
-    dfd_forces: dict[str, Any] = {}
+    dfd_forces: dict[UnitType, int] = {}
     dfd_caps: list[str] = []
     for bid in besiegers:
         for ut, n in state.lords[bid].forces.items():
@@ -3269,6 +3275,7 @@ def _require_pending(state: GameState, kind: str, side: Side) -> PendingDecision
     pd = state.pending
     _require(pd is not None and pd.kind == kind,
              f"no pending {kind} decision", code="no_pending")
+    assert pd is not None
     _require(pd.waiting_on == side,
              f"pending decision waiting on {pd.waiting_on}, not {side}",
              code="not_responder")
@@ -3345,6 +3352,7 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     active_side = payload["active_side"]
 
     target = action.get("target_locale_id")
+    target = cast(str, target)
     way_type = action.get("way_type", "road")
     _require(isinstance(target, str), "target_locale_id required",
              code="bad_arg")
@@ -3422,7 +3430,8 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     spoils_dist = {}
     if spoils and attackers:
         from almoravid.battle import distribute_spoils_round_robin
-        spoils_dist = distribute_spoils_round_robin(state, attackers, spoils)
+        spoils_dist = distribute_spoils_round_robin(
+            state, attackers, cast("dict[AssetType, int]", spoils))
     # Move the avoiding subset. Avoid Battle DOES mark Moved/Fought
     # (4.3.4 "Mark Avoiding Lords as Moved/Fought"; 4.8.1 lists Avoid
     # Battle among the Moved/Fought triggers). Only Withdrawal alone is
@@ -3771,6 +3780,7 @@ def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, 
     _require("C14" in state.decks.this_levy_events.get("christian", []),
              "C14 not held in this_levy_events", code="card_not_held")
     lord_id = action.get("lord_id")
+    lord_id = cast(str, lord_id)
     _require(lord_id in ("sancho", "eudes"),
              "lord_id must be sancho or eudes", code="bad_arg")
     _require(lord_id in state.lords, f"{lord_id} not in scenario",
@@ -3868,6 +3878,7 @@ def _h_play_cluniacs(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require("C15" in state.decks.this_levy_events.get("christian", []),
              "C15 not held in this_levy_events", code="card_not_held")
     lord_id = action.get("lord_id")
+    lord_id = cast(str, lord_id)
     _require(lord_id in state.lords, f"unknown lord {lord_id}",
              code="unknown_lord")
     lord = state.lords[lord_id]
@@ -3927,6 +3938,7 @@ def _h_play_de_vivar_reconcile(state: GameState, action: dict[str, Any]) -> dict
     sayyid = state.lords.get("rodrigo_al_sayyid")
     _require(sayyid is not None and sayyid.cylinder.kind == "locale",
              "Rodrigo al-Sayyid not on map", code="not_on_map")
+    assert sayyid is not None
     # Reconcile: remove al-Sayyid from the map; Muslim +1 VP.
     from almoravid.state import Cylinder
     for field_name in sayyid.cleanup_on_removal_fields:
@@ -3978,6 +3990,7 @@ def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[
     _require(state.locales[from_loc].has_port,
              f"{from_loc} is not a Port", code="not_port")
     target = action.get("target_locale_id")
+    target = cast(str, target)
     _require(target in state.locales, f"unknown locale {target!r}",
              code="unknown_locale")
     _require(state.locales[target].has_port,
@@ -4156,7 +4169,9 @@ def _h_designate_lieutenant(state: GameState, action: dict[str, Any]) -> dict[st
              "Lieutenants are designated during the Plan step (4.1.3)",
              code="wrong_step")
     lord_id = action.get("lord_id")
+    lord_id = cast(str, lord_id)
     commander_id = action.get("commander_id")
+    commander_id = cast(str, commander_id)
     _require(lord_id in state.lords and commander_id in state.lords,
              "lord_id and commander_id required", code="bad_arg")
     _require(lord_id != commander_id, "a Lord cannot be his own Lieutenant",
@@ -4220,6 +4235,7 @@ def _h_toggle_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, 
         return {"unstacked": lord_id,
                 "actions_remaining": state.meta.actions_remaining}
     commander_id = action.get("commander_id")
+    commander_id = cast(str, commander_id)
     _require(commander_id in state.lords, "commander_id required",
              code="bad_arg")
     cmd = state.lords[commander_id]
@@ -4434,6 +4450,7 @@ def _h_dinars_deposit(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(side == "muslim", "Dinars is a Muslim Plan-step option",
              code="wrong_side")
     lord_id = action.get("lord_id")
+    lord_id = cast(str, lord_id)
     _require(lord_id in state.lords, "lord_id required", code="bad_arg")
     lord = state.lords[lord_id]
     _require(lord.is_taifa and lord_id not in
@@ -4487,6 +4504,7 @@ def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[s
     pol = action.get("policy")
     _require(pol in _ABSORB_POLICIES,
              f"policy must be one of {_ABSORB_POLICIES}", code="bad_arg")
+    pol = cast(str, pol)
     state.meta.absorption_policy[side] = pol
     _record(state, action, f"{side} sets absorption policy = {pol}")
     return {"side": side, "absorption_policy": pol}
@@ -4540,6 +4558,7 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
              f"{here} already has a Cathedral Seat", code="already_seat")
     # Two-marker cap; relocate one if both already placed.
     relocate_from = action.get("relocate_from")
+    relocate_from = cast(str, relocate_from)
     if len(state.cathedral_seat_locales) >= 2:
         _require(relocate_from in state.cathedral_seat_locales,
                  "both Cathedral Seats are placed; specify relocate_from "
@@ -4566,7 +4585,7 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
 
 
 def _set_neutrality_pending(state: GameState, deferred: list[Any],
-                            resume_active: bool) -> bool:
+                            resume_active: Side) -> bool:
     """T4 (1.4.3 RECOGNITION OF NEUTRALITY): set a pending decision for
     the first side (Christian then Muslim) that has a Lord Besieging a
     now-Neutral Enemy Stronghold, letting it choose remove-Siege vs
@@ -4587,7 +4606,7 @@ def _set_neutrality_pending(state: GameState, deferred: list[Any],
 
 
 def _maybe_set_neutrality_pending(state: GameState, results: dict[str, Any],
-                                  resume_active: bool) -> bool:
+                                  resume_active: Side) -> bool:
     deferred = results.get("deferred_neutrality") or []
     return _set_neutrality_pending(state, deferred, resume_active) if deferred \
         else False
@@ -4652,12 +4671,13 @@ def _emir_jihad_targets(state: GameState) -> list[str]:
     eligible = _jihad_eligible_locales(state)
     if not eligible:
         return []
-    christian_locs = [lord.cylinder.locale_id for lord in state.lords.values()
+    christian_locs = [cast(str, lord.cylinder.locale_id)
+                      for lord in state.lords.values()
                       if lord.side == "christian" and lord.cylinder.kind == "locale"]
     out: list[str] = []
     for tgt in eligible:
         dist = hop_distances(tgt)
-        y = dist.get(yusuf.cylinder.locale_id)
+        y = dist.get(cast(str, yusuf.cylinder.locale_id))
         if y is None:
             continue
         # Strictly closer than EVERY Christian (None = unreachable = farther;
@@ -4684,6 +4704,7 @@ def _h_cmd_emir_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(state.meta.actions_remaining >= 1,
              "needs an unspent Command card", code="not_enough_actions")
     target = action.get("jihad_locale")
+    target = cast(str, target)
     _require(target in state.locales, "jihad_locale required", code="bad_arg")
     _require(target in _emir_jihad_targets(state),
              f"{target} is not a Jihad-eligible Locale Yusuf is closer to "
@@ -4802,7 +4823,9 @@ def _h_cmd_cabalgadas(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(payer is not None,
              "Cabalgadas needs 1 Provender (own or Shared, 1.5.2)",
              code="no_provender")
+    payer = cast(str, payer)
     target = action.get("target_locale")
+    target = cast(str, target)
     _require(target in state.locales, "target_locale required", code="bad_arg")
     _require(target in _cabalgadas_targets(state, lord_id, side),
              f"{target} is not a legal Cabalgadas target (<=2 Ways, no "
@@ -4917,9 +4940,12 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
              and state.pending.kind == "sagrajas_resolve",
              "no Sagrajas Battle ready to resolve", code="wrong_phase")
     side = _require_side(action)
+    assert state.pending is not None
     _require(side == state.pending.waiting_on,
              f"{side} is not the Attacker", code="wrong_side")
     role = state.meta.sagrajas_role
+    atk_side: Side
+    def_side: Side
     if role == "attack":
         atk_side, def_side, marshal = "christian", "muslim", "alfonso"
     else:
