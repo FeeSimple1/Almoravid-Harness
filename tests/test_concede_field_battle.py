@@ -13,6 +13,9 @@ deterministic regardless of dice: the non-conceding side wins.
 
 from __future__ import annotations
 
+import json as _json
+
+import almoravid.battle as _battle
 from almoravid.actions import apply_action
 from almoravid.battle import BattleSide, resolve_battle
 from almoravid.scenarios import load_scenario
@@ -385,3 +388,153 @@ def test_interactive_sally_sallying_lord_concede() -> None:
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
                          "attacker_concede": True})
     assert r["winner"] == "christian"   # besieger (defender) side
+
+
+# ---- Interactive Concede for a Storm (4.5.2, Attacker-only, Round 2+) ------
+
+def _storm_setup(seed=3, siege=3):
+    s = _activate("scenario_a_toledo_beset", "alvar_fanez", seed=seed)
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale",
+                                               locale_id="zaragoza")
+    s.lords["alvar_fanez"].in_stronghold = False
+    s.locales["zaragoza"].siege_yellow = siege
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale",
+                                              locale_id="zaragoza")
+    s.lords["al_mustain"].in_stronghold = True
+    return s
+
+
+def test_interactive_storm_pauses_before_round2() -> None:
+    from almoravid.actions import apply_action
+    s = _storm_setup(siege=3)
+    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+                         "interactive_concede": True})
+    # Round 1 runs immediately; pause before Round 2 (Storm Concede is 2+).
+    assert r["storm"] == "awaiting_concede" and r["round"] == 2
+    assert s.pending is not None and s.pending.kind == "storm_concede"
+
+
+def test_interactive_storm_legal_moves_attacker_only() -> None:
+    from almoravid.actions import apply_action
+    from almoravid.legal_moves import legal_moves
+    s = _storm_setup(siege=3)
+    apply_action(s, {"type": "cmd_storm", "side": "christian",
+                     "interactive_concede": True})
+    sc = [m for m in legal_moves(s) if m["type"] == "storm_concede"]
+    assert len(sc) == 2  # continue + attacker concede (no defender concede)
+    assert all("defender_concede" not in m for m in sc)
+
+
+def test_interactive_storm_parity_with_synchronous() -> None:
+    from almoravid.actions import apply_action
+    for seed in (1, 3, 11):
+        s_sync = _storm_setup(seed=seed, siege=3)
+        r_sync = apply_action(s_sync, {"type": "cmd_storm",
+                                       "side": "christian"})
+        s_int = _storm_setup(seed=seed, siege=3)
+        r_int = apply_action(s_int, {"type": "cmd_storm", "side": "christian",
+                                     "interactive_concede": True})
+        while s_int.pending is not None and s_int.pending.kind == "storm_concede":
+            r_int = apply_action(s_int, {"type": "storm_concede",
+                                         "side": "christian"})
+        assert r_int["winner"] == r_sync["winner"]
+        assert r_int["rounds"] == r_sync["rounds"]
+        assert r_int["sack"] == r_sync["sack"]
+
+
+def test_interactive_storm_attacker_reactive_concede() -> None:
+    """The besieging Attacker, after Round 1, reactively Concedes at the
+    start of Round 2 -> the Storm ends and the Attacker (Christian) loses."""
+    from almoravid.actions import apply_action
+    s = _storm_setup(seed=3, siege=4)
+    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+                         "interactive_concede": True})
+    assert r["round"] == 2
+    r = apply_action(s, {"type": "storm_concede", "side": "christian",
+                         "attacker_concede": True})
+    assert r["winner"] == "muslim"      # defender wins; attacker conceded
+    assert r["rounds"] == 1             # only Round 1 ran
+
+
+# ---- Interactive (reactive) Relief Sally (4.4.1) --------------------------
+#
+# Driven at the resolver level with a JSON snapshot round-trip between every
+# Round (exactly what the relief_concede pending handler does), so these
+# validate the serializable lane state + round-stepping + reactive concede.
+
+def _relief_state(seed):
+    s = load_scenario("scenario_a_toledo_beset", seed=seed)
+    s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="sevilla")
+    s.lords["alfonso"].in_stronghold = False
+    s.lords["alfonso"].forces = {"men_at_arms": 5}
+    s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale",
+                                               locale_id="sevilla")
+    s.lords["alvar_fanez"].in_stronghold = True
+    s.lords["alvar_fanez"].forces = {"men_at_arms": 3}
+    s.lords["al_mutamid"].cylinder = Cylinder(kind="locale",
+                                              locale_id="sevilla")
+    s.lords["al_mutamid"].in_stronghold = False
+    s.lords["al_mutamid"].forces = {"men_at_arms": 8}
+    s.locales["sevilla"].siege_green = 2
+    return s
+
+
+def _relief_sync(s, *, acr=None, dcr=None):
+    res, _ = _battle.resolve_relief_sally(
+        s, ["alfonso"], ["alvar_fanez"], ["al_mutamid"],
+        besieger_side="muslim", locale_id="sevilla",
+        attacker_concede_round=acr, defender_concede_round=dcr)
+    return res.winner, len(res.rounds)
+
+
+def _relief_stepped(s, *, concede_round=None, conceder=None):
+    rs = _battle._relief_setup(s, ["alfonso"], ["alvar_fanez"], ["al_mutamid"],
+                          besieger_side="muslim", locale_id="sevilla",
+                          max_rounds=6)
+    snap = _json.loads(_json.dumps(_battle._relief_to_snapshot(rs)))
+    rnd_i = 1
+    while True:
+        rs = _battle._relief_from_snapshot(s, snap)   # JSON round-trip each Round
+        atkc = (conceder == "attacker" and rnd_i == concede_round)
+        dfdc = (conceder == "defender" and rnd_i == concede_round)
+        _battle._relief_declare_concede(rs, atk_concedes=atkc, dfd_concedes=dfdc)
+        rs.result.rounds.append(_battle._relief_run_round(s, rs, rnd_i))
+        if atkc or dfdc or _battle._relief_over(s, rs) or rnd_i >= rs.max_rounds:
+            _battle._relief_finalize(s, rs)
+            return rs.result.winner, len(rs.result.rounds)
+        snap = _json.loads(_json.dumps(_battle._relief_to_snapshot(rs)))
+        rnd_i += 1
+
+
+def test_relief_interactive_parity_with_synchronous() -> None:
+    for seed in (1, 3, 7, 11, 20):
+        assert _relief_stepped(_relief_state(seed)) == \
+            _relief_sync(_relief_state(seed))
+
+
+def test_relief_interactive_attacker_reactive_concede() -> None:
+    """Relieving side Concedes at Round 2 -> besieger (Muslim) wins."""
+    w_step = _relief_stepped(_relief_state(3), concede_round=2,
+                             conceder="attacker")
+    assert w_step == _relief_sync(_relief_state(3), acr=2)
+    assert w_step[0] == "muslim" and w_step[1] == 2
+
+
+def test_relief_interactive_defender_reactive_concede() -> None:
+    """Besieger Concedes at Round 2 -> relieving side (Christian) wins."""
+    w_step = _relief_stepped(_relief_state(3), concede_round=2,
+                             conceder="defender")
+    assert w_step == _relief_sync(_relief_state(3), dcr=2)
+    assert w_step[0] == "christian" and w_step[1] == 2
+
+
+def test_relief_snapshot_round_trips_through_json() -> None:
+    rs = _battle._relief_setup(_relief_state(3), ["alfonso"], ["alvar_fanez"],
+                          ["al_mutamid"], besieger_side="muslim",
+                          locale_id="sevilla", max_rounds=6)
+    snap = _battle._relief_to_snapshot(rs)
+    _json.dumps(snap)   # must be JSON-serializable
+    rs2 = _battle._relief_from_snapshot(_relief_state(3), _json.loads(
+        _json.dumps(snap)))
+    assert rs2.shared == rs.shared and rs2.walls == rs.walls
+    assert rs2.lf.keys() == rs.lf.keys()

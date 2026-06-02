@@ -3079,6 +3079,222 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _begin_interactive_storm(
+    state: GameState,
+    action: dict[str, Any],
+    atk: Any,
+    dfd: Any,
+    pl: dict[str, Any],
+    *,
+    walls_range_override: tuple[int, int] | None = None,
+    reposition_defender: bool = True,
+) -> dict[str, Any]:
+    """Start a reactive Storm: build the per-Lord context, resolve Round 1
+    immediately (S10 Concede is Attacker-only, Round 2+), then pause on a
+    storm_concede decision before Round 2 (or finish if the Storm ended)."""
+    from almoravid.battle import (
+        BattleResult,
+        _storm_attacker_alive,
+        _storm_defender_alive,
+        _storm_finalize,
+        _storm_run_round,
+        _storm_setup,
+        _storm_winner,
+        battle_side_to_snapshot,
+    )
+    ss, max_rounds = _storm_setup(
+        state, atk, dfd, walls_range_override=walls_range_override,
+        reposition_defender=reposition_defender)
+    result = BattleResult(engagement="storm", attacker=atk, defender=dfd)
+    result.rounds.append(_storm_run_round(state, atk, dfd, ss, 1))
+    pl = dict(pl)
+    pl["ss"] = ss
+    pl["max_rounds"] = max_rounds
+    pl["rounds_done"] = 1
+    over = (not _storm_attacker_alive(ss)
+            or not _storm_defender_alive(ss, dfd))
+    if over or max_rounds < 2:
+        _storm_finalize(ss, atk, dfd, result)
+        _storm_winner(result, ss, atk, dfd, conceded=False,
+                      max_rounds=max_rounds)
+        state.pending = None
+        return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
+                             pl=pl)
+    pl["attacker"] = battle_side_to_snapshot(atk)
+    pl["defender"] = battle_side_to_snapshot(dfd)
+    pl["round_idx"] = 2
+    state.pending = PendingDecision(
+        kind="storm_concede", waiting_on=pl["side"], payload=pl)
+    state.meta.active_player = pl["side"]
+    return {"storm": "awaiting_concede", "round": 2}
+
+
+def _h_storm_concede(state: GameState,
+                     action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one Storm Round after its start-of-Round Attacker Concede
+    declaration (S10, Round 2+). `attacker_concede` ends the Storm with the
+    Attacker as loser; otherwise the Round runs and the Storm either ends or
+    re-pends for the next Round."""
+    from almoravid.battle import (
+        BattleResult,
+        BattleRound,
+        _storm_attacker_alive,
+        _storm_defender_alive,
+        _storm_finalize,
+        _storm_run_round,
+        _storm_winner,
+        battle_side_from_snapshot,
+        battle_side_to_snapshot,
+    )
+    side = _require_side(action)
+    pd = _require_pending(state, "storm_concede", side)
+    pl = pd.payload
+    atk = battle_side_from_snapshot(pl["attacker"])
+    dfd = battle_side_from_snapshot(pl["defender"])
+    ss = pl["ss"]
+    round_idx: int = pl["round_idx"]
+    max_rounds: int = pl["max_rounds"]
+    if bool(action.get("attacker_concede")):
+        result = BattleResult(engagement="storm", attacker=atk, defender=dfd)
+        result.rounds = [BattleRound(index=i)
+                         for i in range(1, pl["rounds_done"] + 1)]
+        result.notes.append(
+            f"Attacker Concedes at start of Round {round_idx}")
+        _storm_finalize(ss, atk, dfd, result)
+        _storm_winner(result, ss, atk, dfd, conceded=True,
+                      max_rounds=max_rounds)
+        state.pending = None
+        return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
+                             pl=pl)
+    result = BattleResult(engagement="storm", attacker=atk, defender=dfd)
+    _storm_run_round(state, atk, dfd, ss, round_idx)
+    rounds_done: int = pl["rounds_done"] + 1
+    over = (not _storm_attacker_alive(ss)
+            or not _storm_defender_alive(ss, dfd))
+    if over or round_idx >= max_rounds:
+        result.rounds = [BattleRound(index=i)
+                         for i in range(1, rounds_done + 1)]
+        _storm_finalize(ss, atk, dfd, result)
+        _storm_winner(result, ss, atk, dfd, conceded=False,
+                      max_rounds=max_rounds)
+        state.pending = None
+        return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
+                             pl=pl)
+    pl = dict(pl)
+    pl["ss"] = ss
+    pl["attacker"] = battle_side_to_snapshot(atk)
+    pl["defender"] = battle_side_to_snapshot(dfd)
+    pl["round_idx"] = round_idx + 1
+    pl["rounds_done"] = rounds_done
+    state.pending = PendingDecision(
+        kind="storm_concede", waiting_on=side, payload=pl)
+    return {"storm": "in_progress", "round_resolved": round_idx,
+            "rounds_done": rounds_done}
+
+
+def _finish_storm(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    atk: Any,
+    dfd: Any,
+    result: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Post-Storm aftermath (4.5.2 commit + Sack + Losses), shared by the
+    synchronous cmd_storm path and the interactive storm_concede driver."""
+    from almoravid.battle import apply_aftermath, commit_forces_after_battle
+    side: Side = pl["side"]
+    here: str = pl["here"]
+    enemy_inside: list[str] = pl["enemy_inside"]
+    lord_id: str = pl["lord_id"]
+    loc = state.locales[here]
+    # S11b: commit each besieging Lord and each Defender Lord exactly
+    # from the per-Lord post-Storm forces (resolve_storm tracked them).
+    if result.attacker_lord_forces:
+        for bid, f in result.attacker_lord_forces.items():
+            if bid in state.lords:
+                state.lords[bid].forces = dict(f)
+                # S11b: write per-Lord Routed units so 4.4.4 Storm Losses
+                # (apply_battle_losses storm=True) roll per-Lord and any
+                # survivors return to that Lord's Forces.
+                state.lords[bid].routed_units = dict(
+                    result.attacker_lord_routed.get(bid, {}))
+    else:
+        commit_forces_after_battle(state, atk)
+    if result.defender_lord_forces:
+        for did, f in result.defender_lord_forces.items():
+            if did in state.lords:
+                state.lords[did].forces = dict(f)
+                state.lords[did].routed_units = dict(
+                    result.defender_lord_routed.get(did, {}))
+    elif len(dfd.lord_ids) == 1:
+        commit_forces_after_battle(state, dfd)
+
+    # 4.5.2 SACK: if the Besieged Defenders lose the Storm, the
+    # Stronghold is Sacked.
+    conq_result = None
+    sack = None
+    if result.winner == side:
+        from almoravid.actions import _shift_service_left as _ssl
+        from almoravid.battle import distribute_spoils_round_robin
+        from almoravid.state import Cylinder
+        from almoravid.static_data import load_strongholds as _ls
+        # Besieging Lords present (Spoils recipients).
+        besiegers_here = [
+            lord_obj.id for lord_obj in state.lords.values()
+            if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
+            and lord_obj.cylinder.locale_id == here
+        ]
+        sack_spoils: dict[AssetType, int] = {}
+        removed_lords: list[str] = []
+        # (a) Permanently remove all losing Lords (3.3.1); award all
+        #     their Assets as Spoils (4.4.3) — capture BEFORE cleanup.
+        for eid in enemy_inside:
+            elord = state.lords[eid]
+            for atype, n in list(elord.assets.items()):
+                if n > 0:
+                    sack_spoils[atype] = sack_spoils.get(atype, 0) + n
+            for fld in elord.cleanup_on_removal_fields:
+                try:
+                    setattr(elord, fld, type(getattr(elord, fld))())
+                except Exception:
+                    pass
+            elord.cylinder = Cylinder(kind="removed")
+            _ssl(state, eid, boxes=20)
+            removed_lords.append(eid)
+        # (b) Conquer the Stronghold as per Surrender (4.5.1).
+        conq_result = _conquer_stronghold(state, here, side)
+        # (c) In addition, award Stronghold Spoils (table) to besiegers.
+        sh_spoils = _ls()["strongholds"][loc.base_type].get("spoils", {})
+        for k in ("coin", "loot", "prov"):
+            if sh_spoils.get(k):
+                sack_spoils[k] = sack_spoils.get(k, 0) + sh_spoils[k]
+        if besiegers_here and sack_spoils:
+            distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
+        sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
+                "recipients": besiegers_here}
+
+    # 4.5.2 -> 4.4.4 Losses: both sides roll for Routed units. The
+    # Storm Attacker's Routed units always need a 1; the Defender
+    # always rolls Protection (handled by apply_battle_losses storm
+    # flag + winner path). Then 4.4.5 Aftermath.
+    from almoravid.battle import apply_battle_losses
+    apply_battle_losses(state, result, {"losers": []}, storm=True)
+    apply_aftermath(state, result)
+
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    _record(state, action,
+            f"{side} {lord_id} Storms {here}: winner={result.winner}, "
+            f"rounds={len(result.rounds)}"
+            + (f", Sack: {sack}" if sack else "")
+            + f"; card spent ({consumed} actions)")
+    return {"winner": result.winner, "rounds": len(result.rounds),
+            "conquest": conq_result, "sack": sack,
+            "actions_consumed": consumed}
+
+
 def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.5.2 Storm. Active Lord outside a Besieged Stronghold (i.e.,
     with at least one of our Siege markers at the Locale) assaults
@@ -3088,9 +3304,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.battle import (
         BattleSide,
-        apply_aftermath,
         battleside_for_lord,
-        commit_forces_after_battle,
         resolve_storm,
     )
     from almoravid.effective import is_besieged, is_friendly_locale
@@ -3176,112 +3390,40 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             forces={},
             capabilities_in_play=[],
         )
-    # Phase 6i: C6 Surprise pending → modify walls_range to -1.
+    # Phase 6i: C6 Surprise pending -> modify walls_range to -1.
     surprise_loc = state.meta.surprise_storm_pending_locale_id
+    walls_override: tuple[int, int] | None = None
     if surprise_loc == here:
         from almoravid.static_data import load_strongholds
         base_walls = load_strongholds()["strongholds"][loc.base_type]["walls_range"]
-        modified_walls = (base_walls[0], max(0, base_walls[1] - 1))
-    # Per-combat Storm policies (Option A): the controlling player
-    # pre-declares an optional Attacker concede round (S10, >=2) and
-    # whether the Defender brings Reserves to the Front (S11 Reposition;
-    # forced advance still applies when all Front Lords Rout).
-    concede_after_round = action.get("concede_after_round")
+        walls_override = (base_walls[0], max(0, base_walls[1] - 1))
     reposition_defender = bool(action.get("reposition_defender", True))
+    pl: dict[str, Any] = {
+        "engagement_label": "storm",
+        "finish": "storm",
+        "side": side,
+        "here": here,
+        "enemy_inside": enemy_inside,
+        "lord_id": lord_id,
+    }
+    # Reactive (round-stepped) Storm Concede (S10, Attacker-only, Round
+    # 2+). Opt-in so the synchronous default path is unchanged.
+    if bool(action.get("interactive_concede")):
+        if surprise_loc == here:
+            state.meta.surprise_storm_pending_locale_id = None
+        return _begin_interactive_storm(
+            state, action, atk, dfd, pl,
+            walls_range_override=walls_override,
+            reposition_defender=reposition_defender)
+    concede_after_round = action.get("concede_after_round")
+    result = resolve_storm(
+        state, atk, dfd, walls_range_override=walls_override,
+        concede_after_round=concede_after_round,
+        reposition_defender=reposition_defender)
     if surprise_loc == here:
-        result = resolve_storm(state, atk, dfd,
-                               walls_range_override=modified_walls,
-                               concede_after_round=concede_after_round,
-                               reposition_defender=reposition_defender)
         state.meta.surprise_storm_pending_locale_id = None
-    else:
-        result = resolve_storm(state, atk, dfd,
-                               concede_after_round=concede_after_round,
-                               reposition_defender=reposition_defender)
-    # S11b: commit each besieging Lord and each Defender Lord exactly
-    # from the per-Lord post-Storm forces (resolve_storm tracked them).
-    if result.attacker_lord_forces:
-        for bid, f in result.attacker_lord_forces.items():
-            if bid in state.lords:
-                state.lords[bid].forces = dict(f)
-                # S11b: write per-Lord Routed units so 4.4.4 Storm Losses
-                # (apply_battle_losses storm=True) roll per-Lord and any
-                # survivors return to that Lord's Forces.
-                state.lords[bid].routed_units = dict(
-                    result.attacker_lord_routed.get(bid, {}))
-    else:
-        commit_forces_after_battle(state, atk)
-    if result.defender_lord_forces:
-        for did, f in result.defender_lord_forces.items():
-            if did in state.lords:
-                state.lords[did].forces = dict(f)
-                state.lords[did].routed_units = dict(
-                    result.defender_lord_routed.get(did, {}))
-    elif len(dfd.lord_ids) == 1:
-        commit_forces_after_battle(state, dfd)
-
-    # 4.5.2 SACK: if the Besieged Defenders lose the Storm, the
-    # Stronghold is Sacked.
-    conq_result = None
-    sack = None
-    if result.winner == side:
-        from almoravid.actions import _shift_service_left as _ssl
-        from almoravid.battle import distribute_spoils_round_robin
-        from almoravid.state import Cylinder
-        from almoravid.static_data import load_strongholds as _ls
-        # Besieging Lords present (Spoils recipients).
-        besiegers_here = [
-            lord_obj.id for lord_obj in state.lords.values()
-            if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
-            and lord_obj.cylinder.locale_id == here
-        ]
-        sack_spoils: dict[AssetType, int] = {}
-        removed_lords: list[str] = []
-        # (a) Permanently remove all losing Lords (3.3.1); award all
-        #     their Assets as Spoils (4.4.3) — capture BEFORE cleanup.
-        for eid in enemy_inside:
-            elord = state.lords[eid]
-            for atype, n in list(elord.assets.items()):
-                if n > 0:
-                    sack_spoils[atype] = sack_spoils.get(atype, 0) + n
-            for fld in elord.cleanup_on_removal_fields:
-                try:
-                    setattr(elord, fld, type(getattr(elord, fld))())
-                except Exception:
-                    pass
-            elord.cylinder = Cylinder(kind="removed")
-            _ssl(state, eid, boxes=20)
-            removed_lords.append(eid)
-        # (b) Conquer the Stronghold as per Surrender (4.5.1).
-        conq_result = _conquer_stronghold(state, here, side)
-        # (c) In addition, award Stronghold Spoils (table) to besiegers.
-        sh_spoils = _ls()["strongholds"][loc.base_type].get("spoils", {})
-        for k in ("coin", "loot", "prov"):
-            if sh_spoils.get(k):
-                sack_spoils[k] = sack_spoils.get(k, 0) + sh_spoils[k]
-        if besiegers_here and sack_spoils:
-            distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
-        sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
-                "recipients": besiegers_here}
-
-    # 4.5.2 -> 4.4.4 Losses: both sides roll for Routed units. The
-    # Storm Attacker's Routed units always need a 1; the Defender
-    # always rolls Protection (handled by apply_battle_losses storm
-    # flag + winner path). Then 4.4.5 Aftermath.
-    from almoravid.battle import apply_battle_losses
-    apply_battle_losses(state, result, {"losers": []}, storm=True)
-    apply_aftermath(state, result)
-
-    consumed = state.meta.actions_remaining
-    state.meta.actions_remaining = 0
-    _record(state, action,
-            f"{side} {lord_id} Storms {here}: winner={result.winner}, "
-            f"rounds={len(result.rounds)}"
-            + (f", Sack: {sack}" if sack else "")
-            + f"; card spent ({consumed} actions)")
-    return {"winner": result.winner, "rounds": len(result.rounds),
-            "conquest": conq_result, "sack": sack,
-            "actions_consumed": consumed}
+    return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
+                         pl=pl)
 
 
 def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -3835,6 +3977,112 @@ def _h_respond_bypass(state: GameState, action: dict[str, Any]) -> dict[str, Any
             "actions_remaining": state.meta.actions_remaining}
 
 
+def _finish_relief_sally(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    result: Any,
+    atk: Any,
+    dfd: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Relief-Sally aftermath + the shared stand-battle tail (besiege/bypass
+    or restore control, end card). Used by the synchronous and interactive
+    relief-sally paths."""
+    from almoravid.battle import apply_relief_sally_aftermath
+    locale_id: str = pl["locale_id"]
+    active_side: Side = pl["active_side"]
+    side: Side = pl["side"]
+    retreat_summary = apply_relief_sally_aftermath(
+        state, result, locale_id=locale_id, besieger_side=pl["other"],
+        approach_from_locale=pl.get("from_locale_id"),
+        approach_way_type=pl.get("via_way_type"))
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    if not _set_besiege_or_bypass_pending(
+            state, locale_id, active_side, pl.get("active_lord_id")):
+        _clear_approach_pending(state, active_side)
+    _record(state, action,
+            f"{side} stands; Battle at {locale_id}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}")
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
+    }
+
+
+def _begin_interactive_relief(
+    state: GameState,
+    action: dict[str, Any],
+    marcher_ids: list[str],
+    sallyer_ids: list[str],
+    defender_lord_ids: list[str],
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Start a reactive Relief Sally: build the lane state and pause on a
+    relief_concede decision before Round 1 (either side may Concede)."""
+    from almoravid.battle import _relief_setup, _relief_to_snapshot
+    rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_lord_ids,
+                       besieger_side=pl["other"], locale_id=pl["locale_id"],
+                       max_rounds=6)
+    pl = dict(pl)
+    pl["rs"] = _relief_to_snapshot(rs)
+    pl["round_idx"] = 1
+    pl["max_rounds"] = 6
+    state.pending = PendingDecision(
+        kind="relief_concede", waiting_on=pl["active_side"], payload=pl)
+    state.meta.active_player = pl["active_side"]
+    return {"relief_sally": "awaiting_concede", "round": 1}
+
+
+def _h_relief_concede(state: GameState,
+                      action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one Relief-Sally Round after its start-of-Round Concede
+    declaration (4.4.2; either side, from Round 1). Runs the Round, then
+    finishes (Concede / Rout / Round cap) or re-pends for the next Round."""
+    from almoravid.battle import (
+        _relief_declare_concede,
+        _relief_finalize,
+        _relief_from_snapshot,
+        _relief_over,
+        _relief_run_round,
+        _relief_to_snapshot,
+    )
+    side = _require_side(action)
+    pd = _require_pending(state, "relief_concede", side)
+    pl = pd.payload
+    rs = _relief_from_snapshot(state, pl["rs"])
+    rnd_i: int = pl["round_idx"]
+    atk_concedes = bool(action.get("attacker_concede"))
+    dfd_concedes = bool(action.get("defender_concede"))
+    _relief_declare_concede(rs, atk_concedes=atk_concedes,
+                            dfd_concedes=dfd_concedes)
+    rs.result.rounds.append(_relief_run_round(state, rs, rnd_i))
+    ended = (atk_concedes or dfd_concedes
+             or _relief_over(state, rs)
+             or rnd_i >= pl["max_rounds"])
+    if not ended:
+        pl = dict(pl)
+        pl["rs"] = _relief_to_snapshot(rs)
+        pl["round_idx"] = rnd_i + 1
+        state.pending = PendingDecision(
+            kind="relief_concede", waiting_on=side, payload=pl)
+        return {"relief_sally": "in_progress", "round_resolved": rnd_i,
+                "rounds_done": len(rs.result.rounds)}
+    if atk_concedes or dfd_concedes:
+        rs.result.notes.append(
+            f"Round {rnd_i} ended with Concede; Relief Sally ends")
+    _relief_finalize(state, rs)
+    state.pending = None
+    return _finish_relief_sally(state, action, result=rs.result,
+                                atk=rs.result.attacker,
+                                dfd=rs.result.defender, pl=pl)
+
+
 def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
     on both sides at the Approach Locale. Battle ends the active side's
@@ -3893,6 +4141,20 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
+        relief_pl: dict[str, Any] = {
+            "side": side,
+            "locale_id": locale_id,
+            "active_side": active_side,
+            "other": other,
+            "from_locale_id": payload.get("from_locale_id"),
+            "via_way_type": payload.get("via_way_type"),
+            "active_lord_id": payload.get("active_lord_id"),
+        }
+        # Reactive (round-stepped) Concede for the Relief Sally (opt-in).
+        if bool(action.get("interactive_concede")):
+            return _begin_interactive_relief(
+                state, action, marcher_ids, sallyer_ids,
+                defender_lord_ids, relief_pl)
         from almoravid.battle import (
             apply_relief_sally_aftermath,
             resolve_relief_sally,
@@ -5247,6 +5509,8 @@ CAMPAIGN_HANDLERS = {
     "respond_besiege": _h_respond_besiege,
     "respond_bypass": _h_respond_bypass,
     "battle_concede": _h_battle_concede,
+    "storm_concede": _h_storm_concede,
+    "relief_concede": _h_relief_concede,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
     "play_al_qadir": _h_play_al_qadir,
