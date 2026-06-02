@@ -68,6 +68,21 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "choices": {lid: "add" for lid in locs}})
         return moves
 
+    # 4.4.2 CONCEDE THE FIELD? — reactive per-Round Concede declaration in
+    # an interactive Battle. The waiting side declares whether the Attacker
+    # and/or Defender Concedes this Round (Attacker then Defender). Offer
+    # the three meaningful choices; the driver may also send a custom
+    # combination of attacker_concede / defender_concede.
+    if (state.pending is not None
+            and state.pending.kind == "battle_concede"):
+        side = state.pending.waiting_on
+        moves.append({"type": "battle_concede", "side": side})
+        moves.append({"type": "battle_concede", "side": side,
+                      "attacker_concede": True})
+        moves.append({"type": "battle_concede", "side": side,
+                      "defender_concede": True})
+        return moves
+
     # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord
     # at a time (Supply / Ravage / pass), then Christian-then-Muslim Pay
     # (or done) at Sieges. Pattern 11: only the waiting_on side may act.

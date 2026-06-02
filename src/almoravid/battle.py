@@ -35,7 +35,7 @@ Bug-pattern preemption:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from almoravid.rng import roll_d6
@@ -815,6 +815,44 @@ def _battle_over(attacker: BattleSide, defender: BattleSide) -> bool:
     Reposition)."""
     return (_side_all_lords_routed(attacker)
             or _side_all_lords_routed(defender))
+
+
+def battle_side_to_snapshot(bs: BattleSide) -> dict[str, Any]:
+    """JSON-able snapshot of a BattleSide for suspend/resume of an
+    interactive (round-stepped) Battle. All fields are primitive
+    containers; `array` LordPositions are flattened by dataclasses.asdict.
+    """
+    return asdict(bs)
+
+
+def battle_side_from_snapshot(d: dict[str, Any]) -> BattleSide:
+    """Rebuild a BattleSide from battle_side_to_snapshot() output."""
+    arr = d.get("array")
+    array: list[LordPosition] | None = None
+    if arr is not None:
+        array = [
+            LordPosition(
+                lord_id=p["lord_id"],
+                position=p["position"],
+                forces=dict(p["forces"]),
+                capabilities_in_play=list(p["capabilities_in_play"]),
+                routed_units=dict(p["routed_units"]),
+                m7_marked=p["m7_marked"],
+            )
+            for p in arr
+        ]
+    return BattleSide(
+        side=d["side"],
+        role=d["role"],
+        lord_ids=list(d["lord_ids"]),
+        forces=dict(d["forces"]),
+        capabilities_in_play=list(d["capabilities_in_play"]),
+        routed_units=dict(d["routed_units"]),
+        garrison_forces=dict(d["garrison_forces"]),
+        m7_boosts_remaining=d["m7_boosts_remaining"],
+        array=array,
+        conceded=d["conceded"],
+    )
 
 
 def _battle_one_round(
