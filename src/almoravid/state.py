@@ -36,7 +36,7 @@ FUTURE_PROJECTS_LESSONS.md:
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -159,8 +159,9 @@ class Meta(StrictModel):
     # Default weakest_first (matches Nevsky). NOTE: the Storm Attacker
     # is RULE-FORCED to armored_first (4.5.2) regardless of this value.
     absorption_policy: dict[Side, str] = Field(
-        default_factory=lambda: {"christian": "weakest_first",
-                                 "muslim": "weakest_first"})
+        default_factory=lambda: cast("dict[Side, str]",
+                                     {"christian": "weakest_first",
+                                      "muslim": "weakest_first"}))
     # Phase 6i: Surprise (C6) consumed on March into empty Enemy
     # Stronghold — payload tells the next cmd_storm to use Walls-1
     # and applies +2 Siege markers (already placed by the cmd_march

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from importlib import resources
-from typing import Any
+from typing import Any, cast
 
 PACKAGE = "almoravid.data.static"
 
@@ -22,44 +22,44 @@ def _read(name: str) -> Any:
 @lru_cache(maxsize=1)
 def load_taifas() -> dict[str, Any]:
     """Return the parsed taifas.json. Cached."""
-    return _read("taifas.json")
+    return cast("dict[str, Any]", _read("taifas.json"))
 
 
 @lru_cache(maxsize=1)
 def load_locales() -> dict[str, Any]:
     """Return the parsed locales.json. Cached."""
-    return _read("locales.json")
+    return cast("dict[str, Any]", _read("locales.json"))
 
 
 @lru_cache(maxsize=1)
 def load_ways() -> dict[str, Any]:
     """Return the parsed ways.json. Cached."""
-    return _read("ways.json")
+    return cast("dict[str, Any]", _read("ways.json"))
 
 
 @lru_cache(maxsize=1)
 def load_lords() -> dict[str, Any]:
     """Return the parsed lords.json. Cached."""
-    return _read("lords.json")
+    return cast("dict[str, Any]", _read("lords.json"))
 
 
 @lru_cache(maxsize=1)
 def load_cards() -> dict[str, Any]:
     """Return the parsed cards.json. Cached."""
-    return _read("cards.json")
+    return cast("dict[str, Any]", _read("cards.json"))
 
 
 
 @lru_cache(maxsize=1)
 def load_forces() -> dict[str, Any]:
     """Return the parsed forces.json. Cached."""
-    return _read("forces.json")
+    return cast("dict[str, Any]", _read("forces.json"))
 
 
 @lru_cache(maxsize=1)
 def load_strongholds() -> dict[str, Any]:
     """Return the parsed strongholds.json. Cached."""
-    return _read("strongholds.json")
+    return cast("dict[str, Any]", _read("strongholds.json"))
 
 
 def neighbors(locale_id: str) -> list[tuple[str, str]]:

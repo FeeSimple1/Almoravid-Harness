@@ -25,6 +25,7 @@ from almoravid.state import (
     Calendar,
     CalendarBox,
     CardInPlay,
+    CardScope,
     Cylinder,
     Decks,
     GameState,
@@ -33,8 +34,11 @@ from almoravid.state import (
     Lord,
     Meta,
     Score,
+    Season,
     ServiceMarker,
     Side,
+    TurnType,
+    UnitType,
     Taifa,
     Vassal,
     Way,
@@ -90,7 +94,7 @@ def scenario_path(name: str) -> Path:
 def load_scenario_raw(name: str) -> dict[str, Any]:
     """Parse a scenario JSON file by stem. No conversion."""
     text = resources.files(PACKAGE).joinpath(f"{name}.json").read_text(encoding="utf-8")
-    return json.loads(text)
+    return cast("dict[str, Any]", json.loads(text))
 
 
 def load_scenario(name: str, seed: int = 0) -> GameState:
@@ -119,11 +123,11 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
     # ---- Calendar -------------------------------------------------
     boxes: list[CalendarBox] = []
     for box_n in range(1, 17):
-        season = _SEASON_BY_BOX[box_n]
+        season: Season = cast("Season", _SEASON_BY_BOX[box_n])
         # turn_type stub: Scenario F's winter sequence applies to 7-8;
         # 15-16 are also winter by season. Phase 2 will set this from
         # rules (Levy/Campaign sub-phases, Scenario F Winter, Curias).
-        turn_type = "winter" if season == "winter" else "campaign"
+        turn_type: TurnType = "winter" if season == "winter" else "campaign"
         boxes.append(CalendarBox(
             number=box_n, season=season, turn_type=turn_type,
         ))
@@ -317,7 +321,9 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
     capabilities_in_play: list[CardInPlay] = []
     for lid, lord in lords_state.items():
         for cap_id in lord.capabilities:
-            scope = cards_static.get(cap_id, {}).get("capability_scope") or "this_lord"
+            scope: CardScope = cast(
+                "CardScope",
+                cards_static.get(cap_id, {}).get("capability_scope") or "this_lord")
             capabilities_in_play.append(CardInPlay(
                 card_id=cap_id,
                 scope=scope,
@@ -392,7 +398,7 @@ _SAGRAJAS_CHRISTIANS = ["alfonso", "pedro_ansurez", "garcia_ordonez",
 _SAGRAJAS_MUSLIMS = ["yusuf", "sir", "al_mutamid", "al_mutawakkil", "abd_allah"]
 
 
-def _add_units(lord, units: dict) -> None:
+def _add_units(lord: Lord, units: dict[UnitType, int]) -> None:
     for ut, n in units.items():
         lord.forces[ut] = lord.forces.get(ut, 0) + n
 
