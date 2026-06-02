@@ -2397,8 +2397,8 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
       - Rustling: at Stronghold +1 Loot AND +1 Prov; at Region +1 Loot.
       - Enforcing Parias: if this is the 1st, 3rd, 5th... CHRISTIAN
         (yellow) Ravaged marker in the Taifa, shift that Taifa Lord's
-        (not Yusuf/Sir/Rodrigo) Service 1 box left. Phase 5c stub: log
-        the trigger; actual Service shift lands with Calendar mutators.
+        (not Yusuf/Sir/Rodrigo) Service 1 box left (applied below via
+        _shift_service_left).
     """
     from almoravid.effective import is_besieged, is_friendly_locale
 
@@ -2544,11 +2544,10 @@ def _conquer_stronghold(state: GameState, locale_id: str,
     # Independent + Christian conquers: Conquered (1 VP × value)
     # Reconquista + Muslim conquers: Jihad (1/2 VP × value)
     # Parias + either: 1 VP / 0.5 VP per side
-    # For Phase 5i baseline, use a simplified rule:
-    #   - Christian conquers Muslim: place Conquered yellow markers
-    #   - Muslim conquers Christian: place Conquered green markers
-    #   - Muslim conquers Conquered (Reconquista) Christian Stronghold:
-    #     place Jihad markers
+    # Full Table 4 rule (implemented below):
+    #   - Muslim conquers a Parias/Reconquista Taifa Stronghold -> Jihad;
+    #   - otherwise (incl. Christian conquest, Muslim conquest of a
+    #     Christian Kingdom) -> Conquered.
     # 1.4.4 / 4.5: Muslim Conquest of ANY Stronghold in a Parias or
     # Reconquista Taifa places Jihad markers (1 per Stronghold Value)
     # AND removes any Christian Conquered + Christian Seat markers

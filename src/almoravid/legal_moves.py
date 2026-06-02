@@ -418,10 +418,10 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     for clid, cl in state.lords.items():
         if (cl.side == side and cl.cylinder.kind == "locale"
                 and not cl.just_arrived_this_levy
+                and clid not in state.meta.muster_banned_this_levy_lord_ids
                 and cl.lordship_used < cl.lordship_rating):
             try:
                 cl_here = cl.cylinder.locale_id
-                assert cl_here is not None
                 assert cl_here is not None
                 if (is_friendly_locale(state, cl_here, side)
                         and not is_besieged(state, clid)):
