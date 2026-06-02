@@ -54,7 +54,7 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         return dump
     opp = _other(viewer_side)
     revealed = _combat_revealed_locales(state)
-    for lid, lord in dump["lords"].items():
+    for _lid, lord in dump["lords"].items():
         if lord.get("side") != opp:
             continue
         cyl = lord.get("cylinder", {})

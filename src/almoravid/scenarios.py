@@ -454,7 +454,7 @@ def build_sagrajas(seed: int = 0) -> GameState:
     lord_static = load_lords()["lords"]
 
     # Everyone off the board first.
-    for lid, lord in s.lords.items():
+    for _lid, lord in s.lords.items():
         lord.cylinder = Cylinder(kind="set_aside")
         lord.forces = {}
         lord.capabilities = []

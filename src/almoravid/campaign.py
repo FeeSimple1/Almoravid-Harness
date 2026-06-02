@@ -2881,8 +2881,8 @@ def _h_cmd_storm(state, action):
              "no active Lord", code="no_active_lord")
     lord_id = state.meta.active_lord_id
     lord = state.lords[lord_id]
-    _require(lord.side == side, code="wrong_side",
-             message=f"{lord_id} not on {side}'s side") if False else _require(lord.side == side, f"{lord_id} not on {side}'s side", code="wrong_side")
+    _require(lord.side == side, f"{lord_id} not on {side}'s side",
+             code="wrong_side")
     _require(not is_besieged(state, lord_id),
              "Besieged Lord must Sally not Storm", code="besieged")
     _apply_absorption_policy(state, side, action)
@@ -4007,7 +4007,7 @@ def compute_final_vp(state) -> tuple[float, float]:
     """
     christian = 0.0
     muslim = 0.0
-    for lid, loc in state.locales.items():
+    for _lid, loc in state.locales.items():
         is_taifa_terr = loc.territory in state.taifas
         if loc.conquered_markers:
             if is_taifa_terr:
@@ -4250,8 +4250,6 @@ def _apply_wastage(state) -> list[dict]:
             ]
             state.decks.discard.append(drop)
             out.append({"lord_id": lid, "discarded_capability": drop})
-    if out:
-        state.history.append  # no-op marker; recorded by caller log
     return out
 
 
@@ -4918,7 +4916,7 @@ def _h_resolve_battle(state, action):
         losers = [(def_side if winner == atk_side else atk_side)]
     else:
         losers = [atk_side, def_side]   # no decision: clear the field
-    for lid, lord in state.lords.items():
+    for _lid, lord in state.lords.items():
         if lord.side in losers:
             lord.cylinder = Cylinder(kind="removed")
             lord.in_stronghold = False

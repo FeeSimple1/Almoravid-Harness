@@ -463,7 +463,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if state.meta.phase != "levy" or state.meta.levy_step != "call_to_arms":
         return out
-    STRONG = ("city", "fortress", "town", "castle")
+    strong_types = ("city", "fortress", "town", "castle")
 
     def free_of_siege(lid: str) -> bool:
         loc = state.locales[lid]
@@ -533,7 +533,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             pay = build_payment("christian", 2, False)
             if pay is not None:
                 for lid, loc in state.locales.items():
-                    if (loc.base_type in STRONG and free_of_siege(lid)
+                    if (loc.base_type in strong_types and free_of_siege(lid)
                             and is_friendly_locale(state, lid, "christian")
                             and no_enemy_lord(lid)):
                         out.append({"type": "cta_employ_rodrigo",
@@ -553,7 +553,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         pay = build_payment("muslim", 3, True)
         if pay is not None:
             for lid, loc in state.locales.items():
-                if (loc.base_type in STRONG and free_of_siege(lid)
+                if (loc.base_type in strong_types and free_of_siege(lid)
                         and is_friendly_locale(state, lid, "muslim")
                         and no_enemy_lord(lid)):
                     out.append({"type": "cta_employ_rodrigo",

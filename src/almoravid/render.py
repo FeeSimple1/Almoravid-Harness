@@ -190,7 +190,8 @@ def render_summary(state: GameState) -> str:
     for tid in ("toledo", "badajoz", "granada", "valencia", "zaragoza", "lerida", "sevilla"):
         if tid in state.taifas:
             t = state.taifas[tid]
-            status_short = {"independent": "I", "parias": "P", "reconquista": "R", "kingdoms": "K"}[t.status]
+            status_short = {"independent": "I", "parias": "P",
+                            "reconquista": "R", "kingdoms": "K"}[t.status]
             t_parts.append(f"{t.name[:3]}={status_short}")
     lines.append("Taifas: " + " ".join(t_parts))
     lines.append("")
@@ -283,9 +284,11 @@ def render_verbose(state: GameState) -> str:
                 + "  ".join(parts)
             )
     if state.calendar.off_left or state.calendar.off_right:
-        out.append(f"  Off-edge cylinders: L={state.calendar.off_left} R={state.calendar.off_right}")
+        out.append(f"  Off-edge cylinders: L={state.calendar.off_left} "
+                   f"R={state.calendar.off_right}")
     if state.calendar.off_left_service or state.calendar.off_right_service:
-        out.append(f"  Off-edge service:   L={state.calendar.off_left_service} R={state.calendar.off_right_service}")
+        out.append(f"  Off-edge service:   L={state.calendar.off_left_service} "
+                   f"R={state.calendar.off_right_service}")
 
     # Lords full
     out.append("")
@@ -293,7 +296,8 @@ def render_verbose(state: GameState) -> str:
     for lid, lord in sorted(state.lords.items(), key=lambda kv: (kv[1].side, kv[1].name)):
         out.append(
             f"  {_SIDE_SHORT[lord.side]} {lord.name} ({lid}) "
-            f"F{lord.fealty}/S{lord.service_rating}/L{lord.lordship_rating}/C{lord.command_rating}  "
+            f"F{lord.fealty}/S{lord.service_rating}/"
+            f"L{lord.lordship_rating}/C{lord.command_rating}  "
             f"{_cylinder_short(lord)}"
         )
         if lord.forces:
@@ -383,8 +387,10 @@ def _render_focus_lord(state: GameState, lord_id: str) -> str:
         out.append(f"Routed units (this engagement): {_forces_short(lord.routed_units)}")
     out.append("")
     out.append("Per-card / per-Levy flags:")
-    out.append(f"  moved_fought={lord.moved_fought}  just_arrived_this_levy={lord.just_arrived_this_levy}")
-    out.append(f"  lordship_used={lord.lordship_used}  first_march_used_this_card={lord.first_march_used_this_card}")
+    out.append(f"  moved_fought={lord.moved_fought}  "
+               f"just_arrived_this_levy={lord.just_arrived_this_levy}")
+    out.append(f"  lordship_used={lord.lordship_used}  "
+               f"first_march_used_this_card={lord.first_march_used_this_card}")
     out.append(f"  raiders_used_this_card={lord.raiders_used_this_card}")
     return "\n".join(out)
 
@@ -394,9 +400,9 @@ def _render_focus_locale(state: GameState, loc_id: str) -> str:
     out = [
         f"=== Locale: {loc.name} ({loc_id}) ===",
         f"Territory: {loc.territory}",
-        f"Base type: {loc.base_type}"
-        + (f" (Cap {state.locales[loc_id]})" if False else ""),
-        f"Gardens: {loc.has_gardens}  |  Port: {loc.has_port}  |  Reconquista target: {loc.is_reconquista_target}",
+        f"Base type: {loc.base_type}",
+        f"Gardens: {loc.has_gardens}  |  Port: {loc.has_port}  |  "
+        f"Reconquista target: {loc.is_reconquista_target}",
         f"Printed seats: {', '.join(loc.printed_seat_lord_ids) or '—'}  |  "
         f"Seat markers: {', '.join(loc.seat_marker_lord_ids) or '—'}",
     ]
@@ -404,12 +410,15 @@ def _render_focus_locale(state: GameState, loc_id: str) -> str:
     if markers:
         out.append(f"Markers: {markers}")
     # Lords currently here
-    here = [lord for lord in state.lords.values() if lord.cylinder.kind == "locale" and lord.cylinder.locale_id == loc_id]
+    here = [lord for lord in state.lords.values()
+            if lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == loc_id]
     if here:
         out.append("")
         out.append("Lords here:")
         for lord in here:
-            out.append(f"  {_SIDE_SHORT[lord.side]} {lord.name}  forces=[{_forces_short(lord.forces)}]")
+            out.append(f"  {_SIDE_SHORT[lord.side]} {lord.name}  "
+                       f"forces=[{_forces_short(lord.forces)}]")
     # Adjacent locales (via Ways)
     from almoravid.static_data import neighbors
     nbrs = neighbors(loc_id)

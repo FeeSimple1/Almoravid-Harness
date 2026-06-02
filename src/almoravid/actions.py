@@ -144,7 +144,7 @@ def _advance_step_if_both_done(state: GameState) -> None:
         # Treating Phase 5j leftover pending_draw cards as discard
         # is the conservative choice.
         if current == "arts_of_war":
-            for side_key, cards in list(state.decks.pending_draw.items()):
+            for _side_key, cards in list(state.decks.pending_draw.items()):
                 state.decks.discard.extend(cards)
             state.decks.pending_draw = {}
         state.meta.levy_step = LEVY_STEPS[idx + 1]
@@ -1360,7 +1360,7 @@ def _flip_up_pennants(state: GameState, side: str) -> list[str]:
     return flipped
 
 
-def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
+def _compute_disband_target_box(state: GameState, lord: Lord) -> int:
     """Errata p.12: where the Disbanding Lord's cylinder lands.
 
     During Levy: current_box + service_rating.

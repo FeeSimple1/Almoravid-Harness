@@ -25,7 +25,9 @@ state so the eventual Battle code can find them.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+import math as _math
+from collections.abc import Callable
+from typing import Any
 
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
@@ -298,11 +300,6 @@ def _m12_taifa_marriage(state, side, card_id, payload):
 
 
 
-
-
-import math as _math
-
-
 @register("C10")  # Devaluation (Christian-played, drains Muslim Coin)
 def _c10_devaluation_christian(state, side, card_id, payload):
     """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
@@ -358,7 +355,7 @@ def _m14_devaluation_muslim(state, side, card_id, payload):
         return _no_op_with_note(state, card_id, side,
                                 "no Christian Coin at any Locale")
     total_removed = 0
-    for locale_id, lords in per_locale.items():
+    for _locale_id, lords in per_locale.items():
         total_before = sum(lord.assets.get("coin", 0) for lord in lords)
         target = _math.ceil(total_before / 2)
         to_remove = total_before - target
@@ -479,7 +476,9 @@ def _m23_berenguer_ramon(state, side, card_id, payload):
                                  "sancho", "eudes")
                 if lid in state.lords
                 and state.lords[lid].cylinder.kind == "locale"]
-    target = payload.get("target_lord_id") if payload.get("target_lord_id")         in eligible else (eligible[0] if eligible else None)
+    target = (payload.get("target_lord_id")
+              if payload.get("target_lord_id") in eligible
+              else (eligible[0] if eligible else None))
     if target is None:
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Lord on map")
@@ -1210,7 +1209,8 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
         cands = [lord for lord in state.lords.values()
                  if lord.side == "christian" and lord.cylinder.kind == "calendar"]
         target = state.lords.get(lid) if lid else None
-        if target is None or target.side != "christian"                 or target.cylinder.kind != "calendar":
+        if (target is None or target.side != "christian"
+                or target.cylinder.kind != "calendar"):
             target = cands[0] if cands else None
         if target is None:
             return _no_op_with_note(state, card_id, side,
@@ -1241,7 +1241,8 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
         return _no_op_with_note(state, card_id, side,
                                 "no Christian Lord on Calendar")
     lid = payload.get("lord_id")
-    target_sm = next((sm for sm in candidates if sm.lord_id == lid), None)         or min(candidates, key=lambda sm: sm.box)
+    target_sm = (next((sm for sm in candidates if sm.lord_id == lid), None)
+                 or min(candidates, key=lambda sm: sm.box))
     target_sm.box = min(16, target_sm.box + 1)
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
@@ -1367,7 +1368,7 @@ def _c20_al_qadir(state, side, card_id, payload):
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Taifa free of Muslim Lords")
     removed = 0
-    for taifa_id, lid in eligible:
+    for _taifa_id, lid in eligible:
         loc = state.locales[lid]
         take = min(loc.jihad_markers, 2 - removed)
         loc.jihad_markers -= take
