@@ -3178,7 +3178,12 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         forces=dfd_forces,
         capabilities_in_play=dfd_caps,
     )
-    result = resolve_sally(state, atk, dfd)
+    result = resolve_sally(
+        state, atk, dfd,
+        attacker_concede_round=_concede_round_arg(
+            action, "attacker_concede_round"),
+        defender_concede_round=_concede_round_arg(
+            action, "defender_concede_round"))
     commit_forces_after_battle(state, atk)
     if len(dfd.lord_ids) == 1:
         commit_forces_after_battle(state, dfd)
@@ -3725,7 +3730,11 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
         )
         result, lanes = resolve_relief_sally(
             state, marcher_ids, sallyer_ids, defender_lord_ids,
-            besieger_side=other, locale_id=locale_id)
+            besieger_side=other, locale_id=locale_id,
+            attacker_concede_round=_concede_round_arg(
+                action, "attacker_concede_round"),
+            defender_concede_round=_concede_round_arg(
+                action, "defender_concede_round"))
         marchers, sallyers, def_front, def_rear, shared = lanes
         # resolve_relief_sally has already committed each Lord's Forces +
         # Routed units exactly (per-Lord), so no proportional commit here.
