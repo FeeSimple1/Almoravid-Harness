@@ -232,14 +232,14 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
         for cyl in entry.get("cylinders", []):
             on_calendar_box[cyl] = entry["box"]
 
-    for lid, l in lord_static.items():
+    for lid, lord_obj in lord_static.items():
         # Pick cylinder location for this Lord
         in_stronghold = False
         if lid in mustered_index:
             m = mustered_index[lid]
             cylinder = Cylinder(kind="locale", locale_id=m["locale_id"])
-            forces = dict(l["forces"])
-            assets = dict(l["assets"])
+            forces = dict(lord_obj["forces"])
+            assets = dict(lord_obj["assets"])
             if "assets_override" in m:
                 assets.update(m["assets_override"])
             capabilities = list(m.get("capabilities", []))
@@ -273,20 +273,20 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
                    name=v["name"],
                    forces=v["forces"],
                    service_cost=v["service_cost"])
-            for i, v in enumerate(l["vassals"])
+            for i, v in enumerate(lord_obj["vassals"])
         ] if cylinder.kind == "locale" else []
 
         lords_state[lid] = Lord(
             id=lid,
-            name=l["name"],
-            side=l["side"],
-            is_taifa=l["is_taifa"],
-            home_taifa=l["home_taifa"],
-            seats=list(l["seats"]),
-            fealty=l["fealty"],
-            service_rating=l["service"],
-            lordship_rating=l["lordship"],
-            command_rating=l["command"],
+            name=lord_obj["name"],
+            side=lord_obj["side"],
+            is_taifa=lord_obj["is_taifa"],
+            home_taifa=lord_obj["home_taifa"],
+            seats=list(lord_obj["seats"]),
+            fealty=lord_obj["fealty"],
+            service_rating=lord_obj["service"],
+            lordship_rating=lord_obj["lordship"],
+            command_rating=lord_obj["command"],
             cylinder=cylinder,
             forces=forces,
             assets=assets,
@@ -433,7 +433,7 @@ def build_sagrajas(seed: int = 0) -> GameState:
     # Reset campaign clutter inherited from the Scenario F skeleton: a
     # battle-only minigame has no Taifa politics / VP markers / Sieges.
     s.taifas_box_vp = 0.0
-    s.taifas_box_coin = 0.0
+    s.taifas_box_coin = 0
     for loc in s.locales.values():
         loc.siege_yellow = 0
         loc.siege_green = 0
@@ -454,27 +454,27 @@ def build_sagrajas(seed: int = 0) -> GameState:
     lord_static = load_lords()["lords"]
 
     # Everyone off the board first.
-    for lid, l in s.lords.items():
-        l.cylinder = Cylinder(kind="set_aside")
-        l.forces = {}
-        l.capabilities = []
-        l.in_stronghold = False
-        l.is_lieutenant = False
-        l.lieutenant_of = None
-        l.routed_units = {}
+    for _lid, lord in s.lords.items():
+        lord.cylinder = Cylinder(kind="set_aside")
+        lord.forces = {}
+        lord.capabilities = []
+        lord.in_stronghold = False
+        lord.is_lieutenant = False
+        lord.lieutenant_of = None
+        lord.routed_units = {}
 
     def muster(lid: str, include_vassals: bool = True,
                exclude_vassal_names: tuple[str, ...] = ()) -> None:
-        l = s.lords[lid]
+        lord = s.lords[lid]
         st = lord_static[lid]
-        l.cylinder = Cylinder(kind="locale", locale_id=_SAGRAJAS_LOCALE)
-        l.in_stronghold = False
-        l.forces = dict(st["forces"])
+        lord.cylinder = Cylinder(kind="locale", locale_id=_SAGRAJAS_LOCALE)
+        lord.in_stronghold = False
+        lord.forces = dict(st["forces"])
         if include_vassals:
             for v in st.get("vassals", []):
                 if v["name"] in exclude_vassal_names:
                     continue
-                _add_units(l, v["forces"])
+                _add_units(lord, v["forces"])
 
     # --- Christians: all starting + all Vassal Forces (Sancho: no Vassals).
     for lid in ("alfonso", "pedro_ansurez", "garcia_ordonez", "alvar_fanez"):

@@ -41,19 +41,19 @@ def _make_rng(seed: int, rng_state: int) -> random.Random:
     return rng
 
 
-def roll_d6(state: "GameState") -> int:
+def roll_d6(state: GameState) -> int:
     """Roll a single d6, advancing state.meta.rng_state by 1."""
     rng = _make_rng(state.meta.seed, state.meta.rng_state)
     state.meta.rng_state += 1
     return rng.randint(1, 6)
 
 
-def roll_d6_n(state: "GameState", n: int) -> list[int]:
+def roll_d6_n(state: GameState, n: int) -> list[int]:
     """Roll n d6 results. Each roll advances rng_state by 1."""
     return [roll_d6(state) for _ in range(n)]
 
 
-def shuffle(state: "GameState", items: list[T]) -> list[T]:
+def shuffle(state: GameState, items: list[T]) -> list[T]:
     """Return a Fisher-Yates shuffle of items, advancing rng_state by 1.
 
     Empty / single-element lists still consume an rng_state tick so the

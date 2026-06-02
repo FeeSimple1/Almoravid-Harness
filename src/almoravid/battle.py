@@ -42,7 +42,6 @@ from almoravid.rng import roll_d6
 from almoravid.state import GameState, Side, UnitType
 from almoravid.static_data import load_forces
 
-
 Role = Literal["attacker", "defender"]
 StrikeKind = Literal["melee", "missiles", "javelins", "crossbows", "bowmen", "slingers"]
 UnitClass = Literal["horse", "foot"]
@@ -227,11 +226,11 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
         return
     contribs: list[tuple[int, str]] = []
     for lid in side.lord_ids:
-        l = state.lords.get(lid)
-        if l is None:
+        lord = state.lords.get(lid)
+        if lord is None:
             continue
-        af = (l.forces.get("men_at_arms", 0)
-              + l.forces.get("african_foot", 0))
+        af = (lord.forces.get("men_at_arms", 0)
+              + lord.forces.get("african_foot", 0))
         contribs.append((af, lid))
     contribs.sort(reverse=True)
     if side.array is not None:
@@ -489,13 +488,11 @@ def _resolve_protection_roll(
         return cs
 
     chosen = None
-    chosen_pool_name = None
     chosen_pool = None
-    for pool_name, pool in pools:
+    for _pool_name, pool in pools:
         cands = _build_candidates(pool)
         if cands:
             _, chosen = cands[0]
-            chosen_pool_name = pool_name
             chosen_pool = pool
             break
     if chosen is None:
@@ -1098,7 +1095,7 @@ def apply_aftermath(
     # roll for their Routed units per the rule.
 
     # Bug J (Pattern 13): clear this_levy_events; discard the held cards.
-    for side_key, cards in list(state.decks.this_levy_events.items()):
+    for _side_key, cards in list(state.decks.this_levy_events.items()):
         state.decks.discard.extend(cards)
     state.decks.this_levy_events = {}
 
@@ -1180,10 +1177,10 @@ def battleside_for_lords(
     forces: dict[UnitType, int] = {}
     caps: list[str] = []
     for lid in lord_ids:
-        l = state.lords[lid]
-        for ut, n in l.forces.items():
+        lord = state.lords[lid]
+        for ut, n in lord.forces.items():
             forces[ut] = forces.get(ut, 0) + n
-        caps.extend(l.capabilities)
+        caps.extend(lord.capabilities)
 
     side_obj = BattleSide(
         side=side, role=role, lord_ids=list(lord_ids),
@@ -1210,11 +1207,11 @@ def battleside_for_lords(
             else:
                 slots.append((lid, "reserve"))
         for lid, pos in slots:
-            l = state.lords[lid]
+            lord = state.lords[lid]
             array.append(LordPosition(
                 lord_id=lid, position=pos,
-                forces=dict(l.forces),
-                capabilities_in_play=list(l.capabilities),
+                forces=dict(lord.forces),
+                capabilities_in_play=list(lord.capabilities),
             ))
         side_obj.array = array
 
@@ -1426,21 +1423,21 @@ def resolve_storm(
     by Stronghold Capacity. Per-Lord post-Storm forces are exposed on the
     result (attacker_lord_forces / defender_lord_forces).
     """
-    from almoravid.static_data import load_strongholds
     from almoravid.capabilities import any_lord_with_capability
+    from almoravid.static_data import load_strongholds
 
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
     for lid in defender.lord_ids:
-        l = state.lords.get(lid)
-        if l and l.cylinder.kind == "locale":
-            locale_id = l.cylinder.locale_id
+        lord = state.lords.get(lid)
+        if lord and lord.cylinder.kind == "locale":
+            locale_id = lord.cylinder.locale_id
             break
     if locale_id is None:
         for lid in attacker.lord_ids:
-            l = state.lords.get(lid)
-            if l and l.cylinder.kind == "locale":
-                locale_id = l.cylinder.locale_id
+            lord = state.lords.get(lid)
+            if lord and lord.cylinder.kind == "locale":
+                locale_id = lord.cylinder.locale_id
                 break
     walls_range = (1, 4)
     capacity = 1
@@ -1755,9 +1752,9 @@ def resolve_sally(
     # side's Siege markers there.
     locale_id = None
     for lid in attacker.lord_ids:
-        l = state.lords.get(lid)
-        if l and l.cylinder.kind == "locale":
-            locale_id = l.cylinder.locale_id
+        lord = state.lords.get(lid)
+        if lord and lord.cylinder.kind == "locale":
+            locale_id = lord.cylinder.locale_id
             break
     defender_walls = None
     if locale_id is not None:
@@ -1856,10 +1853,10 @@ def _pooled_battleside(state: GameState, lord_ids: list[str],
     forces: dict[UnitType, int] = {}
     caps: list[str] = []
     for lid in lord_ids:
-        l = state.lords[lid]
-        for ut, n in l.forces.items():
+        lord = state.lords[lid]
+        for ut, n in lord.forces.items():
             forces[ut] = forces.get(ut, 0) + n
-        caps.extend(l.capabilities)
+        caps.extend(lord.capabilities)
     return BattleSide(side=side, role=role, lord_ids=list(lord_ids),
                       forces=forces, capabilities_in_play=caps)
 
@@ -2276,7 +2273,7 @@ def _consume_camp_attack(
         # behavior is reproducible under self-play.
         friendly = attacker if attacker.side == side_key else defender
         enemy = defender if friendly is attacker else attacker
-        ASSET_DRAIN_ORDER = ("coin", "loot", "prov", "cart", "mule")
+        asset_drain_order = ("coin", "loot", "prov", "cart", "mule")
         total_spoils: dict[str, int] = {}
         for elid in enemy.lord_ids:
             elord = state.lords.get(elid)
@@ -2284,7 +2281,7 @@ def _consume_camp_attack(
                 continue
             # Phase 1: take 2 as Spoils.
             taken = 0
-            for atype in ASSET_DRAIN_ORDER:
+            for atype in asset_drain_order:
                 if taken >= 2:
                     break
                 have = elord.assets.get(atype, 0)
@@ -2297,7 +2294,7 @@ def _consume_camp_attack(
                     taken += take
             # Phase 2: remove 2 more.
             removed = 0
-            for atype in ASSET_DRAIN_ORDER:
+            for atype in asset_drain_order:
                 if removed >= 2:
                     break
                 have = elord.assets.get(atype, 0)
@@ -2401,7 +2398,7 @@ def apply_retreat_aftermath(
     """
     from almoravid.actions import _shift_service_left
     from almoravid.effective import (
-        is_besieged, is_bypassed, is_friendly_locale,
+        is_friendly_locale,
     )
     from almoravid.map import neighbors_via
     from almoravid.rng import roll_d6
@@ -2443,9 +2440,9 @@ def apply_retreat_aftermath(
     # Battle locale = first loser Lord's cylinder.locale_id.
     battle_locale = None
     for lid in loser_side_obj.lord_ids:
-        l = state.lords.get(lid)
-        if l is not None and l.cylinder.kind == "locale":
-            battle_locale = l.cylinder.locale_id
+        lord_obj = state.lords.get(lid)
+        if lord_obj is not None and lord_obj.cylinder.kind == "locale":
+            battle_locale = lord_obj.cylinder.locale_id
             break
     if battle_locale is None:
         return summary
@@ -2474,10 +2471,10 @@ def apply_retreat_aftermath(
     else:
         capacity = 0
     already_inside = sum(
-        1 for l in state.lords.values()
-        if l.cylinder.kind == "locale"
-        and l.cylinder.locale_id == battle_locale
-        and l.in_stronghold
+        1 for lord_obj in state.lords.values()
+        if lord_obj.cylinder.kind == "locale"
+        and lord_obj.cylinder.locale_id == battle_locale
+        and lord_obj.in_stronghold
     )
 
     # Iterate losing Lords in stable order so RNG draws are
@@ -2547,11 +2544,11 @@ def apply_retreat_aftermath(
             # available (preferring loot/cart/mule/prov, keeping coin
             # for Pay step). If no Asset is available, the opt-out
             # cannot be exercised and the Service-shift fires normally.
-            ASSET_PAY_ORDER = ("loot", "mule", "cart", "prov", "coin")
+            asset_pay_order = ("loot", "mule", "cart", "prov", "coin")
             c7_held = "C7" in state.decks.this_levy_events.get("christian", [])
             opt_out_used = False
             if c7_held and loser_side == "christian":
-                for atype in ASSET_PAY_ORDER:
+                for atype in asset_pay_order:
                     if lord.assets.get(atype, 0) > 0:
                         lord.assets[atype] -= 1
                         if lord.assets[atype] == 0:
@@ -2612,13 +2609,15 @@ def _retreat_target_clear(
     """Per rule 4.4.3 retreat requires: no Enemy Lord and no Enemy
     Stronghold (unless Besieged or Bypassed)."""
     from almoravid.effective import (
-        is_besieged, is_bypassed, is_friendly_locale,
+        is_besieged,
+        is_bypassed,
+        is_friendly_locale,
     )
     other = "muslim" if retreating_side == "christian" else "christian"
-    for l in state.lords.values():
-        if (l.side == other and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == locale_id):
-            if not (is_besieged(state, l.id) or is_bypassed(state, l.id)):
+    for lord in state.lords.values():
+        if (lord.side == other and lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == locale_id):
+            if not (is_besieged(state, lord.id) or is_bypassed(state, lord.id)):
                 return False
     loc = state.locales[locale_id]
     if loc.base_type != "region" and not is_friendly_locale(
@@ -2678,7 +2677,7 @@ def _reposition_array(side: BattleSide) -> None:
     empties = [s for s in front_slots if s not in filled]
     reserves = [lp for lp in side.array if lp.position == "reserve"
                 and lp.has_unrouted()]
-    for slot, lp in zip(empties, reserves):
+    for slot, lp in zip(empties, reserves, strict=False):
         lp.position = slot
     # Step 3: center-fill (mandatory slide from left/right if center empty).
     has_center = any(lp.position == "front_center" for lp in side.array)
@@ -2712,7 +2711,9 @@ def _flanking_contribution(side: BattleSide, opposite: BattleSide) -> int:
                   and lp.has_unrouted()}
     count = 0
     for lp in side.array:
-        if lp.position in ("front_center", "front_left", "front_right")                 and lp.has_unrouted()                 and lp.position not in opp_filled:
+        if (lp.position in ("front_center", "front_left", "front_right")
+                and lp.has_unrouted()
+                and lp.position not in opp_filled):
             count += 1
     return count
 
@@ -2725,7 +2726,7 @@ def _flanking_contribution(side: BattleSide, opposite: BattleSide) -> int:
 def _build_strike_rows_for_position(
     state: GameState,
     side: BattleSide,
-    lp: "LordPosition",
+    lp: LordPosition,
     *,
     context: Literal["battle", "storm"] = "battle",
 ) -> list[StrikeRow]:
@@ -2774,7 +2775,7 @@ def _build_strike_rows_for_position(
 def _resolve_protection_roll_for_lp(
     state: GameState,
     side: BattleSide,
-    target_lp: "LordPosition",
+    target_lp: LordPosition,
     striker_kind: StrikeKind,
     *,
     context: Literal["battle", "storm"] = "battle",
@@ -2884,7 +2885,7 @@ def _resolve_protection_roll_for_lp(
     return (False, chosen)
 
 
-def _pick_flank_target(side: BattleSide) -> "LordPosition | None":
+def _pick_flank_target(side: BattleSide) -> LordPosition | None:
     """Greedy flank target: pick the Front-position Lord with the most
     unrouted units. Per rule 4.4.2 the Flanking Lord's owner chooses
     between Flanking or directly-opposed Enemy — here we route to the

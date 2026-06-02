@@ -36,7 +36,6 @@ from almoravid.state import (
 )
 from almoravid.static_data import load_cards, load_lords
 
-
 # ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
@@ -145,7 +144,7 @@ def _advance_step_if_both_done(state: GameState) -> None:
         # Treating Phase 5j leftover pending_draw cards as discard
         # is the conservative choice.
         if current == "arts_of_war":
-            for side_key, cards in list(state.decks.pending_draw.items()):
+            for _side_key, cards in list(state.decks.pending_draw.items()):
                 state.decks.discard.extend(cards)
             state.decks.pending_draw = {}
         state.meta.levy_step = LEVY_STEPS[idx + 1]
@@ -177,9 +176,11 @@ def _advance_step_if_both_done(state: GameState) -> None:
         # Rule 5.2: entering the Campaign, a side with no Mustered Lords
         # on the map loses immediately (it also could not legally build a
         # Plan, 4.1.1/1.9.2). Check at this Levy->Campaign boundary.
-        from almoravid.campaign import (check_campaign_victory,
-                                          compute_victory,
-                                          _apply_capability_discard)
+        from almoravid.campaign import (
+            _apply_capability_discard,
+            check_campaign_victory,
+            compute_victory,
+        )
         if check_campaign_victory(state) is not None:
             compute_victory(state)
             state.meta.phase = "ended"
@@ -369,9 +370,9 @@ def _rebuild_aow_deck(state: GameState, side: str) -> int:
     excluded.update(state.decks.board_edge.get(side, []))
     excluded.update(c.card_id for c in state.decks.capabilities_in_play
                     if c.owner_side == side)
-    for l in state.lords.values():
-        if l.side == side:
-            excluded.update(l.capabilities)
+    for lord in state.lords.values():
+        if lord.side == side:
+            excluded.update(lord.capabilities)
     excluded.update(state.decks.pending_draw.get(side, []))
     state.decks.draw = [cid for cid, c in cards.items()
                         if c["side"] == side and cid not in excluded]
@@ -449,8 +450,8 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
         # receive it; such a card is discarded (no Capability assigned).
         _cap_ok = True
         if lord is not None:
-            from almoravid.static_data import load_cards as _lc
             from almoravid.capabilities import capability_eligible_lords as _cel
+            from almoravid.static_data import load_cards as _lc
             _nm = _lc()["cards"].get(card_id, {}).get("capability_name")
             _elig = _cel(card_id)   # 3.4.4 card-text eligible-Lord set [Q-001]
             _cap_ok = (_nm not in _this_lord_cap_titles(lord)
@@ -707,9 +708,9 @@ def _cta_seat_has_enemy_lord(state: GameState, locale_id: str,
     (same test as the normal-Muster _free_seats_for helper, so the CtA
     auto-Muster paths stay consistent with 3.4.1 Muster). [P-5 playtest]"""
     return any(
-        l.cylinder.kind == "locale" and l.cylinder.locale_id == locale_id
-        and l.side != side
-        for l in state.lords.values()
+        lord.cylinder.kind == "locale" and lord.cylinder.locale_id == locale_id
+        and lord.side != side
+        for lord in state.lords.values()
     )
 
 
@@ -850,8 +851,8 @@ def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[s
     campeador = state.lords["rodrigo_campeador"]
     sayyid_on_map = sayyid.cylinder.kind == "locale"
     christian_removed = any(
-        l.side == "christian" and l.cylinder.kind == "removed"
-        for l in state.lords.values())
+        lord.side == "christian" and lord.cylinder.kind == "removed"
+        for lord in state.lords.values())
     _require(sayyid_on_map or christian_removed,
              "Reconcile needs al-Sayyid on the map OR a permanently "
              "removed Christian Lord (3.5.1)", code="cta_unavailable")
@@ -1057,10 +1058,10 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
     _cta_require_turn(state, side)
     yusuf = state.lords["yusuf"]
     sir = state.lords["sir"]
-    for lid, l in (("yusuf", yusuf), ("sir", sir)):
-        _require(l.cylinder.kind == "calendar"
-                 and l.cylinder.box is not None
-                 and l.cylinder.box <= state.calendar.current_box,
+    for lid, lord in (("yusuf", yusuf), ("sir", sir)):
+        _require(lord.cylinder.kind == "calendar"
+                 and lord.cylinder.box is not None
+                 and lord.cylinder.box <= state.calendar.current_box,
                  f"{lid} is not Ready on the Calendar (3.5.2)",
                  code="not_ready")
     from almoravid.events import _jihad_eligible_locales
@@ -1104,7 +1105,7 @@ def _h_cta_call_emir(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(side == "muslim", "Call upon an Emir is Muslim (3.5.2)",
              code="wrong_side")
     _cta_require_turn(state, side)
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_friendly_locale
     yusuf = state.lords["yusuf"]
     _require(yusuf.cylinder.kind == "locale",
              "Yusuf is not on the map (3.5.2)", code="not_on_map")
@@ -1122,7 +1123,7 @@ def _h_cta_call_emir(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     # The Seat Locale must be neither Enemy nor Besieged.
     _require(is_friendly_locale(state, here, "muslim"),
              f"{here} is Enemy to the Muslims (3.5.2)", code="enemy_locale")
-    _require(loc_unbesieged := _cta_locale_free_of_siege(state, here),
+    _require(_cta_locale_free_of_siege(state, here),
              f"{here} is Besieged (3.5.2)", code="under_siege")
     mode = action.get("mode")
     _require(mode in ("muster", "shift"),
@@ -1359,7 +1360,7 @@ def _flip_up_pennants(state: GameState, side: str) -> list[str]:
     return flipped
 
 
-def _compute_disband_target_box(state: GameState, lord: "Lord") -> int:
+def _compute_disband_target_box(state: GameState, lord: Lord) -> int:
     """Errata p.12: where the Disbanding Lord's cylinder lands.
 
     During Levy: current_box + service_rating.
@@ -1490,8 +1491,8 @@ def _award_parias_coin(state: GameState, amount: int, targets) -> dict[str, Any]
     placed (stays in the pool).
     """
     from almoravid.effective import is_besieged
-    eligible = [lid for lid, l in state.lords.items()
-                if l.side == "christian" and l.cylinder.kind == "locale"
+    eligible = [lid for lid, lord_obj in state.lords.items()
+                if lord_obj.side == "christian" and lord_obj.cylinder.kind == "locale"
                 and not is_besieged(state, lid)]
     if not eligible:
         return {"amount": amount, "placed": {}, "unplaced": amount,
@@ -1569,7 +1570,7 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # 1.6 no-Forces auto-Disband (3.3.2) bypasses the at-limit gate.
     bypass_limit = bool(action.get("bypass_limit_check"))
     if sm is None:
-        beyond, at_limit = True, False  # off the Calendar (off-left)
+        beyond = True  # off the Calendar (off-left)
     else:
         if not bypass_limit:
             _require(sm.box <= cur,
@@ -1577,7 +1578,6 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      f"Levy marker (box {cur}) — not subject to Disband (3.3)",
                      code="not_at_limit")
         beyond = sm.box < cur
-        at_limit = sm.box >= cur  # at limit OR (forced) right-of-limit
 
     # 3.3.2 Important / 1.4.3: Independent Taifa Lord -> Parias + Coin + VP.
     taifa_adjust = None
@@ -1705,7 +1705,7 @@ def _require_levy_actor_eligible(state: GameState, lord, lord_id: str) -> None:
     at a Friendly Locale with no Siege there (he may be Bypassed,
     4.3.5). Applies to all Lordship-spending Levy actions (Levy Lord
     to Muster, Levy Vassal, Levy Transport, Levy Capability)."""
-    from almoravid.effective import is_friendly_locale, is_besieged
+    from almoravid.effective import is_besieged, is_friendly_locale
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not on the map (3.4)", code="not_on_map")
     here = lord.cylinder.locale_id
@@ -1848,9 +1848,9 @@ def _unused_capability_cards(state: GameState, side: str) -> list[str]:
     excluded.update(state.decks.board_edge.get(side, []))
     excluded.update(c.card_id for c in state.decks.capabilities_in_play
                     if c.owner_side == side)
-    for l in state.lords.values():
-        if l.side == side:
-            excluded.update(l.capabilities)
+    for lord in state.lords.values():
+        if lord.side == side:
+            excluded.update(lord.capabilities)
     excluded.update(state.decks.pending_draw.get(side, []))
     return [cid for cid, c in cards.items()
             if c["side"] == side and cid not in excluded
@@ -1874,8 +1874,8 @@ def _check_this_lord_cap_limits(lord, card_id: str) -> None:
     Christian captains). [Q-001] Enforced as a hard gate on adding a new
     one (rather than a forced discard, which would require a separate
     player choice)."""
-    from almoravid.static_data import load_cards
     from almoravid.capabilities import capability_eligible_lords
+    from almoravid.static_data import load_cards
     cards = load_cards()["cards"]
     new_title = cards.get(card_id, {}).get("capability_name")
     _elig = capability_eligible_lords(card_id)

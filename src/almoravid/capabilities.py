@@ -17,7 +17,6 @@ from __future__ import annotations
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
 
-
 # Eligible-Lord sets for This-Lord capabilities whose card text restricts
 # WHO may hold them (Arts of War Reference "Lords." line; 3.4.4). The four
 # Christian "captains" share one list across C8 Hueste, C15 Alferez, and
@@ -86,8 +85,8 @@ def any_lord_with_capability(
     if _scope_of(card_id) != "this_lord":
         return []
     return [
-        lid for lid, l in state.lords.items()
-        if l.side == side and card_id in l.capabilities
+        lid for lid, lord in state.lords.items()
+        if lord.side == side and card_id in lord.capabilities
     ]
 
 

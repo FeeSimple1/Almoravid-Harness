@@ -101,7 +101,7 @@ def new(
         state = load_scenario(scenario, seed=seed)
     except FileNotFoundError as e:
         typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     _write_state(state, output)
     typer.echo(f"wrote {output}")
 
@@ -149,7 +149,7 @@ def view(
             typer.echo(render_focus(s, focus_target))
         except ValueError as e:
             typer.echo(f"error: {e}", err=True)
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     else:
         typer.echo(f"error: unknown mode {mode!r}; use summary | verbose | focus",
                    err=True)
@@ -187,12 +187,12 @@ def do(
         action = json.loads(action_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         typer.echo(f"error: action_file is not valid JSON: {e}", err=True)
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from None
     try:
         result = apply_action(s, action)
     except IllegalAction as e:
         typer.echo(f"illegal_action[{e.code}]: {e}", err=True)
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from None
     target = output if output is not None else state_file
     _write_state(s, target)
     typer.echo(f"OK: {json.dumps(result, sort_keys=True)}")

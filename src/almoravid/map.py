@@ -89,16 +89,16 @@ def neighbors_via(locale_id: str, way_type: str) -> list[str]:
 def christian_kingdom_locales() -> list[str]:
     """Locale ids in León or Aragón (Christian Kingdoms)."""
     return [
-        lid for lid, l in load_locales()["locales"].items()
-        if l["territory"] in ("leon", "aragon")
+        lid for lid, lord in load_locales()["locales"].items()
+        if lord["territory"] in ("leon", "aragon")
     ]
 
 
 def taifa_locales(taifa_id: str) -> list[str]:
     """Locale ids belonging to the named Taifa."""
     return [
-        lid for lid, l in load_locales()["locales"].items()
-        if l["territory"] == taifa_id
+        lid for lid, lord in load_locales()["locales"].items()
+        if lord["territory"] == taifa_id
     ]
 
 

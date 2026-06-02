@@ -25,11 +25,12 @@ state so the eventual Battle code can find them.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+import math as _math
+from collections.abc import Callable
+from typing import Any
 
 from almoravid.state import GameState, Side
 from almoravid.static_data import load_cards
-
 
 # (state, side, card_id, payload) -> result dict
 ResolverFn = Callable[[GameState, Side, str, dict[str, Any]], dict[str, Any]]
@@ -173,18 +174,18 @@ def _drought(state, side, card_id, payload):
     from almoravid.effective import has_gardens, is_friendly_locale
     target_side: Side = "muslim" if card_id == "C5" else "christian"
     candidates: list[str] = []
-    for l in state.lords.values():
-        if l.side != target_side:
+    for lord in state.lords.values():
+        if lord.side != target_side:
             continue
-        if l.cylinder.kind != "locale":
+        if lord.cylinder.kind != "locale":
             continue
-        loc_id = l.cylinder.locale_id
+        loc_id = lord.cylinder.locale_id
         gardens_ok = has_gardens(state, loc_id)
-        seat_ok = loc_id in state.lords[l.id].seats
+        seat_ok = loc_id in state.lords[lord.id].seats
         friendly = is_friendly_locale(state, loc_id, target_side)
         if (gardens_ok or seat_ok) and friendly:
             continue
-        candidates.append(l.id)
+        candidates.append(lord.id)
     if not candidates:
         return _no_op_with_note(state, card_id, side,
                                 f"no eligible {target_side} Lord to Feed")
@@ -254,8 +255,8 @@ def _m12_taifa_marriage(state, side, card_id, payload):
     Service marker RIGHT (toward end of campaign, +1 box).
     payload['lord_ids']: optional explicit list of up to 2 Lord IDs.
     """
-    taifa_lord_ids = [lid for lid, l in state.lords.items()
-                      if l.is_taifa and l.side == "muslim"]
+    taifa_lord_ids = [lid for lid, lord in state.lords.items()
+                      if lord.is_taifa and lord.side == "muslim"]
     # Lordship +2 branch: payload['mode']=='lordship', one Lord.
     if payload.get("mode") == "lordship":
         lid = payload.get("lord_id")
@@ -275,15 +276,15 @@ def _m12_taifa_marriage(state, side, card_id, payload):
                                 "no Taifa Lord eligible")
     shifted = []
     for lid in chosen[:2]:
-        l = state.lords.get(lid)
-        if l is None:
+        lord = state.lords.get(lid)
+        if lord is None:
             continue
-        if l.cylinder.kind == "calendar":
+        if lord.cylinder.kind == "calendar":
             # Shift cylinder LEFT (toward box 1 / earlier activation).
-            cur = l.cylinder.box if l.cylinder.box is not None else 1
-            l.cylinder.box = max(0, cur - 1)
+            cur = lord.cylinder.box if lord.cylinder.box is not None else 1
+            lord.cylinder.box = max(0, cur - 1)
             shifted.append({"lord_id": lid, "shifted": "cylinder_left",
-                            "new_cylinder_box": l.cylinder.box})
+                            "new_cylinder_box": lord.cylinder.box})
         else:
             sm = next((s for s in state.calendar.service_markers
                        if s.lord_id == lid), None)
@@ -299,11 +300,6 @@ def _m12_taifa_marriage(state, side, card_id, payload):
 
 
 
-
-
-import math as _math
-
-
 @register("C10")  # Devaluation (Christian-played, drains Muslim Coin)
 def _c10_devaluation_christian(state, side, card_id, payload):
     """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
@@ -313,9 +309,9 @@ def _c10_devaluation_christian(state, side, card_id, payload):
     Taifas-box Coin is not modeled in state (no Taifa.assets field) so
     only Lord-held Coin is affected. Pattern 10: no Coin -> no-op.
     """
-    muslim_lords = [l for l in state.lords.values() if l.side == "muslim"]
+    muslim_lords = [lord for lord in state.lords.values() if lord.side == "muslim"]
     box = state.taifas_box_coin
-    total_before = sum(l.assets.get("coin", 0) for l in muslim_lords) + box
+    total_before = sum(lord.assets.get("coin", 0) for lord in muslim_lords) + box
     if total_before == 0:
         return _no_op_with_note(state, card_id, side,
                                 "no Muslim Coin to devalue")
@@ -326,15 +322,15 @@ def _c10_devaluation_christian(state, side, card_id, payload):
     box_take = min(box, to_remove)
     state.taifas_box_coin -= box_take
     removed += box_take
-    for l in sorted(muslim_lords, key=lambda x: x.id):
+    for lord in sorted(muslim_lords, key=lambda x: x.id):
         if removed >= to_remove:
             break
-        have = l.assets.get("coin", 0)
+        have = lord.assets.get("coin", 0)
         take = min(have, to_remove - removed)
         if take > 0:
-            l.assets["coin"] = have - take
-            if l.assets["coin"] == 0:
-                l.assets.pop("coin", None)
+            lord.assets["coin"] = have - take
+            if lord.assets["coin"] == 0:
+                lord.assets.pop("coin", None)
             removed += take
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
@@ -351,28 +347,28 @@ def _m14_devaluation_muslim(state, side, card_id, payload):
     Coin -> no-op.
     """
     per_locale: dict[str, list] = {}
-    for l in state.lords.values():
-        if (l.side == "christian" and l.cylinder.kind == "locale"
-                and l.assets.get("coin", 0) > 0):
-            per_locale.setdefault(l.cylinder.locale_id, []).append(l)
+    for lord in state.lords.values():
+        if (lord.side == "christian" and lord.cylinder.kind == "locale"
+                and lord.assets.get("coin", 0) > 0):
+            per_locale.setdefault(lord.cylinder.locale_id, []).append(lord)
     if not per_locale:
         return _no_op_with_note(state, card_id, side,
                                 "no Christian Coin at any Locale")
     total_removed = 0
-    for locale_id, lords in per_locale.items():
-        total_before = sum(l.assets.get("coin", 0) for l in lords)
+    for _locale_id, lords in per_locale.items():
+        total_before = sum(lord.assets.get("coin", 0) for lord in lords)
         target = _math.ceil(total_before / 2)
         to_remove = total_before - target
         removed = 0
-        for l in sorted(lords, key=lambda x: x.id):
+        for lord in sorted(lords, key=lambda x: x.id):
             if removed >= to_remove:
                 break
-            have = l.assets.get("coin", 0)
+            have = lord.assets.get("coin", 0)
             take = min(have, to_remove - removed)
             if take > 0:
-                l.assets["coin"] = have - take
-                if l.assets["coin"] == 0:
-                    l.assets.pop("coin", None)
+                lord.assets["coin"] = have - take
+                if lord.assets["coin"] == 0:
+                    lord.assets.pop("coin", None)
                 removed += take
         total_removed += removed
     state.decks.discard.append(card_id)
@@ -480,7 +476,9 @@ def _m23_berenguer_ramon(state, side, card_id, payload):
                                  "sancho", "eudes")
                 if lid in state.lords
                 and state.lords[lid].cylinder.kind == "locale"]
-    target = payload.get("target_lord_id") if payload.get("target_lord_id")         in eligible else (eligible[0] if eligible else None)
+    target = (payload.get("target_lord_id")
+              if payload.get("target_lord_id") in eligible
+              else (eligible[0] if eligible else None))
     if target is None:
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Lord on map")
@@ -516,10 +514,10 @@ def _crusader_event(state, side, card_id, payload):
     from almoravid.effective import is_besieged
     target_lord_id = payload.get("target_lord_id")
     available_christians = [
-        l.id for l in state.lords.values()
-        if l.side == "christian"
-        and l.cylinder.kind == "locale"
-        and not is_besieged(state, l.id)
+        lord.id for lord in state.lords.values()
+        if lord.side == "christian"
+        and lord.cylinder.kind == "locale"
+        and not is_besieged(state, lord.id)
     ]
     if not available_christians:
         return _no_op_with_note(state, card_id, side,
@@ -654,9 +652,9 @@ def _m15_parias_revolt(state, side, card_id, payload):
     add = 1
     if loc.jihad_markers > 0:
         add = 2
-    here_lord_ids = [l.id for l in state.lords.values()
-                     if l.cylinder.kind == "locale"
-                     and l.cylinder.locale_id == locale_id]
+    here_lord_ids = [lord.id for lord in state.lords.values()
+                     if lord.cylinder.kind == "locale"
+                     and lord.cylinder.locale_id == locale_id]
     if "yusuf" in here_lord_ids or "sir" in here_lord_ids:
         add = 3
     loc.jihad_markers += add
@@ -781,11 +779,11 @@ def _jihad_eligible_locales(
     if same_taifa_as:
         allowed_taifa_ids = set()
         for lid in same_taifa_as:
-            l = state.lords.get(lid)
-            if l is None or l.cylinder.kind != "locale":
+            lord = state.lords.get(lid)
+            if lord is None or lord.cylinder.kind != "locale":
                 continue
             for t in state.taifas.values():
-                if l.cylinder.locale_id in t.locale_ids:
+                if lord.cylinder.locale_id in t.locale_ids:
                     allowed_taifa_ids.add(t.id)
     out: list[str] = []
     for taifa in state.taifas.values():
@@ -807,9 +805,9 @@ def _jihad_eligible_locales(
                 continue
             # Unbesieged/Unbypassed Christian Lord blocks the Locale.
             christian_here = [
-                l for l in state.lords.values()
-                if l.side == "christian" and l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == lid
+                lord for lord in state.lords.values()
+                if lord.side == "christian" and lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == lid
             ]
             if christian_here:
                 sieging_or_bypassing = (loc.siege_yellow > 0
@@ -898,8 +896,8 @@ def _m8_ahmad_ibn_rumayla(state, side, card_id, payload):
             return _no_op_with_note(state, card_id, side,
                                     "no eligible empty Conquered Town")
         # Must be empty (no Lords either side).
-        if any(l.cylinder.kind == "locale" and l.cylinder.locale_id == loc_id
-               for l in state.lords.values()):
+        if any(lord.cylinder.kind == "locale" and lord.cylinder.locale_id == loc_id
+               for lord in state.lords.values()):
             return _no_op_with_note(state, card_id, side,
                                     f"{loc_id} is not empty")
         loc.conquered_markers = max(0, loc.conquered_markers - 1)
@@ -921,14 +919,14 @@ def _m11_jihad_bonus_active(state) -> bool:
     """M11 3-Jihad bonus: Yusuf or Sir in any Reconquista/Parias Taifa
     or in a Kingdom (Leon/Aragon)."""
     for lid in ("yusuf", "sir"):
-        l = state.lords.get(lid)
-        if l is None or l.cylinder.kind != "locale":
+        lord = state.lords.get(lid)
+        if lord is None or lord.cylinder.kind != "locale":
             continue
-        loc = state.locales.get(l.cylinder.locale_id)
+        loc = state.locales.get(lord.cylinder.locale_id)
         if loc is None:
             continue
         in_taifa_bonus = any(
-            l.cylinder.locale_id in t.locale_ids
+            lord.cylinder.locale_id in t.locale_ids
             and t.status in ("reconquista", "parias")
             for t in state.taifas.values())
         if in_taifa_bonus or loc.territory in ("leon", "aragon"):
@@ -961,16 +959,16 @@ def _m18_refugees(state, side, card_id, payload):
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
     restored: list[dict] = []
-    for lid, l in state.lords.items():
-        if not l.is_taifa or l.side != "muslim":
+    for lid, lord in state.lords.items():
+        if not lord.is_taifa or lord.side != "muslim":
             continue
-        if l.cylinder.kind != "locale":
+        if lord.cylinder.kind != "locale":
             continue
         if is_besieged(state, lid):
             continue
         rec = statics.get(lid, {})
         starting = dict(rec.get("forces", {}))
-        for v in l.vassals:
+        for v in lord.vassals:
             if v.ready:
                 continue  # Not Mustered
             for ut, n in v.forces.items():
@@ -978,13 +976,13 @@ def _m18_refugees(state, side, card_id, payload):
         added: dict[str, int] = {}
         for ut in ("light_horse", "militia"):
             want = starting.get(ut, 0)
-            have = l.forces.get(ut, 0)
+            have = lord.forces.get(ut, 0)
             if want > have:
                 add = want - have
-                l.forces[ut] = have + add
+                lord.forces[ut] = have + add
                 added[ut] = add
         # Add 1 Transport (Mule).
-        l.assets["mule"] = l.assets.get("mule", 0) + 1
+        lord.assets["mule"] = lord.assets.get("mule", 0) + 1
         added["mule"] = 1
         restored.append({"lord_id": lid, "added": added})
     if not restored:
@@ -1005,8 +1003,8 @@ def _m22_massacre(state, side, card_id, payload):
     """
     eudes = state.lords.get("eudes")
     crusaders_on_map = any(
-        l.side == "christian" and l.crusader_markers > 0
-        for l in state.lords.values()
+        lord.side == "christian" and lord.crusader_markers > 0
+        for lord in state.lords.values()
     )
     bonus = ((eudes is not None and eudes.cylinder.kind == "locale")
              or crusaders_on_map)
@@ -1014,22 +1012,22 @@ def _m22_massacre(state, side, card_id, payload):
     # (payload['lord_id']); default = add Jihad.
     if bonus and payload.get("lord_id"):
         lid = payload["lord_id"]
-        l = state.lords.get(lid)
-        if (l is not None and l.is_taifa and l.side == "muslim"
-                and l.cylinder.kind == "calendar"):
-            from almoravid.static_data import load_lords as _ll
-            from almoravid.state import Cylinder
+        lord = state.lords.get(lid)
+        if (lord is not None and lord.is_taifa and lord.side == "muslim"
+                and lord.cylinder.kind == "calendar"):
             from almoravid.actions import _free_seats_for
+            from almoravid.state import Cylinder
+            from almoravid.static_data import load_lords as _ll
             rec = _ll()["lords"].get(lid, {})
             # 3.4.1: auto-Muster places only at a free Seat (neither Enemy
             # nor with an Enemy Lord present); no free Seat -> fall through
             # to the Jihad branch (the Muster cannot happen). [Door C]
             free = _free_seats_for(state, lid)
             if free:
-                l.cylinder = Cylinder(kind="locale", locale_id=free[0])
-                l.forces = dict(rec.get("forces", {}))
-                l.assets = dict(rec.get("assets", {}))
-                l.just_arrived_this_levy = True
+                lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
+                lord.forces = dict(rec.get("forces", {}))
+                lord.assets = dict(rec.get("assets", {}))
+                lord.just_arrived_this_levy = True
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
                         "mustered": lid, "seat": free[0], "bonus": True}
@@ -1053,11 +1051,11 @@ def _yusuf_or_sir_in_status(state, statuses: tuple[str, ...]) -> bool:
     """Check whether Yusuf or Sir is at a locale whose Taifa is in
     `statuses`."""
     for lid in ("yusuf", "sir"):
-        l = state.lords.get(lid)
-        if l is None or l.cylinder.kind != "locale":
+        lord = state.lords.get(lid)
+        if lord is None or lord.cylinder.kind != "locale":
             continue
         for t in state.taifas.values():
-            if l.cylinder.locale_id in t.locale_ids and t.status in statuses:
+            if lord.cylinder.locale_id in t.locale_ids and t.status in statuses:
                 return True
     return False
 
@@ -1065,10 +1063,10 @@ def _yusuf_or_sir_in_status(state, statuses: tuple[str, ...]) -> bool:
 def _yusuf_or_sir_in_kingdom(state) -> bool:
     """Yusuf or Sir at a Christian Kingdom locale."""
     for lid in ("yusuf", "sir"):
-        l = state.lords.get(lid)
-        if l is None or l.cylinder.kind != "locale":
+        lord = state.lords.get(lid)
+        if lord is None or lord.cylinder.kind != "locale":
             continue
-        loc = state.locales.get(l.cylinder.locale_id)
+        loc = state.locales.get(lord.cylinder.locale_id)
         if loc and loc.territory in ("leon", "aragon"):
             return True
     return False
@@ -1105,9 +1103,9 @@ def _m10_fatwa(state, side, card_id, payload):
     eudes = state.lords.get("eudes")
     if eudes is not None and eudes.cylinder.kind == "locale":
         bonus += 1
-    for l in state.lords.values():
-        if l.side == "christian":
-            bonus += l.crusader_markers
+    for lord in state.lords.values():
+        if lord.side == "christian":
+            bonus += lord.crusader_markers
     add = max(1, bonus)
     placement = _add_jihad(state, add, payload)
     if placement is None:
@@ -1133,9 +1131,9 @@ def _m20_mudejares(state, side, card_id, payload):
     add = 1
     if loc.jihad_markers > 0:
         add = 2
-    here_ids = [l.id for l in state.lords.values()
-                if l.cylinder.kind == "locale"
-                and l.cylinder.locale_id == target]
+    here_ids = [lord.id for lord in state.lords.values()
+                if lord.cylinder.kind == "locale"
+                and lord.cylinder.locale_id == target]
     if "yusuf" in here_ids or "sir" in here_ids:
         add = 3
     loc.jihad_markers += add
@@ -1158,18 +1156,18 @@ def _m21_al_sumaisir(state, side, card_id, payload):
         # Seat and copy starting forces/assets (mirrors muster_lord but
         # bypasses Fealty and steps).
         from almoravid.static_data import load_lords as _ll
-        l = state.lords[target_lord_id]
-        if l.is_taifa and l.side == "muslim" and l.cylinder.kind == "calendar":
+        lord = state.lords[target_lord_id]
+        if lord.is_taifa and lord.side == "muslim" and lord.cylinder.kind == "calendar":
             from almoravid.actions import _free_seats_for
             rec = _ll()["lords"].get(target_lord_id, {})
             # 3.4.1 free Seat only; no free Seat -> fall through to Jihad. [Door C]
             free = _free_seats_for(state, target_lord_id)
             if free:
                 from almoravid.state import Cylinder
-                l.cylinder = Cylinder(kind="locale", locale_id=free[0])
-                l.forces = dict(rec.get("forces", {}))
-                l.assets = dict(rec.get("assets", {}))
-                l.just_arrived_this_levy = True
+                lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
+                lord.forces = dict(rec.get("forces", {}))
+                lord.assets = dict(rec.get("assets", {}))
+                lord.just_arrived_this_levy = True
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
                         "mustered": target_lord_id, "seat": free[0]}
@@ -1180,9 +1178,9 @@ def _m21_al_sumaisir(state, side, card_id, payload):
                                 "no eligible Parias Locale")
     # 4 Jihad if Yusuf/Sir at any eligible Parias Locale, else 2.
     yusuf_sir_present = any(
-        l.id in ("yusuf", "sir") and l.cylinder.kind == "locale"
-        and l.cylinder.locale_id in eligible
-        for l in state.lords.values()
+        lord.id in ("yusuf", "sir") and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id in eligible
+        for lord in state.lords.values()
     )
     add = 4 if yusuf_sir_present else 2
     placement = _add_jihad(state, add, payload, statuses=("parias",))
@@ -1208,17 +1206,18 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
     mode = payload.get("mode", "service_right")
     if mode == "muster":
         lid = payload.get("lord_id")
-        cands = [l for l in state.lords.values()
-                 if l.side == "christian" and l.cylinder.kind == "calendar"]
+        cands = [lord for lord in state.lords.values()
+                 if lord.side == "christian" and lord.cylinder.kind == "calendar"]
         target = state.lords.get(lid) if lid else None
-        if target is None or target.side != "christian"                 or target.cylinder.kind != "calendar":
+        if (target is None or target.side != "christian"
+                or target.cylinder.kind != "calendar"):
             target = cands[0] if cands else None
         if target is None:
             return _no_op_with_note(state, card_id, side,
                                     "no Christian Lord on Calendar to Muster")
-        from almoravid.static_data import load_lords as _ll
-        from almoravid.state import Cylinder
         from almoravid.actions import _free_seats_for
+        from almoravid.state import Cylinder
+        from almoravid.static_data import load_lords as _ll
         rec = _ll()["lords"].get(target.id, {})
         # 3.4.1: Muster only at a free Seat (neither Enemy nor Enemy-occupied). [Door C]
         free = _free_seats_for(state, target.id)
@@ -1242,7 +1241,8 @@ def _c16_bernard_de_sedirac(state, side, card_id, payload):
         return _no_op_with_note(state, card_id, side,
                                 "no Christian Lord on Calendar")
     lid = payload.get("lord_id")
-    target_sm = next((sm for sm in candidates if sm.lord_id == lid), None)         or min(candidates, key=lambda sm: sm.box)
+    target_sm = (next((sm for sm in candidates if sm.lord_id == lid), None)
+                 or min(candidates, key=lambda sm: sm.box))
     target_sm.box = min(16, target_sm.box + 1)
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
@@ -1264,9 +1264,9 @@ def _c17_genoa_pisa(state, side, card_id, payload):
         if not is_friendly_locale(state, lid, "muslim"):
             continue
         muslim_here = any(
-            l.side == "muslim" and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id == lid
-            for l in state.lords.values()
+            lord.side == "muslim" and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == lid
+            for lord in state.lords.values()
         )
         if muslim_here:
             continue
@@ -1292,16 +1292,16 @@ def _c18_runaway_slaves(state, side, card_id, payload):
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
     restored: list[dict] = []
-    for lid, l in state.lords.items():
-        if l.side != "christian":
+    for lid, lord in state.lords.items():
+        if lord.side != "christian":
             continue
-        if l.cylinder.kind != "locale":
+        if lord.cylinder.kind != "locale":
             continue
         if is_besieged(state, lid):
             continue
         rec = statics.get(lid, {})
         starting = dict(rec.get("forces", {}))
-        for v in l.vassals:
+        for v in lord.vassals:
             if v.ready:
                 continue
             for ut, n in v.forces.items():
@@ -1309,12 +1309,12 @@ def _c18_runaway_slaves(state, side, card_id, payload):
         added: dict[str, int] = {}
         for ut in ("men_at_arms", "militia", "serfs"):
             want = starting.get(ut, 0)
-            have = l.forces.get(ut, 0)
+            have = lord.forces.get(ut, 0)
             if want > have:
                 add = want - have
-                l.forces[ut] = have + add
+                lord.forces[ut] = have + add
                 added[ut] = add
-        l.assets["mule"] = l.assets.get("mule", 0) + 1
+        lord.assets["mule"] = lord.assets.get("mule", 0) + 1
         added["mule"] = 1
         restored.append({"lord_id": lid, "added": added})
     if not restored:
@@ -1329,8 +1329,8 @@ def _c19_fitna(state, side, card_id, payload):
     """C19 (Immediate): Choose 2 Taifa Lords; Service -1 left each;
     this Levy, no Muster of/by them."""
     from almoravid.actions import _shift_service_left
-    taifa_lords = [lid for lid, l in state.lords.items()
-                   if l.is_taifa and l.side == "muslim"
+    taifa_lords = [lid for lid, lord in state.lords.items()
+                   if lord.is_taifa and lord.side == "muslim"
                    and any(sm.lord_id == lid
                            for sm in state.calendar.service_markers)]
     if not taifa_lords:
@@ -1356,9 +1356,9 @@ def _c20_al_qadir(state, side, card_id, payload):
         if t.status not in ("reconquista", "parias"):
             continue
         if any(
-            l.side == "muslim" and l.cylinder.kind == "locale"
-            and l.cylinder.locale_id in t.locale_ids
-            for l in state.lords.values()
+            lord.side == "muslim" and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id in t.locale_ids
+            for lord in state.lords.values()
         ):
             continue
         for lid in t.locale_ids:
@@ -1368,7 +1368,7 @@ def _c20_al_qadir(state, side, card_id, payload):
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Taifa free of Muslim Lords")
     removed = 0
-    for taifa_id, lid in eligible:
+    for _taifa_id, lid in eligible:
         loc = state.locales[lid]
         take = min(loc.jihad_markers, 2 - removed)
         loc.jihad_markers -= take
@@ -1435,11 +1435,11 @@ def _c23_illness(state, side, card_id, payload):
     result: dict = {"card_id": card_id, "side": side, "target": target,
                     "mode": mode}
     if mode == "cylinder":
-        l = state.lords[target]
-        if l.cylinder.kind == "calendar":
-            cur = l.cylinder.box if l.cylinder.box is not None else 1
-            l.cylinder.box = max(0, cur - 1)
-            result["new_cylinder_box"] = l.cylinder.box
+        lord = state.lords[target]
+        if lord.cylinder.kind == "calendar":
+            cur = lord.cylinder.box if lord.cylinder.box is not None else 1
+            lord.cylinder.box = max(0, cur - 1)
+            result["new_cylinder_box"] = lord.cylinder.box
         else:
             # On the map: fall back to Service shift (cylinder branch
             # only meaningful on Calendar per card text).
