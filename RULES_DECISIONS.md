@@ -63,3 +63,38 @@ The pre-declared (vs fully interactive) model is the only simplification.
 **Revisit:** when `resolve_battle` / `resolve_relief_sally` are made
 re-entrant (would allow a true interactive per-Round Attacker-then-Defender
 concede prompt instead of the pre-declared rounds).
+
+
+## DECISION-002 — Reactive (round-stepped) Concede via an interactive mode
+
+**Date:** 2026-06-02
+**Type:** [INTERPRETATION]
+**Trigger:** Follow-up to DECISION-001 — the pre-declared concede commits the
+Round up front and cannot be decided reactively after watching earlier
+Rounds, which 4.4.2 ("at the start of each Round … may declare") permits.
+
+**Decision:** Add a true reactive Concede the Field as an opt-in interactive
+mode. With `interactive_concede` on the battle action, the Battle is resolved
+one Round at a time: at the start of each Round it pauses on a
+`battle_concede` PendingDecision (waiting on the active side), and the
+response declares this Round's `attacker_concede` / `defender_concede`. The
+driver therefore decides Concede reactively, having seen the prior Rounds.
+The synchronous default path (with pre-declared concede, DECISION-001) is
+unchanged, so existing tests and self-play are unaffected. The two paths
+share `_battle_one_round` and a single per-engagement aftermath, and
+interactive-no-concede is verified byte-identical (same RNG, same result)
+to the synchronous resolution.
+
+**Scope:** open-field Battle (`cmd_battle`) and besieged-Lord Sally
+(`cmd_sally`, which resolves as a Battle) support interactive reactive
+concede now. Storm (`resolve_storm`) and Relief Sally
+(`resolve_relief_sally`) carry per-Lord Front/Reserve lane state across
+Rounds (closures over `a_lord_forces` / `d_front` / lane objects), so a
+re-entrant rewrite of those two is a substantially larger change; they
+currently retain the DECISION-001 pre-declared concede (Storm correctly
+Attacker-only, 4.5.2). The harness surfaces the per-Round choice in
+legal_moves; self-play never opts into interactive mode.
+
+**Revisit:** when `resolve_storm` / `resolve_relief_sally` are refactored to
+thread their per-Lord lane state through a serializable context (which would
+let them adopt the same round-stepped interactive concede).
