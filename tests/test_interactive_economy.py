@@ -141,3 +141,28 @@ def test_interactive_wastage_lets_owner_pick_the_discarded_item() -> None:
         apply_action(s, {"type": "wastage_choice", "side": "muslim",
                          "discards": {}})
     assert s.pending is None
+
+
+def test_interactive_economy_baton_matches_synchronous() -> None:
+    """After end_card, the card-to-card baton (active_player) must be the
+    same whether the economy step ran synchronously or interactively."""
+    # Synchronous reference.
+    s1 = load_scenario("scenario_a_toledo_beset")
+    _reveal_alfonso_card(s1)
+    apply_action(s1, {"type": "end_card", "side": "christian"})
+    ref_player = s1.meta.active_player
+
+    # Interactive cascade (no greed-eligible Lords; just walk Pay -> done).
+    s2 = load_scenario("scenario_a_toledo_beset")
+    _reveal_alfonso_card(s2)
+    apply_action(s2, {"type": "end_card", "side": "christian",
+                      "interactive_economy": True})
+    # No greed prompt expected here -> straight to Pay (christian).
+    assert s2.pending is not None and s2.pending.kind == "pay_before_disband"
+    apply_action(s2, {"type": "pay_before_disband", "side": "christian",
+                      "done": True})
+    apply_action(s2, {"type": "pay_before_disband", "side": "muslim",
+                      "done": True})
+    assert s2.pending is None
+    assert s2.meta.active_player == ref_player
+    assert s2.meta.campaign_step == s1.meta.campaign_step

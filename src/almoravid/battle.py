@@ -905,6 +905,11 @@ def _battle_one_round(
     if _mus.m7_owned:
         _held = state.decks.this_levy_events.setdefault("muslim", [])
         if round_idx < _mus.m7_round:
+            # Suppress (not "Used") before the chosen Round: just remove it
+            # from the in-effect set. If the Battle ends before m7_round the
+            # card never reaches decks.discard, but that is harmless -- the
+            # AoW discard pile is a pure sink (no reshuffle) and
+            # this_levy_events is fully cleared at Battle aftermath.
             if "M7" in _held:
                 _held.remove("M7")
         elif round_idx == _mus.m7_round:

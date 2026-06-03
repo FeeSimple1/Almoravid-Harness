@@ -766,6 +766,11 @@ def _h_pay_before_disband(state: GameState,
             payload["cursor_side"] = "muslim"
             return {"pay_before_disband": "done", "next_side": "muslim",
                     "advance": _economy_advance(state, action, payload)}
+        # Restore the card-owner as active_player so the card-to-card baton
+        # flips from the SAME side the synchronous path would (the Pay
+        # cursor ended on Muslim; _advance_or_end_campaign flips from
+        # active_player inside _economy_finalize).
+        state.meta.active_player = payload["active_side"]
         return {"pay_before_disband": "done",
                 "finalize": _economy_finalize(
                     state, action, payload["active_side"],

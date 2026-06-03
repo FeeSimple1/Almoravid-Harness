@@ -177,31 +177,42 @@ deviation was then re-checked against the rulebook for a decisive ruling.
   cannot recycle into a later Campaign's draw deck. (Fixed a real recycling
   bug for multi-Campaign / Scenario F play.)
 
-### Genuine player choices — engine default is a legal branch
+### Genuine player choices — now exposed as interactive decisions
 
-The rulebook explicitly grants the controlling player a free choice here;
-any legal selection satisfies the rules, so there is no single "correct"
-ruling to encode. The engine picks a deterministic, always-legal default.
-A future interactive decision layer (the Concede mechanism is the model)
-could expose these; doing so changes no outcome that is currently illegal.
+The rulebook grants the controlling player a free choice at each of these
+points. They are now surfaced as PendingDecisions (mirroring the Concede
+mechanism), each behind an opt-in flag so that synchronous play, self-play,
+and the existing test corpus keep the deterministic default unchanged.
 
-- **4.9.4 Wastage** ("the owning player could choose to discard a Mule, the
-  Loot, or the card" — rulebook example): the engine auto-discards one
-  *legal* item (largest Asset stack, else a This-Lord card). Always a valid
-  Wastage discard; only the player's free pick is not modelled.
-- **4.8.1 Greed**: discarding excess unfeedable Mules is optional ("Lords
-  *may* discard"). The default keeps Mules and accepts any Unfed Service
-  shift — a legal branch. The beneficial discard is available via the
-  `discard_excess_mules` path on the Feed helpers.
-- **4.8.2 / 6.3.1 voluntary Pay (3.2)**: optional Pay during the per-card
-  and Winter-Disband sub-steps is not exposed as an action; mandatory
-  Disband IS applied. A player choosing not to pre-empt Disband is legal.
-- **4.4.1 "any 1 Round" one-Round effects** (M7 Spear Wall, one-round
-  Javelins): the owner may choose the Round; the engine defaults to Round 1
-  (full-strength, max effect). See DECISION-003. Any Round is legal; Round 1
-  is a defensible fixed choice.
+- **4.9.4 Wastage** — `wastage_choice` pending (opt-in `interactive_wastage`
+  on `end_campaign`). Christians then Muslims; the owner picks WHICH one
+  item each over-stocked Lord discards. Per the rulebook example, ANY single
+  Asset (even a count-1 Loot) or a This-Lord Capability is offerable. Omitted
+  Lords take the legacy deterministic default (largest Asset stack, else a
+  This-Lord card).
+- **4.8.1 Greed** — `greed_mule_choice` pending (opt-in `interactive_economy`
+  on `end_card`). Each side may discard the unfeedable excess Mules of any
+  subset of its eligible Lords before Feed resolves; the default discards
+  none (keeps Mules, accepts any Unfed shift).
+- **4.8.2 / 6.3.1 voluntary Pay** — `pay_before_disband` pending (opt-in
+  `interactive_economy`). After Feed and before the mandatory at-limit
+  Disband, Christians then Muslims may Pay (3.2) to shift Service rightward,
+  or declare `done`. The default (no voluntary Pay) leaves the mandatory
+  Disband intact.
+- **4.4.1 "any 1 Round" one-Round effects** — `oneround_timing` pending
+  (opt-in `interactive_timing` on the interactive Battle). Before Round 1,
+  each owner picks the Round its Javelins (`oneround_round`) and/or M7 Spear
+  Wall (`m7_round`) fire; M7 presence and discard are gated to the chosen
+  Round in `_battle_one_round`. The default is Round 1 (see DECISION-003).
 
-**Scope:** combat (battle.py), commands/economy (campaign.py), end-game.
-**Revisit:** only if an interactive decision layer is added for the
-non-combat player choices above (Wastage / Greed / voluntary Pay) or for
-the one-Round timing of M7/Javelins.
+Synchronous resolution and the deterministic helpers remain the default
+when the opt-in flags are absent, so no previously-legal outcome changes.
+
+The one-Round timing prompt is offered only in the open-field interactive
+Battle driver; Relief-Sally battles do not surface it, so their M7 / Javelin
+effects keep the Round-1 default there (a scope limit, not a rules conflict).
+
+**Scope:** combat (battle.py), commands/economy + end-game (campaign.py),
+legal_moves enumeration.
+**Revisit:** if a UI wants per-item Wastage prompts or per-Lord Greed
+amounts beyond the subset/default options currently enumerated.
