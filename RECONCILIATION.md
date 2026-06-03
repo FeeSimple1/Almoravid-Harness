@@ -27,7 +27,7 @@ VP value tracking (2.2.5, abstract not physical). Verdict: **OK**.
 
 ## Chapter 3 — Levy (3.1–3.5)
 - 3.1 Arts of War (Capabilities first Levy / Events later; Immediate/Hold/
-  This-Levy types; Greed) — **OK** (C18 Milites removal edge case: **DOC**).
+  This-Levy types; Greed) — **OK** (C18 Milites removed-from-game on discard: **FIXED**).
 - 3.2 Pay with Coin / Loot (rate, Taifa Coin, Friendly+unbesieged) — **OK**.
 - 3.3 Disband Beyond-Service / At-Limit, incl. 1.4.3 Independent-Taifa
   Parias/Coin/VP and the "or Campaign" erratum — **OK**.
@@ -53,7 +53,8 @@ VP value tracking (2.2.5, abstract not physical). Verdict: **OK**.
     in both protection paths).
   - **C1/M1 Hills** last the whole Battle — **FIXED** (was discarded after
     Round 1).
-  - C8 Cantador side-wide budget, Flanking "largest", M7/Javelin Round-1 —
+  - C8 Cantador confined to holder + combined +4 cap (**FIXED**); Flanking
+    closest Front Lord (**FIXED**); M7/Javelin Round-1 owner-choice default —
     **DOC**.
 - 4.5 Siege / Storm / Sally:
   - Storm in full (Garrison + absorption order, Walls/Siegeworks, Capacity,
@@ -72,7 +73,7 @@ VP value tracking (2.2.5, abstract not physical). Verdict: **OK**.
     Ravaged/Besieged) — **FIXED** (was Gardens-only).
   - **Ravage**: target must be un-Ravaged (either color) — **FIXED** (enemy-
     color re-Ravage exploit closed); ½VP/Rustling/Enforcing-Parias — **OK**.
-  - Tax (own Seat, whole card) — **OK** (whole-card-vs-fresh-card: **DOC**).
+  - Tax (own Seat, fresh card) — **OK** (Siege/Tax now require a FRESH card: **FIXED**).
 - 4.8 Feed / Pay / Disband:
   - Feed (eat 1 Provender/Moved-Fought Lord, Sharing, Unfed penalty) — **OK**.
   - **Disband at limit**: now sweeps ALL on-map Lords (Christian then Muslim)
@@ -110,4 +111,5 @@ green.
 ## Documented deviations (not wrong-outcome bugs)
 See RULES_DECISIONS DECISION-003 (one-round Javelins) and DECISION-004
 (interactive-choice abstractions — Wastage/Pay/Greed; per-card defaults —
-M7/Javelin/C8/Flanking; Siege/Tax whole-card reading; C18 Milites edge case).
+M7/Javelin Round default; Siege/Tax fresh-card, C8 holder/combined-cap,
+Flanking closest, and C18 removed-from-game are now **FIXED**).
