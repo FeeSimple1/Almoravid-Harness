@@ -111,3 +111,33 @@ def test_interactive_keep_mules_matches_default_when_no_discard() -> None:
     res = apply_action(s, {"type": "pay_before_disband", "side": "muslim",
                            "done": True})
     assert s.pending is None and "finalize" in res
+
+
+# --- Wastage (4.9.4) interactive choice -----------------------------------
+def test_interactive_wastage_lets_owner_pick_the_discarded_item() -> None:
+    from almoravid.campaign import _wastage_eligible_lords
+    s = load_scenario("scenario_a_toledo_beset")
+    # Force an end_campaign state synthetically: set the step and give
+    # Alfonso (on map) an over-stock so Wastage triggers.
+    s.meta.phase = "campaign"
+    s.meta.campaign_step = "end_campaign"
+    al = s.lords["alfonso"]
+    al.assets = {"mule": 2, "loot": 1}     # two Mules -> eligible
+    elig = _wastage_eligible_lords(s, "christian")
+    rec = next(e for e in elig if e["lord_id"] == "alfonso")
+    assert {"asset": "loot"} in rec["options"]   # count-1 Loot is discardable
+
+    apply_action(s, {"type": "end_campaign", "interactive_wastage": True})
+    assert s.pending is not None and s.pending.kind == "wastage_choice"
+    assert s.pending.waiting_on == "christian"
+    # Choose to discard the single Loot (NOT the default largest stack).
+    apply_action(s, {"type": "wastage_choice", "side": "christian",
+                     "discards": {"alfonso": {"asset": "loot"}}})
+    assert s.lords["alfonso"].assets.get("loot", 0) == 0
+    assert s.lords["alfonso"].assets.get("mule", 0) == 2   # mules untouched
+    # After Christians, Muslims get their (possibly empty) Wastage step,
+    # then end-Campaign completes and the pending is cleared.
+    if s.pending is not None and s.pending.kind == "wastage_choice":
+        apply_action(s, {"type": "wastage_choice", "side": "muslim",
+                         "discards": {}})
+    assert s.pending is None

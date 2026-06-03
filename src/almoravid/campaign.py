@@ -914,9 +914,17 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _unstack_all_lieutenants(state)
     # Phase 7g: Wastage (4.9.4) — each Mustered Lord with more than one
     # of any Asset type, or more than one This-Lord Capability card,
-    # discards one excess (greedy: drop one Asset of the largest stack,
-    # else one This-Lord Capability).
-    _apply_wastage(state)
+    # discards one excess. With `interactive_wastage` the owning player
+    # (Christians then Muslims) chooses WHICH item each eligible Lord
+    # discards (the rule allows ANY one Asset or This-Lord Capability,
+    # even a single Loot); otherwise the deterministic default runs.
+    if (bool(action.get("interactive_wastage"))
+            and not action.get("_wastage_done")):
+        started = _wastage_begin(state, action)
+        if started is not None:
+            return started
+    if not action.get("_wastage_done"):
+        _apply_wastage(state)
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -5024,6 +5032,142 @@ def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
             out.append({"lord_id": lid, "discarded_capability": drop})
     return out
 
+def _wastage_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
+    """4.9.4: Lords (this side) on the map who must discard one item --
+    i.e. they hold MORE THAN ONE of any Asset type OR more than one
+    This-Lord Capability. `options` lists every discardable item (any
+    Asset they hold, even count-1, plus each This-Lord Capability), since
+    the rule lets the owner pick ANY single one."""
+    from almoravid.capabilities import capabilities_for_lord
+    out: list[dict[str, Any]] = []
+    for lid in sorted(state.lords):
+        lord = state.lords[lid]
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        caps = capabilities_for_lord(state, lid)
+        triggered = any(n > 1 for n in lord.assets.values()) or len(caps) > 1
+        if not triggered:
+            continue
+        options: list[dict[str, str]] = []
+        for atype, n in sorted(lord.assets.items()):
+            if n > 0:
+                options.append({"asset": atype})
+        for cid in sorted(caps):
+            options.append({"capability": cid})
+        out.append({"lord_id": lid, "options": options})
+    return out
+
+
+def _default_wastage_item(state: GameState, lid: str) -> dict[str, str] | None:
+    """The deterministic default discard for a Lord (largest Asset stack
+    > 1, else a This-Lord Capability) -- the legacy _apply_wastage pick."""
+    from almoravid.capabilities import capabilities_for_lord
+    lord = state.lords[lid]
+    over = [(n, a) for a, n in lord.assets.items() if n > 1]
+    if over:
+        over.sort(reverse=True)
+        return {"asset": over[0][1]}
+    caps = capabilities_for_lord(state, lid)
+    if len(caps) > 1:
+        return {"capability": sorted(caps)[-1]}
+    return None
+
+
+def _apply_one_wastage(state: GameState, lid: str,
+                       item: dict[str, str]) -> dict[str, Any]:
+    """Discard a single chosen Asset or This-Lord Capability for a Lord."""
+    from almoravid.state import AssetType
+    lord = state.lords[lid]
+    if "asset" in item:
+        atype = cast(AssetType, item["asset"])
+        _require(lord.assets.get(atype, 0) > 0,
+                 f"{lid} has no {atype} to discard (Wastage)", code="bad_arg")
+        lord.assets[atype] -= 1
+        if lord.assets[atype] == 0:
+            lord.assets.pop(atype, None)
+        return {"lord_id": lid, "discarded_asset": atype}
+    cid = item["capability"]
+    _require(cid in lord.capabilities,
+             f"{lid} does not hold capability {cid} (Wastage)", code="bad_arg")
+    lord.capabilities.remove(cid)
+    state.decks.capabilities_in_play = [
+        c for c in state.decks.capabilities_in_play
+        if not (c.card_id == cid and c.owner_lord_id == lid)
+    ]
+    state.decks.discard.append(cid)
+    return {"lord_id": lid, "discarded_capability": cid}
+
+
+def _wastage_begin(state: GameState,
+                   action: dict[str, Any]) -> dict[str, Any] | None:
+    """Start the interactive Wastage (4.9.4) flow. Returns the pending
+    result, or None when no Lord on either side needs to discard (the
+    caller then runs the deterministic no-op _apply_wastage)."""
+    if not (_wastage_eligible_lords(state, "christian")
+            or _wastage_eligible_lords(state, "muslim")):
+        return None
+    payload: dict[str, Any] = {"cursor_side": "christian", "prompted": []}
+    return _wastage_advance(state, action, payload)
+
+
+def _wastage_advance(state: GameState, action: dict[str, Any],
+                     payload: dict[str, Any]) -> dict[str, Any]:
+    """Emit the next Wastage prompt (Christians then Muslims) or, when
+    both sides are done, finish end-Campaign via a re-entrant call."""
+    order: tuple[Side, Side] = ("christian", "muslim")
+    prompted = set(payload["prompted"])
+    start = order.index(payload["cursor_side"])
+    for sd in order[start:]:
+        if sd in prompted:
+            continue
+        eligible = _wastage_eligible_lords(state, sd)
+        if eligible:
+            payload["cursor_side"] = sd
+            payload["eligible"] = eligible
+            state.pending = PendingDecision(
+                kind="wastage_choice", waiting_on=sd, payload=payload)
+            state.meta.active_player = sd
+            return {"pending": "wastage_choice", "side": sd,
+                    "eligible": eligible}
+        payload["prompted"].append(sd)
+    # Both sides done -> resume the rest of end-Campaign (skip re-applying
+    # Wastage, which was applied incrementally per choice).
+    state.pending = None
+    return _h_end_campaign(state, {"type": "end_campaign",
+                                   "_wastage_done": True})
+
+
+def _h_wastage_choice(state: GameState,
+                      action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a Wastage (4.9.4) prompt. `discards` maps lord_id ->
+    {"asset": type} or {"capability": id}. Any eligible Lord omitted
+    from `discards` takes the deterministic default discard."""
+    side = _require_side(action)
+    pd = _require_pending(state, "wastage_choice", side)
+    payload = pd.payload
+    eligible = _wastage_eligible_lords(state, side)
+    chosen: dict[str, Any] = action.get("discards", {}) or {}
+    _require(isinstance(chosen, dict),
+             "discards must be a dict lord_id -> item", code="bad_arg")
+    applied: list[dict[str, Any]] = []
+    for rec in eligible:
+        lid = rec["lord_id"]
+        item = chosen.get(lid)
+        if item is None:
+            item = _default_wastage_item(state, lid)
+        if item is None:
+            continue
+        _require(item in rec["options"],
+                 f"{item} is not a legal Wastage discard for {lid}",
+                 code="bad_arg")
+        applied.append(_apply_one_wastage(state, lid, item))
+    payload["prompted"].append(side)
+    state.pending = None
+    _record(state, action, f"{side} Wastage discards: {applied}")
+    return {"wastage_choice": {"side": side, "applied": applied},
+            "advance": _wastage_advance(state, action, payload)}
+
+
 
 def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
@@ -5745,6 +5889,7 @@ CAMPAIGN_HANDLERS = {
     "end_card": _h_end_card,
     "greed_mule_choice": _h_greed_mule_choice,
     "pay_before_disband": _h_pay_before_disband,
+    "wastage_choice": _h_wastage_choice,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
     "cmd_supply": _h_cmd_supply,

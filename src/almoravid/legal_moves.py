@@ -131,6 +131,23 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "done": True})
         return moves
 
+    # 4.9.4 WASTAGE — the owning side (Christians then Muslims) chooses
+    # which one item each over-stocked Lord discards. The default move
+    # lets every eligible Lord take its deterministic default discard;
+    # per-(Lord, item) overrides are also offered.
+    if (state.pending is not None
+            and state.pending.kind == "wastage_choice"):
+        side = state.pending.waiting_on
+        from almoravid.campaign import _wastage_eligible_lords
+        eligible = _wastage_eligible_lords(state, side)
+        moves.append({"type": "wastage_choice", "side": side, "discards": {}})
+        for rec in eligible:
+            lid = rec["lord_id"]
+            for item in rec["options"]:
+                moves.append({"type": "wastage_choice", "side": side,
+                              "discards": {lid: item}})
+        return moves
+
     # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord
     # at a time (Supply / Ravage / pass), then Christian-then-Muslim Pay
     # (or done) at Sieges. Pattern 11: only the waiting_on side may act.
