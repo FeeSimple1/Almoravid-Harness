@@ -279,3 +279,61 @@ campaign.py (`_apply_absorption_policy`, `set_absorption_policy`, interactive
 battle drivers), legal_moves enumeration.
 **Revisit:** when full multi-Lord Array control (Reserve commitment, per-step
 Strike order, Flanking absorb option, center fill) is built.
+
+## DECISION-006 — Multi-Lord Array placement choices are now player-controlled
+
+**Date:** 2026-06-03
+**Type:** [INTERPRETATION]
+**Trigger:** Follow-up to DECISION-005 — implement the multi-Lord Array
+choices that DECISION-005 had marked [DEFERRED].
+
+**Decision:** The Array placement choices the rules grant the owner (4.4.2
+Reposition / Flanking) are exposed as per-side standing policies in
+`state.meta`, set via the `set_array_tactics` action (and surfaced in
+`legal_moves` during the `battle_concede` / `storm_concede` /
+`relief_concede` decisions). They are consumed by `_reposition_array` and
+`_pick_flank_target`, and may be changed between Rounds (no pending gate),
+so control is reactive in practice. Defaults reproduce the prior
+deterministic behaviour, so no previously-legal outcome changes unless a
+side sets a policy.
+
+- **Flanking direction (4.4.2 "center may choose left or right")** —
+  `array_flank_choice` = `left` | `right` | `larger` (default). A CENTER
+  Front Lord with no directly-opposed Enemy Flanks the chosen side (falls
+  back to the larger Enemy when the chosen side is absent). Left/right
+  Flankers remain rule-forced to the closest Enemy (center, then far).
+- **Center fill (4.4.2 Center)** — `array_center_fill` = `left` (default)
+  | `right`. Picks which side Front Lord slides into an empty Front-center.
+- **Reserve Advance (4.4.2 Advance)** — `array_reserve_priority`, an ordered
+  list of lord_ids deciding which Reserve Lord Advances first into an empty
+  Front slot (center-most first). All unrouted Reserves still Advance into
+  empty Front positions (Advance itself is mandatory in Battle); only the
+  assignment order is the owner's choice.
+
+**Strike order (4.4.2 Initiative) — resolved as a non-choice.** "Striking
+Lords choose the order of Strike, Lord by Lord." In this engine all Hits
+aimed at the same target Lord (directly-opposed + Flanking strikers) are
+summed in halves and rounded ONCE per target (B2, DECISION rule 4.4.2 TOTAL
+HITS), and different targets resolve independently, so permuting the
+striking Lords' order cannot change the result. Proven by
+`test_strike_order_is_outcome_independent`. No prompt is needed.
+
+**Residual [DEFERRED] (genuinely unmodelled, narrow):**
+- **Flanking absorb-before-opposed (4.4.2: "A Flanking Lord may absorb Hits
+  from a Flanked Lord, at the owner's option")** — the per-pair model
+  assigns each target's Hits to that target Lord's own forces; using a
+  Flanking Lord to soak Hits for the Flanked Lord would require redirecting
+  Hits between Lords and is not modelled.
+- **Storm REPOSITION optional commitment (4.4.1: "Attacker then Defender
+  MAY add one Lord from Reserve to the Front, up to Stronghold Capacity")**
+  — Storm Reserve commitment is governed by the coarse `reposition_attacker`
+  / `reposition_defender` flags and takes the first Reserve (`pop(0)`),
+  rather than a per-Round optional + which-Reserve owner choice. (Battle
+  Advance is correctly mandatory; this is Storm-specific.)
+
+**Scope:** state.py (GameMeta array_* policies), battle.py
+(`_reposition_array`, `_pick_flank_target`, `_battle_one_round`,
+`_resolve_step_per_pair`), campaign.py (`set_array_tactics`), legal_moves
+enumeration.
+**Revisit:** if the two residuals above are modelled, or if a fully reactive
+per-Round Array-placement prompt is preferred over standing policies.

@@ -935,6 +935,48 @@
           "title": "Absorption Policy",
           "type": "object"
         },
+        "array_flank_choice": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Array Flank Choice",
+          "type": "object"
+        },
+        "array_center_fill": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Array Center Fill",
+          "type": "object"
+        },
+        "array_reserve_priority": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Array Reserve Priority",
+          "type": "object"
+        },
         "surprise_storm_pending_locale_id": {
           "anyOf": [
             {

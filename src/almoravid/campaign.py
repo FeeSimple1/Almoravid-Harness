@@ -5527,6 +5527,56 @@ def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[s
     return {"side": side, "absorption_policy": pol}
 
 
+_FLANK_CHOICES = ("larger", "left", "right")
+_CENTER_FILL = ("left", "right")
+
+
+def _h_set_array_tactics(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Set a side's multi-Lord Array tactical choices (rule 4.4.2
+    Reposition / Flanking) at any time — the owner's standing choices for
+    how its Array resolves placement decisions the rules grant it. All
+    three keys are optional; an omitted key leaves that policy unchanged.
+
+      flank_choice    — center Front Lord with no opposite Enemy Flanks
+                        'left' / 'right' / 'larger' (4.4.2 "center may
+                        choose left or right").
+      center_fill     — fill an empty Front-center from 'left' / 'right'
+                        side Front slot (4.4.2 Center).
+      reserve_priority — ordered list of lord_ids deciding which Reserve
+                        Lord Advances first into an empty Front slot
+                        (4.4.2 Advance).
+    """
+    side = _require_side(action)
+    res: dict[str, Any] = {"side": side}
+    if "flank_choice" in action:
+        fc = action.get("flank_choice")
+        _require(fc in _FLANK_CHOICES,
+                 f"flank_choice must be one of {_FLANK_CHOICES}",
+                 code="bad_arg")
+        state.meta.array_flank_choice[side] = cast(str, fc)
+        res["flank_choice"] = fc
+    if "center_fill" in action:
+        cf = action.get("center_fill")
+        _require(cf in _CENTER_FILL,
+                 f"center_fill must be one of {_CENTER_FILL}", code="bad_arg")
+        state.meta.array_center_fill[side] = cast(str, cf)
+        res["center_fill"] = cf
+    if "reserve_priority" in action:
+        rp = action.get("reserve_priority")
+        _require(isinstance(rp, list)
+                 and all(isinstance(x, str) for x in rp),
+                 "reserve_priority must be a list of lord_id strings",
+                 code="bad_arg")
+        rp_list = list(cast("list[str]", rp))
+        state.meta.array_reserve_priority[side] = rp_list
+        res["reserve_priority"] = list(rp_list)
+    _require(len(res) > 1, "set_array_tactics needs at least one of "
+             "flank_choice / center_fill / reserve_priority", code="bad_arg")
+    _record(state, action, f"{side} sets array tactics: "
+            + ", ".join(f"{k}={v}" for k, v in res.items() if k != "side"))
+    return res
+
+
 def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C16 Cathedrals (Arts of War ref): Alfonso at a Conquered City may
     place a Cathedral Seat marker if none is there yet. The marker acts
@@ -6082,4 +6132,5 @@ CAMPAIGN_HANDLERS = {
     "sagrajas_defend": _h_sagrajas_defend,
     "resolve_battle": _h_resolve_battle,
     "set_absorption_policy": _h_set_absorption_policy,
+    "set_array_tactics": _h_set_array_tactics,
 }
