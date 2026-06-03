@@ -441,7 +441,9 @@ def _feed_consume_own(state: GameState, lord_id: str, *,
 
 
 def _feed_all_moved_fought(state: GameState, *,
-                           discard_excess_mules: bool = False) -> dict[str, Any]:
+                           discard_excess_mules: bool = False,
+                           discard_mules_lords: set[str] | None = None,
+                           ) -> dict[str, Any]:
     """4.8.1 Feed for the per-card Feed/Pay/Disband step (4.8).
 
     E4: ALL Lords marked Moved/Fought on BOTH sides Feed (Christians
@@ -463,8 +465,10 @@ def _feed_all_moved_fought(state: GameState, *,
                 continue
             if lord.cylinder.kind != "locale":
                 continue
+            _discard_this = discard_excess_mules or (
+                discard_mules_lords is not None and lid in discard_mules_lords)
             r = _feed_consume_own(state, lid,
-                                  discard_excess_mules=discard_excess_mules)
+                                  discard_excess_mules=_discard_this)
             summary["fed"].append({"lord_id": lid, **r})
             if r["short"] > 0:
                 shortfall[lid] = r["short"]
@@ -569,11 +573,27 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
     assert lord_id is not None
-    lord = state.lords[lord_id]
+    # 4.8 Feed / Pay / Disband cascade. With `interactive_economy`, the
+    # optional player choices in this step (4.8.1 Greed Mule-discard and
+    # 4.8.2 voluntary Pay before the mandatory Disband) are exposed as
+    # PendingDecisions; otherwise the deterministic default runs (keep
+    # Mules, no voluntary Pay), preserving self-play / synchronous play.
+    if bool(action.get("interactive_economy")):
+        return _economy_begin(state, action, side, lord_id)
     # 4.8.1 Feed — E4/E5: ALL Lords marked Moved/Fought on both sides
     # Feed (a Battle/Storm or Group March marks several), with Sharing
     # among same-Locale same-side Lords.
     feed_result = _feed_all_moved_fought(state)
+    return _economy_finalize(state, action, side, lord_id, feed_result)
+
+
+def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
+                      lord_id: str, feed_result: dict[str, Any],
+                      ) -> dict[str, Any]:
+    """Shared tail of the 4.8 cascade: mandatory at-limit Disband, Vassal
+    Disband, per-card cleanup, and Campaign advance. Used by both the
+    synchronous end-card path and the interactive economy resume."""
+    lord = state.lords[lord_id]
     # 4.8.2/4.8.3 auto-Disband at Service limit: "any Christian then Muslim
     # Lords whose Service markers are at their limit must Disband." Sweep
     # ALL on-map Lords (both sides), not only the active one, since the Feed
@@ -625,6 +645,139 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"ended": lord_id, "feed": feed_result,
             "auto_disband": disband_result,
             "campaign_step": state.meta.campaign_step}
+
+def _greed_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
+    """4.8.1 Greed: Lords (this side) marked Moved/Fought who hold Mules
+    they cannot Feed from their OWN Provender + Loot -- i.e. a discard
+    would change the outcome (reduce or avoid an Unfed Service shift).
+    Returns one record per such Lord with the counts a UI/agent needs."""
+    import math
+    out: list[dict[str, Any]] = []
+    for lid, lord in state.lords.items():
+        if lord.side != side or not lord.moved_fought:
+            continue
+        if lord.cylinder.kind != "locale":
+            continue
+        mules = lord.assets.get("mule", 0)
+        if mules <= 0:
+            continue
+        units = sum(lord.forces.values())
+        capacity = lord.assets.get("prov", 0) + lord.assets.get("loot", 0)
+        if math.ceil((units + mules) / 6) > capacity:
+            keep_if_discard = max(0, capacity * 6 - units)
+            out.append({"lord_id": lid, "mules": mules, "units": units,
+                        "own_capacity": capacity,
+                        "discardable": mules - keep_if_discard})
+    return out
+
+
+def _economy_begin(state: GameState, action: dict[str, Any], side: Side,
+                   lord_id: str) -> dict[str, Any]:
+    """Start the interactive 4.8 Feed/Pay/Disband cascade. Sequences,
+    in rule order (Christians then Muslims): optional Greed Mule-discard
+    -> Feed -> optional voluntary Pay -> mandatory Disband."""
+    payload: dict[str, Any] = {
+        "active_side": side,
+        "active_lord_id": lord_id,
+        "phase": "greed",
+        "cursor_side": "christian",
+        "greed_prompted": [],
+        "discard_lords": [],
+        "feed_result": None,
+    }
+    return _economy_advance(state, action, payload)
+
+
+def _economy_advance(state: GameState, action: dict[str, Any],
+                     payload: dict[str, Any]) -> dict[str, Any]:
+    """Emit the next economy PendingDecision, or finalize when the
+    cascade is complete. Shared by _economy_begin and the two response
+    handlers (greed_mule_choice, pay_before_disband)."""
+    order: tuple[Side, Side] = ("christian", "muslim")
+    if payload["phase"] == "greed":
+        prompted = set(payload["greed_prompted"])
+        start = order.index(payload["cursor_side"])
+        for sd in order[start:]:
+            if sd in prompted:
+                continue
+            eligible = _greed_eligible_lords(state, sd)
+            if eligible:
+                payload["cursor_side"] = sd
+                payload["eligible"] = eligible
+                state.pending = PendingDecision(
+                    kind="greed_mule_choice", waiting_on=sd, payload=payload)
+                state.meta.active_player = sd
+                return {"pending": "greed_mule_choice", "side": sd,
+                        "eligible": eligible}
+            payload["greed_prompted"].append(sd)
+        feed_result = _feed_all_moved_fought(
+            state, discard_mules_lords=set(payload["discard_lords"]))
+        payload["feed_result"] = feed_result
+        payload["phase"] = "pay"
+        payload["cursor_side"] = "christian"
+        return _economy_advance(state, action, payload)
+    sd = payload["cursor_side"]
+    state.pending = PendingDecision(
+        kind="pay_before_disband", waiting_on=sd, payload=payload)
+    state.meta.active_player = sd
+    return {"pending": "pay_before_disband", "side": sd}
+
+
+def _h_greed_mule_choice(state: GameState,
+                         action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a Greed (4.8.1) Mule-discard prompt. `discard_lords`
+    is the subset of this side's eligible Lords who choose to discard
+    their unfeedable excess Mules (default: none -> keep all Mules)."""
+    side = _require_side(action)
+    pd = _require_pending(state, "greed_mule_choice", side)
+    payload = pd.payload
+    eligible_ids = {e["lord_id"] for e in _greed_eligible_lords(state, side)}
+    chosen = action.get("discard_lords", []) or []
+    _require(isinstance(chosen, list),
+             "discard_lords must be a list of lord_ids", code="bad_arg")
+    for lid in chosen:
+        _require(lid in eligible_ids,
+                 f"{lid} is not Greed-eligible for {side}", code="bad_arg")
+        if lid not in payload["discard_lords"]:
+            payload["discard_lords"].append(lid)
+    payload["greed_prompted"].append(side)
+    state.pending = None
+    _record(state, action,
+            f"{side} Greed: discard excess Mules for {list(chosen)}")
+    return {"greed_choice": {"side": side, "discarded_for": list(chosen)},
+            "advance": _economy_advance(state, action, payload)}
+
+
+def _h_pay_before_disband(state: GameState,
+                          action: dict[str, Any]) -> dict[str, Any]:
+    """Response to the voluntary Pay (4.8.2) prompt that precedes the
+    mandatory at-limit Disband. A `done` advances Christians -> Muslims
+    -> Disband; otherwise the action is a Pay (3.2) applied via the
+    shared pay_lord handler."""
+    side = _require_side(action)
+    pd = _require_pending(state, "pay_before_disband", side)
+    payload = pd.payload
+    _require(side == payload["cursor_side"],
+             f"Pay step is waiting on {payload['cursor_side']}, not {side}",
+             code="not_pay_side")
+    if action.get("done"):
+        state.pending = None
+        if side == "christian":
+            payload["cursor_side"] = "muslim"
+            return {"pay_before_disband": "done", "next_side": "muslim",
+                    "advance": _economy_advance(state, action, payload)}
+        return {"pay_before_disband": "done",
+                "finalize": _economy_finalize(
+                    state, action, payload["active_side"],
+                    payload["active_lord_id"], payload["feed_result"])}
+    from almoravid.actions import _h_pay_lord
+    with _MetaCtx(state, phase="levy", levy_step="pay", active_player=side):
+        res = _h_pay_lord(state, {**action, "type": "pay_lord"})
+    state.pending = PendingDecision(
+        kind="pay_before_disband", waiting_on=side, payload=payload)
+    state.meta.active_player = side
+    return {"pay_before_disband": res}
+
 
 
 def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -5590,6 +5743,8 @@ CAMPAIGN_HANDLERS = {
     "finalize_plan": _h_finalize_plan,
     "command_reveal": _h_command_reveal,
     "end_card": _h_end_card,
+    "greed_mule_choice": _h_greed_mule_choice,
+    "pay_before_disband": _h_pay_before_disband,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
     "cmd_supply": _h_cmd_supply,

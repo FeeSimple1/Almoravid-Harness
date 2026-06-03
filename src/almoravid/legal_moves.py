@@ -104,6 +104,33 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "defender_concede": True})
         return moves
 
+    # 4.8.1 GREED — optional Mule discard during the interactive Feed/Pay/
+    # Disband step. The waiting side may discard the unfeedable excess Mules
+    # of any subset of its eligible Lords (default: discard none).
+    if (state.pending is not None
+            and state.pending.kind == "greed_mule_choice"):
+        side = state.pending.waiting_on
+        from almoravid.campaign import _greed_eligible_lords
+        eligible = [e["lord_id"] for e in _greed_eligible_lords(state, side)]
+        moves.append({"type": "greed_mule_choice", "side": side,
+                      "discard_lords": []})
+        if eligible:
+            moves.append({"type": "greed_mule_choice", "side": side,
+                          "discard_lords": eligible})
+        return moves
+
+    # 4.8.2 voluntary PAY before the mandatory at-limit Disband (interactive
+    # Feed/Pay/Disband). The waiting side may Pay (3.2) any eligible Lord to
+    # shift Service rightward, or declare `done` to proceed to Disband.
+    if (state.pending is not None
+            and state.pending.kind == "pay_before_disband"):
+        side = state.pending.waiting_on
+        for mv in _pay_moves(state, side):
+            moves.append({**mv, "type": "pay_before_disband"})
+        moves.append({"type": "pay_before_disband", "side": side,
+                      "done": True})
+        return moves
+
     # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord
     # at a time (Supply / Ravage / pass), then Christian-then-Muslim Pay
     # (or done) at Sieges. Pattern 11: only the waiting_on side may act.
