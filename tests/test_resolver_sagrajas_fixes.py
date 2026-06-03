@@ -121,7 +121,6 @@ def test_cantador_combined_cap_across_horse_and_foot_steps():
     """C8 is 'up to four of that Lord's Knights AND Sergeants'. Resolving
     Horse Melee (Knights) and Foot Melee (Sergeants) as two steps must
     share ONE budget of 4 -- not 4 per step (which would double to 8)."""
-    from almoravid.battle import _battle_one_round
     s = _state()
     s.decks.this_levy_events["christian"] = ["C8"]
     a1 = LordPosition(lord_id="alfonso", position="front_center",
