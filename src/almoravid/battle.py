@@ -1632,6 +1632,18 @@ def _storm_melee_hits(state: GameState, ss: dict[str, Any],
     return total
 
 
+def _storm_reserve_pick(reserve_ids: list[str],
+                        priority: list[str]) -> int:
+    """4.4.1 REPOSITION: index of the Reserve Lord to Advance to the Front.
+    Honours the owner's `array_reserve_priority` (first listed lord_id that
+    is in Reserve); falls back to the first Reserve (legacy `pop(0)`)."""
+    if priority:
+        for lid in priority:
+            if lid in reserve_ids:
+                return reserve_ids.index(lid)
+    return 0
+
+
 def _storm_run_round(state: GameState, attacker: BattleSide,
                      defender: BattleSide, ss: dict[str, Any],
                      round_idx: int) -> BattleRound:
@@ -1643,16 +1655,24 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     wr = ss["walls_range"]
     walls_range = (int(wr[0]), int(wr[1])) if wr else None
     if round_idx >= 2:
+        d_prio = state.meta.array_reserve_priority.get(defender.side, [])
+        a_prio = state.meta.array_reserve_priority.get(attacker.side, [])
+        # Defender: forced commit if Front wiped, else the optional "may add
+        # one Lord from Reserve" (4.4.1); the owner's priority picks which.
         if (not _storm_defender_front_alive(ss)) and ss["d_reserve"]:
-            ss["d_front"].append(ss["d_reserve"].pop(0))
+            ss["d_front"].append(
+                ss["d_reserve"].pop(_storm_reserve_pick(ss["d_reserve"], d_prio)))
         elif (ss["reposition_defender"] and len(ss["d_front"]) < capacity
               and ss["d_reserve"]):
-            ss["d_front"].append(ss["d_reserve"].pop(0))
+            ss["d_front"].append(
+                ss["d_reserve"].pop(_storm_reserve_pick(ss["d_reserve"], d_prio)))
         if (not _storm_attacker_front_alive(ss)) and ss["a_reserve"]:
-            ss["a_front"].append(ss["a_reserve"].pop(0))
+            ss["a_front"].append(
+                ss["a_reserve"].pop(_storm_reserve_pick(ss["a_reserve"], a_prio)))
         elif (ss["reposition_attacker"] and len(ss["a_front"]) < capacity
               and ss["a_reserve"]):
-            ss["a_front"].append(ss["a_reserve"].pop(0))
+            ss["a_front"].append(
+                ss["a_reserve"].pop(_storm_reserve_pick(ss["a_reserve"], a_prio)))
     round_walls = walls_range
     if ss["siege_towers"] and round_idx >= 2 and walls_range is not None:
         round_walls = (walls_range[0], max(0, walls_range[1] - 1))
@@ -3258,6 +3278,30 @@ def _pick_flank_target(side: BattleSide,
     return next(iter(fronts.values()))
 
 
+def _pick_flank_absorber(actor: BattleSide, target: BattleSide,
+                         opposed_lp: LordPosition) -> LordPosition | None:
+    """4.4.2 APPLY HITS: "A Player with a Flanking Lord selects either the
+    Flanking or directly opposed Lord to take Hits." Returns a Front Lord on
+    the TARGET side that is Flanking (its Front position is NOT opposed by an
+    unrouted actor Lord) and can absorb on behalf of `opposed_lp` (the
+    directly-opposed Lord), or None if the target side has no such Flanking
+    Lord. When several qualify, the largest is chosen as the owner's default.
+    """
+    if actor.array is None or target.array is None:
+        return None
+    fronts: tuple[ArrayPosition, ...] = (
+        "front_center", "front_left", "front_right")
+    actor_filled = {lp.position for lp in actor.array
+                    if lp.position in fronts and lp.has_unrouted()}
+    flankers = [lp for lp in target.array
+                if lp.position in fronts and lp.has_unrouted()
+                and lp.position not in actor_filled
+                and lp is not opposed_lp]
+    if not flankers:
+        return None
+    return max(flankers, key=lambda lp: sum(lp.forces.values()))
+
+
 def _sync_side_forces_from_array(side: BattleSide) -> None:
     """Rebuild side.forces as the sum of all LordPosition.forces so
     legacy code paths (commit_forces_after_battle, has_unrouted) keep
@@ -3338,6 +3382,7 @@ def _resolve_step_per_pair(
         target_lp = next((lp for lp in target.array
                           if lp.position == actor_pos
                           and lp.has_unrouted()), None)
+        directly_opposed = target_lp is not None
         if target_lp is None:
             target_lp = _pick_flank_target(
                 target, actor_pos,
@@ -3345,6 +3390,14 @@ def _resolve_step_per_pair(
                     actor.side, "larger"))
         if target_lp is None:
             continue
+        # 4.4.2 APPLY HITS: the target side may absorb a directly-opposed
+        # Lord's Hits with a friendly Flanking Lord, at its option.
+        if (directly_opposed
+                and state.meta.array_flank_absorb.get(
+                    target.side, "opposed") == "flanking"):
+            absorber = _pick_flank_absorber(actor, target, target_lp)
+            if absorber is not None:
+                target_lp = absorber
 
         rows = _build_strike_rows_for_position(state, actor, actor_lp,
                                                context="battle")

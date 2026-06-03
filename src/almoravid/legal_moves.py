@@ -98,6 +98,9 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _cf in ("left", "right"):
             moves.append({"type": "set_array_tactics", "side": side,
                           "center_fill": _cf})
+        for _fa in ("opposed", "flanking"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_absorb": _fa})
         return moves
 
     # 4.4.1 ONE-ROUND EFFECT TIMING — before Round 1, the owner picks which
@@ -144,6 +147,9 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _cf in ("left", "right"):
             moves.append({"type": "set_array_tactics", "side": side,
                           "center_fill": _cf})
+        for _fa in ("opposed", "flanking"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_absorb": _fa})
         return moves
 
     # 4.4.2 CONCEDE THE FIELD? — reactive Relief-Sally Concede (either
@@ -173,6 +179,9 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _cf in ("left", "right"):
             moves.append({"type": "set_array_tactics", "side": side,
                           "center_fill": _cf})
+        for _fa in ("opposed", "flanking"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_absorb": _fa})
         return moves
 
     # 4.8.1 GREED — optional Mule discard during the interactive Feed/Pay/

@@ -337,3 +337,58 @@ striking Lords' order cannot change the result. Proven by
 enumeration.
 **Revisit:** if the two residuals above are modelled, or if a fully reactive
 per-Round Array-placement prompt is preferred over standing policies.
+
+## DECISION-007 — The two DECISION-006 Array residuals are now implemented
+
+**Date:** 2026-06-03
+**Type:** [INTERPRETATION]
+**Trigger:** Follow-up to DECISION-006 — implement its two [DEFERRED]
+residuals (Flanking absorb-before-opposed; Storm REPOSITION optional /
+which-Reserve commitment).
+
+**1. Flanking absorb-before-opposed (4.4.2 APPLY HITS).** Rule: "Hits apply
+to the Forces of the opposed, Flanked, or Flanking Enemy Lord. A Player with
+a Flanking Lord selects either the Flanking or directly opposed Lord to take
+Hits." Exposed as the per-side policy `array_flank_absorb` =
+`opposed` (default) | `flanking`, set via `set_array_tactics` and surfaced in
+`legal_moves`. In the per-pair resolver (`_resolve_step_per_pair`), when the
+target side's policy is `flanking` AND the Hits are aimed at a *directly-
+opposed* Lord AND that side has a Flanking Lord (a Front Lord whose Front
+position is not opposed by an unrouted enemy), the Hits are redirected to
+that Flanking Lord (`_pick_flank_absorber`; the largest qualifying Flanker
+when several exist). Default `opposed` reproduces prior behaviour exactly.
+
+  *Scope note:* the redirect applies only to a directly-opposed Lord's Hits
+  (the rule's "either the Flanking or directly opposed Lord"); Hits an
+  Attacker generates by Flanking still land on the chosen Flank target. The
+  "apply remaining Hits to a NEW Flanking situation mid-step" clause (a Lord
+  Routing to expose a neighbour) remains the existing per-target model and
+  is unchanged.
+
+**2. Storm REPOSITION (4.4.1).** Rule: "In each Storm Round after the first,
+Attacker then Defender may add one Lord from Reserve to the Front, up to
+Stronghold Capacity." Two choices are now exposed:
+  - WHICH Reserve Advances — `_storm_run_round` consults the side's
+    `array_reserve_priority` (the same per-side ordered lord_id policy used
+    for Battle Advance) via `_storm_reserve_pick`, instead of always the
+    first Reserve (`pop(0)`).
+  - WHETHER to add (the optional "may") — `cmd_storm` now reads
+    `reposition_attacker` as well as the existing `reposition_defender`
+    (default True for both), threaded through the synchronous and
+    interactive Storm paths. The forced commit when a side's Front is wiped
+    ("If all Front Lords Routed, a Reserve Lord must move to Front") still
+    fires regardless of the flag.
+
+  *Scope note:* both flags are supplied on the storming side's `cmd_storm`
+  action (consistent with how `reposition_defender` already worked); a fully
+  separate reactive Defender REPOSITION sub-turn is not modelled.
+
+**Strike order** remains a proven non-choice (DECISION-006).
+
+**Scope:** state.py (`array_flank_absorb`), battle.py (`_pick_flank_absorber`,
+`_resolve_step_per_pair`, `_storm_reserve_pick`, `_storm_run_round`),
+campaign.py (`set_array_tactics`, `cmd_storm`, `_begin_interactive_storm`),
+legal_moves enumeration, state.schema.json.
+**Revisit:** if a fully reactive per-Round Array / REPOSITION prompt (each
+owner deciding live, with mid-step new-Flanking Hit spill) is preferred over
+the standing-policy exposure.
