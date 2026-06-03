@@ -3148,11 +3148,91 @@ def _begin_interactive_battle(
     pl["defender"] = battle_side_to_snapshot(dfd)
     pl["defender_walls_range"] = (list(defender_walls_range)
                                   if defender_walls_range else None)
+    # 4.4.1 one-Round effect timing (opt-in): before Round 1, let each
+    # owner choose WHICH Round its Javelins / M7 Spear Wall fire.
+    if bool(action.get("interactive_timing")):
+        queue = _oneround_timing_queue(state, atk, dfd)
+        if queue:
+            pl["timing_queue"] = queue
+            return _oneround_timing_pend(state, atk, dfd, pl)
+    return _battle_pend_concede(state, pl)
+
+
+def _battle_pend_concede(state: GameState,
+                         pl: dict[str, Any]) -> dict[str, Any]:
+    """Pend the Round-1 Concede declaration to start the round-stepped
+    Battle (shared by the timing-prompt resume and the direct start)."""
     state.pending = PendingDecision(
         kind="battle_concede", waiting_on=pl["side"], payload=pl)
     state.meta.active_player = pl["side"]
-    return {"battle": "awaiting_concede", "round": 1,
+    return {"battle": "awaiting_concede", "round": pl["round_idx"],
             "engagement": pl["engagement_label"]}
+
+
+def _oneround_timing_queue(state: GameState, atk: Any,
+                           dfd: Any) -> list[str]:
+    """Roles ("attacker"/"defender") whose side owns a one-Round effect
+    (Javelins or M7) and therefore gets a timing prompt, attacker first."""
+    from almoravid.battle import build_strike_rows
+    queue: list[str] = []
+    for role, bs in (("attacker", atk), ("defender", dfd)):
+        rows = build_strike_rows(state, bs, context="battle")
+        has_jav = any(getattr(r, "one_round_only", False) for r in rows)
+        has_m7 = bool(getattr(bs, "m7_owned", False))
+        if has_jav or has_m7:
+            queue.append(role)
+    return queue
+
+
+def _oneround_timing_pend(state: GameState, atk: Any, dfd: Any,
+                          pl: dict[str, Any]) -> dict[str, Any]:
+    """Emit the timing prompt for the front of pl["timing_queue"]."""
+    from almoravid.battle import build_strike_rows
+    role = pl["timing_queue"][0]
+    bs = atk if role == "attacker" else dfd
+    rows = build_strike_rows(state, bs, context="battle")
+    has_jav = any(getattr(r, "one_round_only", False) for r in rows)
+    has_m7 = bool(getattr(bs, "m7_owned", False))
+    pl["timing_effects"] = {"javelin": has_jav, "m7": has_m7}
+    state.pending = PendingDecision(
+        kind="oneround_timing", waiting_on=bs.side, payload=pl)
+    state.meta.active_player = bs.side
+    return {"pending": "oneround_timing", "side": bs.side, "role": role,
+            "effects": pl["timing_effects"], "max_rounds": pl["max_rounds"]}
+
+
+def _h_oneround_timing(state: GameState,
+                       action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a one-Round effect timing prompt (4.4.1). `javelin_round`
+    and/or `m7_round` (1..max_rounds) set when the owner's one-Round Strikes
+    / Spear Wall fire. Defaults to Round 1 when omitted."""
+    side = _require_side(action)
+    pd = _require_pending(state, "oneround_timing", side)
+    pl = pd.payload
+    role = pl["timing_queue"][0]
+    snap = pl["attacker"] if role == "attacker" else pl["defender"]
+    maxr = int(pl["max_rounds"])
+    effects = pl.get("timing_effects", {"javelin": False, "m7": False})
+    if effects.get("javelin"):
+        jr = int(action.get("javelin_round", 1))
+        _require(1 <= jr <= maxr, f"javelin_round must be 1..{maxr}",
+                 code="bad_arg")
+        snap["oneround_round"] = jr
+    if effects.get("m7"):
+        mr = int(action.get("m7_round", 1))
+        _require(1 <= mr <= maxr, f"m7_round must be 1..{maxr}",
+                 code="bad_arg")
+        snap["m7_round"] = mr
+    pl["timing_queue"] = pl["timing_queue"][1:]
+    state.pending = None
+    if pl["timing_queue"]:
+        from almoravid.battle import battle_side_from_snapshot
+        atk = battle_side_from_snapshot(pl["attacker"])
+        dfd = battle_side_from_snapshot(pl["defender"])
+        return {"oneround_timing": "set",
+                "advance": _oneround_timing_pend(state, atk, dfd, pl)}
+    return {"oneround_timing": "set",
+            "advance": _battle_pend_concede(state, pl)}
 
 
 def _h_battle_concede(state: GameState,
@@ -5890,6 +5970,7 @@ CAMPAIGN_HANDLERS = {
     "greed_mule_choice": _h_greed_mule_choice,
     "pay_before_disband": _h_pay_before_disband,
     "wastage_choice": _h_wastage_choice,
+    "oneround_timing": _h_oneround_timing,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
     "cmd_supply": _h_cmd_supply,

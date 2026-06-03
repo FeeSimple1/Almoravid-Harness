@@ -83,6 +83,26 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "defender_concede": True})
         return moves
 
+    # 4.4.1 ONE-ROUND EFFECT TIMING — before Round 1, the owner picks which
+    # Round its Javelins / M7 Spear Wall fire. Offer Round 1 (default) and
+    # the explicit per-Round options for whichever effect(s) it owns.
+    if (state.pending is not None
+            and state.pending.kind == "oneround_timing"):
+        side = state.pending.waiting_on
+        pl = state.pending.payload
+        maxr = int(pl.get("max_rounds", 6))
+        effects = pl.get("timing_effects", {})
+        moves.append({"type": "oneround_timing", "side": side})
+        if effects.get("javelin"):
+            for rnd_i in range(1, maxr + 1):
+                moves.append({"type": "oneround_timing", "side": side,
+                              "javelin_round": rnd_i})
+        if effects.get("m7"):
+            for rnd_i in range(1, maxr + 1):
+                moves.append({"type": "oneround_timing", "side": side,
+                              "m7_round": rnd_i})
+        return moves
+
     # S10 Storm Concede — Attacker only (4.5.2), reactive per Round (2+).
     if (state.pending is not None
             and state.pending.kind == "storm_concede"):
