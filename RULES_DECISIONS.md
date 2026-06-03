@@ -216,3 +216,66 @@ effects keep the Round-1 default there (a scope limit, not a rules conflict).
 legal_moves enumeration.
 **Revisit:** if a UI wants per-item Wastage prompts or per-Lord Greed
 amounts beyond the subset/default options currently enumerated.
+
+## DECISION-005 — Tactical Battle choices: which are player decisions, and how exposed
+
+**Date:** 2026-06-03
+**Type:** [INTERPRETATION] / [DEFERRED]
+**Trigger:** PR review — "an LLM using the public action interface cannot
+fully control tactical choices in a normal field Battle." Audited 4.4.1–.2
+against the engine to separate genuine player decisions from
+rules-determined resolution.
+
+**Findings (per Rules of Play 4.4.1 REPOSITION/Advance/Center, 4.4.2
+Initiative / ASSIGN HITS):**
+
+- **Concede the Field (4.4.2)** — player choice. Exposed: pre-declared
+  `*_concede_round` args (DECISION-001) and the reactive `interactive_concede`
+  driver, now also for ordinary March-triggered (Stand & Fight) field Battles
+  (PR `expose-field-battle-decisions`), at parity with the end-of-card Battle
+  and Relief Sally.
+- **ASSIGN HITS — "the owner selects which unit will absorb each Hit, Hit by
+  Hit" (4.4.2)** — player choice. Exposed as a per-side standing *policy*
+  (`weakest_first` / `armored_first`) via the `set_absorption_policy` action
+  and the `absorption_policy` arg on combat actions; settable at any time
+  (no global pending gate), including between Rounds of an interactive Battle.
+  As of this PR it is also surfaced in `legal_moves` during the
+  `battle_concede` / `storm_concede` / `relief_concede` decisions so an agent
+  can discover it. **[INTERPRETATION]** With only two Protection classes in
+  play (armored / unarmored), the two policies span the strategically
+  meaningful absorption orders; literal per-Hit ordering beyond that has
+  negligible effect and would explode the decision tree, so the policy is
+  accepted as a faithful proxy rather than a full Hit-by-Hit prompt. Rule-
+  forced cases are still enforced inside resolution regardless of policy:
+  Storm Attacker absorbs with Armored first (4.5.2), and the Crossbow firing
+  side selects the target (1.3.1).
+
+**Deferred (genuine player choices, currently resolved deterministically,
+arise only in MULTI-LORD arrays):**
+
+- **Strike order, Lord by Lord within a step (4.4.2 Initiative)** — the
+  Striking side chooses the order; engine strikes in a fixed order.
+- **Flanking absorb-before-opposed (4.4.2)** — "A Flanking Lord may absorb
+  Hits from a Flanked Lord, at the owner's option"; engine decides
+  deterministically.
+- **REPOSITION / Advance — add a Reserve Lord to the Front (4.4.1; Storm
+  REPOSITION)** — "Attacker then Defender may add one Lord from Reserve to
+  the Front"; engine does not surface the optional commitment.
+- **Center fill, left-or-right (4.4.2 Center)** — when a Front-center
+  position is empty, the owner picks which side Lord slides in; engine
+  picks deterministically.
+
+**Decision:** Treat hit allocation as adequately exposed (policy + now
+discoverable). The four multi-Lord array/order choices are **[DEFERRED]**:
+they only affect Battles with multiple Lords per side and Reserves, and
+exposing them interactively is a larger Array-driver change. Recorded here
+so the omission is explicit rather than silent. No "true tie" winner
+tie-break is a player choice (a real tie clears the field per 4.4 / the
+Sagrajas resolver); the only tie-like choices are the multi-Lord
+center/Reserve picks above.
+
+**Scope:** combat (battle.py `_resolve_protection_roll` absorb policy),
+campaign.py (`_apply_absorption_policy`, `set_absorption_policy`, interactive
+battle drivers), legal_moves enumeration.
+**Revisit:** when full multi-Lord Array control (Reserve commitment, per-step
+Strike order, Flanking absorb option, center fill) is built.
