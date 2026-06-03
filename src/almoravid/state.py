@@ -166,6 +166,31 @@ class Meta(StrictModel):
         default_factory=lambda: cast("dict[Side, str]",
                                      {"christian": "weakest_first",
                                       "muslim": "weakest_first"}))
+    # Multi-Lord Array tactical choices (rule 4.4.2 Reposition / Flanking).
+    # The rules make several Array placements the owner's choice; these
+    # per-side standing policies expose them (consumed by _reposition_array
+    # and _pick_flank_target, with the historical default behaviour when a
+    # side leaves them at the default).
+    #   array_flank_choice  — a CENTER Front Lord with no opposite Enemy may
+    #     Flank "left" or "right" (4.4.2 "center may choose left or right");
+    #     "larger" (default) Flanks the bigger Enemy Lord.
+    #   array_center_fill   — when an empty Front-center must be filled from
+    #     a side Front slot (4.4.2 Center), pull from "left" (default) or
+    #     "right".
+    #   array_reserve_priority — ordered lord_ids deciding which Reserve Lord
+    #     Advances into the first-available empty Front slot (4.4.2 Advance);
+    #     empty list (default) keeps Array order.
+    array_flank_choice: dict[Side, str] = Field(
+        default_factory=lambda: cast("dict[Side, str]",
+                                     {"christian": "larger",
+                                      "muslim": "larger"}))
+    array_center_fill: dict[Side, str] = Field(
+        default_factory=lambda: cast("dict[Side, str]",
+                                     {"christian": "left",
+                                      "muslim": "left"}))
+    array_reserve_priority: dict[Side, list[str]] = Field(
+        default_factory=lambda: cast("dict[Side, list[str]]",
+                                     {"christian": [], "muslim": []}))
     # Phase 6i: Surprise (C6) consumed on March into empty Enemy
     # Stronghold — payload tells the next cmd_storm to use Walls-1
     # and applies +2 Siege markers (already placed by the cmd_march

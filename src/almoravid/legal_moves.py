@@ -88,6 +88,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _pol in ("weakest_first", "armored_first"):
             moves.append({"type": "set_absorption_policy", "side": side,
                           "policy": _pol})
+        # 4.4.2 Reposition / Flanking — multi-Lord Array placement choices
+        # (standing policies; mechanically relevant only with a multi-Lord
+        # Array, harmless otherwise). Surface the enumerable directions;
+        # reserve_priority takes an explicit lord_id list via the action.
+        for _fc in ("larger", "left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_choice": _fc})
+        for _cf in ("left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "center_fill": _cf})
         return moves
 
     # 4.4.1 ONE-ROUND EFFECT TIMING — before Round 1, the owner picks which
@@ -124,6 +134,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _pol in ("weakest_first", "armored_first"):
             moves.append({"type": "set_absorption_policy", "side": side,
                           "policy": _pol})
+        # 4.4.2 Reposition / Flanking — multi-Lord Array placement choices
+        # (standing policies; mechanically relevant only with a multi-Lord
+        # Array, harmless otherwise). Surface the enumerable directions;
+        # reserve_priority takes an explicit lord_id list via the action.
+        for _fc in ("larger", "left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_choice": _fc})
+        for _cf in ("left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "center_fill": _cf})
         return moves
 
     # 4.4.2 CONCEDE THE FIELD? — reactive Relief-Sally Concede (either
@@ -143,6 +163,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         for _pol in ("weakest_first", "armored_first"):
             moves.append({"type": "set_absorption_policy", "side": side,
                           "policy": _pol})
+        # 4.4.2 Reposition / Flanking — multi-Lord Array placement choices
+        # (standing policies; mechanically relevant only with a multi-Lord
+        # Array, harmless otherwise). Surface the enumerable directions;
+        # reserve_priority takes an explicit lord_id list via the action.
+        for _fc in ("larger", "left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "flank_choice": _fc})
+        for _cf in ("left", "right"):
+            moves.append({"type": "set_array_tactics", "side": side,
+                          "center_fill": _cf})
         return moves
 
     # 4.8.1 GREED — optional Mule discard during the interactive Feed/Pay/

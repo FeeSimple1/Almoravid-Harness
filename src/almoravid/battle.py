@@ -917,8 +917,16 @@ def _battle_one_round(
                 _held.append("M7")
     # Phase 6e Reposition (Round 2+ only -- rule 4.4.2 skipped_round_1).
     if round_idx > 1:
-        _reposition_array(attacker)
-        _reposition_array(defender)
+        _reposition_array(
+            attacker,
+            center_fill=state.meta.array_center_fill.get(attacker.side, "left"),
+            reserve_priority=state.meta.array_reserve_priority.get(
+                attacker.side, []))
+        _reposition_array(
+            defender,
+            center_fill=state.meta.array_center_fill.get(defender.side, "left"),
+            reserve_priority=state.meta.array_reserve_priority.get(
+                defender.side, []))
     # Phase 6i: M6 Feigned Retreat reorders Round 2 melee steps -- all
     # Muslim Melee Strikes before all Christian Melee, regardless of who
     # is Attacker.
@@ -2954,13 +2962,25 @@ def declare_concede(result: BattleResult, conceder_side: Side) -> None:
     )
 
 
-def _reposition_array(side: BattleSide) -> None:
+def _reposition_array(
+    side: BattleSide,
+    *,
+    center_fill: str = "left",
+    reserve_priority: list[str] | None = None,
+) -> None:
     """Rule 4.4.2 reposition (Round 2+):
       1. rout_removal: Lord whose forces are empty -> position='routed'.
       2. advance: one Reserve Lord into each empty Front position.
       3. center: if Front center still empty after Advance, mandatory
          slide from Front left or Front right into center.
     No-op when array is None.
+
+    Player choices (4.4.2): `reserve_priority` is an ordered list of
+    lord_ids deciding which Reserve Lord Advances first (into the first
+    empty Front slot, center-most first); Lords not listed keep Array
+    order behind those listed. `center_fill` ("left"|"right") picks which
+    side Front Lord slides into an empty center. Defaults reproduce the
+    historical deterministic behaviour (Array order; left before right).
     """
     if side.array is None:
         return
@@ -2975,12 +2995,24 @@ def _reposition_array(side: BattleSide) -> None:
     empties = [s for s in front_slots if s not in filled]
     reserves = [lp for lp in side.array if lp.position == "reserve"
                 and lp.has_unrouted()]
+    if reserve_priority:
+        # Owner choice (4.4.2 Advance): listed lord_ids Advance first, in
+        # the given order; unlisted Reserves keep Array order behind them.
+        def _prio(lp: LordPosition) -> tuple[int, int]:
+            if lp.lord_id in reserve_priority:
+                return (0, reserve_priority.index(lp.lord_id))
+            return (1, side.array.index(lp))   # type: ignore[union-attr]
+        reserves = sorted(reserves, key=_prio)
     for slot, lp in zip(empties, reserves, strict=False):
         lp.position = slot
     # Step 3: center-fill (mandatory slide from left/right if center empty).
     has_center = any(lp.position == "front_center" for lp in side.array)
     if not has_center:
-        for cand_pos in ("front_left", "front_right"):
+        # Owner choice (4.4.2 Center): pull from the chosen side first.
+        fill_order = (("front_right", "front_left")
+                      if center_fill == "right"
+                      else ("front_left", "front_right"))
+        for cand_pos in fill_order:
             cand = next((lp for lp in side.array
                          if lp.position == cand_pos and lp.has_unrouted()),
                         None)
@@ -3187,12 +3219,15 @@ def _resolve_protection_roll_for_lp(
 
 
 def _pick_flank_target(side: BattleSide,
-                       actor_pos: ArrayPosition) -> LordPosition | None:
+                       actor_pos: ArrayPosition,
+                       *,
+                       flank_choice: str = "larger") -> LordPosition | None:
     """4.4.2 Flanking: a Front Lord with no Enemy directly opposite Strikes
     the CLOSEST Front Enemy Lord. Positional closeness on the 3-slot Front:
     a left/right Flanker prefers the center, then the far slot; a center
-    Flanker may choose left or right (equidistant) — we take the larger of
-    the two as the owner's sensible default."""
+    Flanker may choose left or right (equidistant) — the owner's choice
+    (`flank_choice` = "left" | "right"), defaulting to "larger" (Flank the
+    bigger Enemy Lord) when left unset."""
     if side.array is None:
         return None
     fronts = {
@@ -3206,10 +3241,15 @@ def _pick_flank_target(side: BattleSide,
         order: list[ArrayPosition] = ["front_center", "front_right"]
     elif actor_pos == "front_right":
         order = ["front_center", "front_left"]
-    else:  # center: left and right are equidistant — owner picks the larger.
+    else:  # center: left and right are equidistant — owner's choice.
+        if flank_choice == "left" and "front_left" in fronts:
+            return fronts["front_left"]
+        if flank_choice == "right" and "front_right" in fronts:
+            return fronts["front_right"]
         cands = [fronts[p] for p in ("front_left", "front_right")
                  if p in fronts]
         if cands:
+            # Default "larger" (or chosen side absent): Flank the bigger.
             return max(cands, key=lambda lp: sum(lp.forces.values()))
         order = []
     for p in order:
@@ -3299,7 +3339,10 @@ def _resolve_step_per_pair(
                           if lp.position == actor_pos
                           and lp.has_unrouted()), None)
         if target_lp is None:
-            target_lp = _pick_flank_target(target, actor_pos)
+            target_lp = _pick_flank_target(
+                target, actor_pos,
+                flank_choice=state.meta.array_flank_choice.get(
+                    actor.side, "larger"))
         if target_lp is None:
             continue
 
