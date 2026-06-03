@@ -33,18 +33,18 @@
       "event_name": "Arid Terrain",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Arqueros",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "C5": {
       "side": "christian",
       "event_name": "Drought",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Arqueros",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "C6": {
       "side": "christian",
@@ -258,36 +258,36 @@
       "event_name": "Swollen River",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Harbah",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M4": {
       "side": "muslim",
       "event_name": "Arid Terrain",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Alrama",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M5": {
       "side": "muslim",
       "event_name": "Drought",
       "event_persistence": "hold",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Alrama",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M6": {
       "side": "muslim",
       "event_name": "Feigned Retreat",
       "event_persistence": "immediate",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Harbah",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M7": {
       "side": "muslim",

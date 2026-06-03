@@ -131,8 +131,9 @@ campaign._cabalgadas_capable (add M24 + Muslim eligibility).
 
 ## Q-003 — Bowmen/Javelin capability metadata missing for dual-half cards
 
-**Status:** open
+**Status:** resolved
 **Filed:** 2026-05-23 (surfaced building the Sagrajas minigame)
+**Resolved:** 2026-06-02
 
 **Question:** cards.json records capability_name=None / capability_scope=None
 for C4, C5 (Arqueros), M4, M5 (Alrama), M3, M6 (Harbah) — but the Arts of War
@@ -160,9 +161,18 @@ directly), so this is logged, not blocking.
 2. forces.json already gates the effects on these card_ids (resolver correct).
 3. cards.json: capability_name/scope = None for these six (the bug).
 
-**Resolution:** (pending user adjudication; likely set capability_name +
-this_lord scope for C4/C5/M4/M5/M3/M6, then verify deploy/Levy + eligibility.)
-**Affected code:** src/almoravid/data/static/cards.json.
+**Resolution:** Per the Arts of War Reference (consultation chain below),
+C4/C5 (Arqueros), M4/M5 (Alrama), M3/M6 (Harbah) are This-Lord Capabilities
+with a one-per-title cap (3.4.4). cards.json now records
+capability_name + capability_scope="this_lord" (no_capability=false) for all
+six. They are deployable at the first Levy (3.1.2) and Levyable (3.4.4),
+gated by the existing one-per-title rule (verified by
+tests/test_q003_bowmen_javelin_caps.py). The combat resolver already gated
+their effects on these card_ids, so in-play behavior is unchanged; only the
+Levy/deploy reachability was added. Eligibility is any Lord of the right
+side (capability_eligible_lords returns None for all six).
+**Affected code:** src/almoravid/data/static/cards.json;
+tests/test_q003_bowmen_javelin_caps.py.
 
 ## Sagrajas minigame — documented modeling limitation (not a Q)
 The Background Book gives Yusuf and Sir a Javelins marker for their AFRICAN
