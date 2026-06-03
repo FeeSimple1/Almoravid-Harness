@@ -1037,12 +1037,20 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         lord.moved_fought = False
         lord.routed_units = {}
 
-    # Discard board-edge Capabilities (3.4.4)
+    # Discard board-edge Capabilities (3.4.4). C18 Milites is "removed from
+    # the game" on discard (its Event #C18 Runaway Slaves leaves with it),
+    # so it must NOT recycle into a later Campaign's draw deck.
+    _removed_on_discard = {"C18"}
     for side in ("christian", "muslim"):
         edge = state.decks.board_edge.get(side, [])
-        if edge:
-            state.decks.discard.extend(edge)
-            results["board_edge_discarded"].extend(edge)
+        for cid in edge:
+            if cid in _removed_on_discard:
+                if cid not in state.decks.removed_from_game:
+                    state.decks.removed_from_game.append(cid)
+                results.setdefault("board_edge_removed_from_game", []).append(cid)
+            else:
+                state.decks.discard.append(cid)
+            results["board_edge_discarded"].append(cid)
         state.decks.board_edge[side] = []
 
     # Clear Service markers (6.3.1 Disbands; Spring Muster re-places them)
@@ -2319,6 +2327,10 @@ def _h_cmd_tax(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_besieged(state, lord_id),
              "Besieged Lord cannot Tax (4.7.3)",
              code="besieged")
+    from almoravid.capabilities import effective_command
+    _require(state.meta.actions_remaining == effective_command(state, lord_id),
+             "Tax takes an ENTIRE Command card (4.2.1); no other action may "
+             "precede it this card", code="not_fresh_card")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale",
              code="not_on_map")
@@ -2714,6 +2726,10 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Siege Friendly Locale {here}",
              code="friendly_locale")
+    from almoravid.capabilities import effective_command
+    _require(state.meta.actions_remaining == effective_command(state, lord_id),
+             "Siege takes an ENTIRE Command card (4.2.1); no other action may "
+             "precede it this card", code="not_fresh_card")
 
     color = "yellow" if side == "christian" else "green"
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"

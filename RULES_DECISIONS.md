@@ -136,51 +136,72 @@ from acting as the Levying Lord (it previously only blocked being Mustered).
 **Revisit:** when the Javelins-marker subsystem gains owner round-choice.
 
 
-## DECISION-004 — Residual simplifications after the full rulebook reconciliation
+## DECISION-004 — Adjudication of residual reconciliation items
 
-**Date:** 2026-06-02
+**Date:** 2026-06-02 (revised)
 **Type:** [INTERPRETATION] / [HOUSE RULE]
 **Trigger:** Line-by-line reconciliation of the Rules of Play against the
-implementation (see RECONCILIATION.md). All clear rules-accuracy GAPS found
-were fixed (Ravage re-target, Forage Friendly-Stronghold, Supply/Tax dynamic
+implementation (see RECONCILIATION.md). All clear rules-accuracy GAPS were
+fixed (Ravage re-target, Forage Friendly-Stronghold, Supply/Tax dynamic
 Seats, FPD Disband sweep, Curias box-6 threshold, Ruined Land Parias Coin,
 Scenario D start-Bypass, Crossbows -1 vs Armor, Hills full-Battle duration,
-Sally all-Besieged-Lords, Battering Ram). The items below remain as
-deliberate, documented deviations — they are choice-model abstractions or
-ambiguous readings, not wrong-outcome bugs.
+Sally all-Besieged-Lords, Battering Ram). Each previously-documented
+deviation was then re-checked against the rulebook for a decisive ruling.
 
-**Interactive-choice abstractions** (the engine resolves deterministically
-instead of prompting the controlling player; reactive interaction exists for
-Concede via the opt-in interactive_concede mechanism but not for these):
-- 4.9.4 Wastage: the discarded Asset/Capability is auto-picked (largest
-  Asset stack, else a This-Lord card) rather than chosen by the player.
-- 4.8.1 Greed: the optional discard of Mules in excess of those Fed is not
-  offered as a choice.
-- 4.8.2 / 6.3.1: voluntary Pay (3.2) during the per-card Feed/Pay/Disband and
-  the Winter-Disband Pay sub-step are not exposed as actions (mandatory
-  Disband IS applied; a player cannot pre-empt it by paying).
+### Resolved with a decisive rulebook ruling (now implemented)
 
-**Defensible per-card defaults** (rules grant "any 1 Round"/owner choice;
-the engine uses a fixed sensible default):
-- M7 Spear Wall and one-round Javelins fire in Round 1 (see DECISION-003).
-- C8 Cantador's +4 is a single side-wide budget spent in Front order rather
-  than confined to the one Lord holding the card; bounded at +4 either way.
-  (C8 is modelled as a this_levy_events hold, with no per-Lord owner.)
-- 4.4.2 Flanking targets the largest unopposed enemy Front Lord rather than
-  the positionally "closest"; affects only which enemy a flanker is routed
-  against in a multi-Lord Battle.
+- **4.5.1 Siege / 4.7.3 Tax require a FRESH Command card.** The text "uses
+  all the actions of his Command card" is read as needing the card's FULL
+  actions available — no cheaper action may precede Siege/Tax on the same
+  card. Enforced in `cmd_siege` / `cmd_tax` (code `not_fresh_card`) and in
+  legal_moves (the action is gated on
+  `actions_remaining == effective_command`).
+- **4.4.2 Flanking targets the CLOSEST Front Enemy Lord.** Card/rule text:
+  a flanker "Strikes the closest Front Enemy Lord"; a center flanker may
+  choose left or right. `_pick_flank_target` is now position-aware
+  (front_left → center → right, etc.; center prefers the larger wing).
+- **C8 Cantador is confined to the ONE holding Lord, with a COMBINED cap of
+  4 across Knights and Sergeants.** Card text: "up to four of *that Lord's*
+  Knights and Sergeants units." The prior side-wide budget both (a) let the
+  +4 spill onto Lords other than the holder and (b) reset per Strike step,
+  so Knights (Horse step) and Sergeants (Foot step) could each draw 4 —
+  doubling the bonus to +8. Both were genuine over-credits in multi-Lord
+  Battles. Now a per-Round `c8_ctx` shares ONE budget of 4 across the Horse
+  and Foot Melee steps and applies it only to the holder = the Front
+  Christian Lord with the most eligible units (the placement a rational
+  player makes). Single-Lord Battles are unaffected (holder is that Lord).
+- **C18 Milites is removed from the game when discarded.** Card text:
+  "discard removes the card from the game ... removes Event #C18 Runaway
+  Slaves with it." Discarded C18 now goes to `decks.removed_from_game` (not
+  the discard pile), and `_rebuild_aow_deck` excludes removed cards, so it
+  cannot recycle into a later Campaign's draw deck. (Fixed a real recycling
+  bug for multi-Campaign / Scenario F play.)
 
-**Ambiguous reading:**
-- 4.5.1 Siege / 4.7.3 Tax "use all actions of his Command card" is read as
-  "ends the card" (consumes remaining actions) rather than "requires a fresh
-  card"; a Lord may thus take a cheaper action first and then Siege/Tax.
+### Genuine player choices — engine default is a legal branch
 
-**Edge case:**
-- 3.1.1: C18 Milites "removed" permanence is not separately tracked (C18 is
-  modelled as a board-edge Capability + immediate Event); it does not
-  re-enter the draw deck in normal play.
+The rulebook explicitly grants the controlling player a free choice here;
+any legal selection satisfies the rules, so there is no single "correct"
+ruling to encode. The engine picks a deterministic, always-legal default.
+A future interactive decision layer (the Concede mechanism is the model)
+could expose these; doing so changes no outcome that is currently illegal.
+
+- **4.9.4 Wastage** ("the owning player could choose to discard a Mule, the
+  Loot, or the card" — rulebook example): the engine auto-discards one
+  *legal* item (largest Asset stack, else a This-Lord card). Always a valid
+  Wastage discard; only the player's free pick is not modelled.
+- **4.8.1 Greed**: discarding excess unfeedable Mules is optional ("Lords
+  *may* discard"). The default keeps Mules and accepts any Unfed Service
+  shift — a legal branch. The beneficial discard is available via the
+  `discard_excess_mules` path on the Feed helpers.
+- **4.8.2 / 6.3.1 voluntary Pay (3.2)**: optional Pay during the per-card
+  and Winter-Disband sub-steps is not exposed as an action; mandatory
+  Disband IS applied. A player choosing not to pre-empt Disband is legal.
+- **4.4.1 "any 1 Round" one-Round effects** (M7 Spear Wall, one-round
+  Javelins): the owner may choose the Round; the engine defaults to Round 1
+  (full-strength, max effect). See DECISION-003. Any Round is legal; Round 1
+  is a defensible fixed choice.
 
 **Scope:** combat (battle.py), commands/economy (campaign.py), end-game.
-**Revisit:** when an interactive decision layer is added for non-combat
-choices (Wastage/Pay/Greed), or per-Lord capability ownership is tracked
-(C8), or Battle Array geometry is modelled for Flanking adjacency.
+**Revisit:** only if an interactive decision layer is added for the
+non-combat player choices above (Wastage / Greed / voluntary Pay) or for
+the one-Round timing of M7/Javelins.

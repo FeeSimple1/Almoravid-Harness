@@ -589,6 +589,7 @@ def _resolve_step(
     siege_markers: int = 0,
     round_index: int = 0,
     melee_hits_override: int | None = None,
+    c8_ctx: dict[str, Any] | None = None,
 ) -> StepResolution:
     # Phase 6f: per-pair Strike when both sides have multi-Lord arrays
     # AND context is Battle. Storm and single-Lord cases keep the legacy
@@ -598,7 +599,7 @@ def _resolve_step(
             and defender.array is not None):
         return _resolve_step_per_pair(
             state, step_id, actor_role, step_type, unit_class,
-            attacker, defender, round_index=round_index,
+            attacker, defender, round_index=round_index, c8_ctx=c8_ctx,
         )
 
     actor = attacker if actor_role == "attacker" else defender
@@ -675,8 +676,14 @@ def _resolve_step(
             if r.kind == "melee" and r.unit_type in ("knights", "sergeants"):
                 if _unit_class(r.unit_type) == unit_class:
                     eligible += r.count
-        eligible = min(4, eligible)
+        # Shared per-Round budget: Knights (Horse step) and Sergeants
+        # (Foot step) draw from the SAME pool of 4 (combined cap). Falls
+        # back to a local cap of 4 only if no Round context was threaded.
+        budget = c8_ctx["budget"] if c8_ctx is not None else 4
+        eligible = min(eligible, budget)
         if eligible > 0:
+            if c8_ctx is not None:
+                c8_ctx["budget"] -= eligible
             raw += float(eligible)
             by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
@@ -900,11 +907,13 @@ def _battle_one_round(
         ]
     else:
         steps_this_round = _BATTLE_STEPS
+    c8_ctx = _build_c8_ctx(state, attacker, defender, round_idx)
     for step_id, actor_role, step_type, unit_class in steps_this_round:
         step_res = _resolve_step(state, step_id, actor_role, step_type,
                                   unit_class, attacker, defender,
                                   round_index=round_idx,
-                                  walls_range=defender_walls_range)
+                                  walls_range=defender_walls_range,
+                                  c8_ctx=c8_ctx)
         rnd.steps.append(step_res)
         if _battle_over(attacker, defender):
             break
@@ -1466,6 +1475,47 @@ def _combined_melee_raw(
 def _c8_bonus_for_forces(forces: dict[UnitType, int]) -> int:
     """C8 Cantador eligible units (Knights + Sergeants) in a force dict."""
     return forces.get("knights", 0) + forces.get("sergeants", 0)
+
+
+def _build_c8_ctx(
+    state: GameState, attacker: BattleSide, defender: BattleSide,
+    round_idx: int,
+) -> dict[str, Any] | None:
+    """Per-Round shared C8 Cantador context for an open-field Battle.
+
+    Card C8 reads "up to four of *that Lord's* Knights and Sergeants ...
+    cause one added Hit" in Round 1 only. Two corrections vs a naive
+    per-step budget:
+
+    * COMBINED cap of 4 across Knights (Horse Melee step) AND Sergeants
+      (Foot Melee step) -- the two steps must share ONE budget, else the
+      bonus doubles to 8.
+    * Confined to the ONE Christian Lord whose mat holds the card. We pick
+      the Front Christian Lord with the most eligible (Knights+Sergeants)
+      units -- the placement a rational player makes -- and apply the
+      bonus to that Lord only. (Single-Lord Battles: holder is that Lord.)
+
+    Returns None when C8 is not in effect this Round.
+    """
+    if round_idx != 1:
+        return None
+    if "C8" not in state.decks.this_levy_events.get("christian", []):
+        return None
+    chr_side = attacker if attacker.side == "christian" else defender
+    holder_id: int | None = None
+    if chr_side.array is not None:
+        best = -1
+        for lp in chr_side.array:
+            if lp.position not in ("front_center", "front_left",
+                                   "front_right"):
+                continue
+            if not lp.has_unrouted():
+                continue
+            elig = _c8_bonus_for_forces(lp.forces)
+            if elig > best:
+                best = elig
+                holder_id = id(lp)
+    return {"budget": 4, "holder_id": holder_id}
 
 
 def _storm_front_agg(ss: dict[str, Any], who: str) -> dict[UnitType, int]:
@@ -3102,21 +3152,36 @@ def _resolve_protection_roll_for_lp(
     return (False, chosen)
 
 
-def _pick_flank_target(side: BattleSide) -> LordPosition | None:
-    """Greedy flank target: pick the Front-position Lord with the most
-    unrouted units. Per rule 4.4.2 the Flanking Lord's owner chooses
-    between Flanking or directly-opposed Enemy — here we route to the
-    largest target deterministically."""
+def _pick_flank_target(side: BattleSide,
+                       actor_pos: ArrayPosition) -> LordPosition | None:
+    """4.4.2 Flanking: a Front Lord with no Enemy directly opposite Strikes
+    the CLOSEST Front Enemy Lord. Positional closeness on the 3-slot Front:
+    a left/right Flanker prefers the center, then the far slot; a center
+    Flanker may choose left or right (equidistant) — we take the larger of
+    the two as the owner's sensible default."""
     if side.array is None:
         return None
-    front_lords = [
-        lp for lp in side.array
+    fronts = {
+        lp.position: lp for lp in side.array
         if lp.position in ("front_center", "front_left", "front_right")
         and lp.has_unrouted()
-    ]
-    if not front_lords:
+    }
+    if not fronts:
         return None
-    return max(front_lords, key=lambda lp: sum(lp.forces.values()))
+    if actor_pos == "front_left":
+        order: list[ArrayPosition] = ["front_center", "front_right"]
+    elif actor_pos == "front_right":
+        order = ["front_center", "front_left"]
+    else:  # center: left and right are equidistant — owner picks the larger.
+        cands = [fronts[p] for p in ("front_left", "front_right")
+                 if p in fronts]
+        if cands:
+            return max(cands, key=lambda lp: sum(lp.forces.values()))
+        order = []
+    for p in order:
+        if p in fronts:
+            return fronts[p]
+    return next(iter(fronts.values()))
 
 
 def _sync_side_forces_from_array(side: BattleSide) -> None:
@@ -3142,6 +3207,7 @@ def _resolve_step_per_pair(
     attacker: BattleSide,
     defender: BattleSide,
     round_index: int = 0,
+    c8_ctx: dict[str, Any] | None = None,
 ) -> StepResolution:
     """Per-pair Strike resolution (rule 4.4.2 multi-Lord Array).
 
@@ -3176,10 +3242,16 @@ def _resolve_step_per_pair(
     contributions: dict[int, Any] = {}
     target_order: list[int] = []
     # (c) C8 Cantador adds +1 to up to 4 of ONE Christian Lord's Knights/
-    # Sergeants in Round 1. Across multiple Christian Lords this step the
-    # +4 must NOT recur per Lord -- a single shared budget of 4 spends down
-    # across the actor Lords (it lands on whichever Lord(s) Strike first).
-    cantador_budget = [4]
+    # Sergeants in Round 1, confined to the single Lord whose mat holds the
+    # card (c8_ctx["holder_id"]) and sharing ONE budget of 4 across the
+    # Horse-Melee and Foot-Melee steps of the Round (Knights + Sergeants
+    # combined). The budget/holder live in the per-Round c8_ctx so they do
+    # not reset per step or per Lord.
+    # Direct callers (unit tests) may not thread a per-Round context; build
+    # a fallback so a single-step call still applies C8 correctly.
+    if c8_ctx is None:
+        c8_ctx = _build_c8_ctx(state, attacker, defender, round_index)
+    cantador_holder = c8_ctx["holder_id"] if c8_ctx is not None else None
 
     for actor_pos in ("front_center", "front_left", "front_right"):
         actor_lp = next((lp for lp in actor.array
@@ -3187,13 +3259,13 @@ def _resolve_step_per_pair(
                          and lp.has_unrouted()), None)
         if actor_lp is None:
             continue
-        # Find target: same position first, else Flanking to closest
-        # (here: largest) Front enemy Lord.
+        # 4.4.2: Strike the directly-opposite Enemy if present, else
+        # Flank to the closest Front Enemy Lord.
         target_lp = next((lp for lp in target.array
                           if lp.position == actor_pos
                           and lp.has_unrouted()), None)
         if target_lp is None:
-            target_lp = _pick_flank_target(target)
+            target_lp = _pick_flank_target(target, actor_pos)
         if target_lp is None:
             continue
 
@@ -3231,7 +3303,8 @@ def _resolve_step_per_pair(
         # via the shared, decremented `cantador_budget` (each Lord draws
         # from the same pool of 4 in Front-position order).
         if (step_type == "melee" and round_index == 1
-                and actor.side == "christian"
+                and actor.side == "christian" and c8_ctx is not None
+                and (cantador_holder is None or id(actor_lp) == cantador_holder)
                 and "C8" in state.decks.this_levy_events.get("christian", [])):
             eligible = 0
             for r in rows:
@@ -3239,9 +3312,9 @@ def _resolve_step_per_pair(
                         and r.unit_type in ("knights", "sergeants")
                         and _unit_class(r.unit_type) == unit_class):
                     eligible += r.count
-            eligible = min(eligible, cantador_budget[0])   # (c) shared cap of 4
+            eligible = min(eligible, c8_ctx["budget"])   # combined cap of 4
             if eligible > 0:
-                cantador_budget[0] -= eligible
+                c8_ctx["budget"] -= eligible
                 raw += float(eligible)
                 by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 

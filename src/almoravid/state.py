@@ -444,6 +444,10 @@ class Decks(StrictModel):
     capabilities_in_play: list[CardInPlay] = Field(default_factory=list)
     # Christian/Muslim board-edge Capability cards available for Levy.
     board_edge: dict[Side, list[str]] = Field(default_factory=dict)
+    # Cards removed from the game permanently (never recycled into the
+    # draw deck). E.g. C18 Milites: "discard removes the card from the
+    # game ... removes Event #C18 Runaway Slaves with it" (AoW ref).
+    removed_from_game: list[str] = Field(default_factory=list)
 
     # Per-Levy / per-Campaign event persistence buckets (Pattern 13).
     # Cleared at the end of their respective windows.
