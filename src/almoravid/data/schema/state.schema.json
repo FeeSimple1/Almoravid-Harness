@@ -257,6 +257,13 @@
           "title": "Board Edge",
           "type": "object"
         },
+        "removed_from_game": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Removed From Game",
+          "type": "array"
+        },
         "this_levy_events": {
           "additionalProperties": {
             "items": {

@@ -376,6 +376,8 @@ def _rebuild_aow_deck(state: GameState, side: Side) -> int:
         if lord.side == side:
             excluded.update(lord.capabilities)
     excluded.update(state.decks.pending_draw.get(side, []))
+    # Cards removed from the game (e.g. C18 once discarded) never recycle.
+    excluded.update(state.decks.removed_from_game)
     state.decks.draw = [cid for cid, c in cards.items()
                         if c["side"] == side and cid not in excluded]
     return len(excluded)

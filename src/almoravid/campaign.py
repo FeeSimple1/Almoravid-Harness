@@ -1037,12 +1037,20 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         lord.moved_fought = False
         lord.routed_units = {}
 
-    # Discard board-edge Capabilities (3.4.4)
+    # Discard board-edge Capabilities (3.4.4). C18 Milites is "removed from
+    # the game" on discard (its Event #C18 Runaway Slaves leaves with it),
+    # so it must NOT recycle into a later Campaign's draw deck.
+    _removed_on_discard = {"C18"}
     for side in ("christian", "muslim"):
         edge = state.decks.board_edge.get(side, [])
-        if edge:
-            state.decks.discard.extend(edge)
-            results["board_edge_discarded"].extend(edge)
+        for cid in edge:
+            if cid in _removed_on_discard:
+                if cid not in state.decks.removed_from_game:
+                    state.decks.removed_from_game.append(cid)
+                results.setdefault("board_edge_removed_from_game", []).append(cid)
+            else:
+                state.decks.discard.append(cid)
+            results["board_edge_discarded"].append(cid)
         state.decks.board_edge[side] = []
 
     # Clear Service markers (6.3.1 Disbands; Spring Muster re-places them)
