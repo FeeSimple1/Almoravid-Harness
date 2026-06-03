@@ -441,7 +441,9 @@ def _feed_consume_own(state: GameState, lord_id: str, *,
 
 
 def _feed_all_moved_fought(state: GameState, *,
-                           discard_excess_mules: bool = False) -> dict[str, Any]:
+                           discard_excess_mules: bool = False,
+                           discard_mules_lords: set[str] | None = None,
+                           ) -> dict[str, Any]:
     """4.8.1 Feed for the per-card Feed/Pay/Disband step (4.8).
 
     E4: ALL Lords marked Moved/Fought on BOTH sides Feed (Christians
@@ -463,8 +465,10 @@ def _feed_all_moved_fought(state: GameState, *,
                 continue
             if lord.cylinder.kind != "locale":
                 continue
+            _discard_this = discard_excess_mules or (
+                discard_mules_lords is not None and lid in discard_mules_lords)
             r = _feed_consume_own(state, lid,
-                                  discard_excess_mules=discard_excess_mules)
+                                  discard_excess_mules=_discard_this)
             summary["fed"].append({"lord_id": lid, **r})
             if r["short"] > 0:
                 shortfall[lid] = r["short"]
@@ -569,11 +573,27 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
     assert lord_id is not None
-    lord = state.lords[lord_id]
+    # 4.8 Feed / Pay / Disband cascade. With `interactive_economy`, the
+    # optional player choices in this step (4.8.1 Greed Mule-discard and
+    # 4.8.2 voluntary Pay before the mandatory Disband) are exposed as
+    # PendingDecisions; otherwise the deterministic default runs (keep
+    # Mules, no voluntary Pay), preserving self-play / synchronous play.
+    if bool(action.get("interactive_economy")):
+        return _economy_begin(state, action, side, lord_id)
     # 4.8.1 Feed — E4/E5: ALL Lords marked Moved/Fought on both sides
     # Feed (a Battle/Storm or Group March marks several), with Sharing
     # among same-Locale same-side Lords.
     feed_result = _feed_all_moved_fought(state)
+    return _economy_finalize(state, action, side, lord_id, feed_result)
+
+
+def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
+                      lord_id: str, feed_result: dict[str, Any],
+                      ) -> dict[str, Any]:
+    """Shared tail of the 4.8 cascade: mandatory at-limit Disband, Vassal
+    Disband, per-card cleanup, and Campaign advance. Used by both the
+    synchronous end-card path and the interactive economy resume."""
+    lord = state.lords[lord_id]
     # 4.8.2/4.8.3 auto-Disband at Service limit: "any Christian then Muslim
     # Lords whose Service markers are at their limit must Disband." Sweep
     # ALL on-map Lords (both sides), not only the active one, since the Feed
@@ -625,6 +645,144 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"ended": lord_id, "feed": feed_result,
             "auto_disband": disband_result,
             "campaign_step": state.meta.campaign_step}
+
+def _greed_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
+    """4.8.1 Greed: Lords (this side) marked Moved/Fought who hold Mules
+    they cannot Feed from their OWN Provender + Loot -- i.e. a discard
+    would change the outcome (reduce or avoid an Unfed Service shift).
+    Returns one record per such Lord with the counts a UI/agent needs."""
+    import math
+    out: list[dict[str, Any]] = []
+    for lid, lord in state.lords.items():
+        if lord.side != side or not lord.moved_fought:
+            continue
+        if lord.cylinder.kind != "locale":
+            continue
+        mules = lord.assets.get("mule", 0)
+        if mules <= 0:
+            continue
+        units = sum(lord.forces.values())
+        capacity = lord.assets.get("prov", 0) + lord.assets.get("loot", 0)
+        if math.ceil((units + mules) / 6) > capacity:
+            keep_if_discard = max(0, capacity * 6 - units)
+            out.append({"lord_id": lid, "mules": mules, "units": units,
+                        "own_capacity": capacity,
+                        "discardable": mules - keep_if_discard})
+    return out
+
+
+def _economy_begin(state: GameState, action: dict[str, Any], side: Side,
+                   lord_id: str) -> dict[str, Any]:
+    """Start the interactive 4.8 Feed/Pay/Disband cascade. Sequences,
+    in rule order (Christians then Muslims): optional Greed Mule-discard
+    -> Feed -> optional voluntary Pay -> mandatory Disband."""
+    payload: dict[str, Any] = {
+        "active_side": side,
+        "active_lord_id": lord_id,
+        "phase": "greed",
+        "cursor_side": "christian",
+        "greed_prompted": [],
+        "discard_lords": [],
+        "feed_result": None,
+    }
+    return _economy_advance(state, action, payload)
+
+
+def _economy_advance(state: GameState, action: dict[str, Any],
+                     payload: dict[str, Any]) -> dict[str, Any]:
+    """Emit the next economy PendingDecision, or finalize when the
+    cascade is complete. Shared by _economy_begin and the two response
+    handlers (greed_mule_choice, pay_before_disband)."""
+    order: tuple[Side, Side] = ("christian", "muslim")
+    if payload["phase"] == "greed":
+        prompted = set(payload["greed_prompted"])
+        start = order.index(payload["cursor_side"])
+        for sd in order[start:]:
+            if sd in prompted:
+                continue
+            eligible = _greed_eligible_lords(state, sd)
+            if eligible:
+                payload["cursor_side"] = sd
+                payload["eligible"] = eligible
+                state.pending = PendingDecision(
+                    kind="greed_mule_choice", waiting_on=sd, payload=payload)
+                state.meta.active_player = sd
+                return {"pending": "greed_mule_choice", "side": sd,
+                        "eligible": eligible}
+            payload["greed_prompted"].append(sd)
+        feed_result = _feed_all_moved_fought(
+            state, discard_mules_lords=set(payload["discard_lords"]))
+        payload["feed_result"] = feed_result
+        payload["phase"] = "pay"
+        payload["cursor_side"] = "christian"
+        return _economy_advance(state, action, payload)
+    sd = payload["cursor_side"]
+    state.pending = PendingDecision(
+        kind="pay_before_disband", waiting_on=sd, payload=payload)
+    state.meta.active_player = sd
+    return {"pending": "pay_before_disband", "side": sd}
+
+
+def _h_greed_mule_choice(state: GameState,
+                         action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a Greed (4.8.1) Mule-discard prompt. `discard_lords`
+    is the subset of this side's eligible Lords who choose to discard
+    their unfeedable excess Mules (default: none -> keep all Mules)."""
+    side = _require_side(action)
+    pd = _require_pending(state, "greed_mule_choice", side)
+    payload = pd.payload
+    eligible_ids = {e["lord_id"] for e in _greed_eligible_lords(state, side)}
+    chosen = action.get("discard_lords", []) or []
+    _require(isinstance(chosen, list),
+             "discard_lords must be a list of lord_ids", code="bad_arg")
+    for lid in chosen:
+        _require(lid in eligible_ids,
+                 f"{lid} is not Greed-eligible for {side}", code="bad_arg")
+        if lid not in payload["discard_lords"]:
+            payload["discard_lords"].append(lid)
+    payload["greed_prompted"].append(side)
+    state.pending = None
+    _record(state, action,
+            f"{side} Greed: discard excess Mules for {list(chosen)}")
+    return {"greed_choice": {"side": side, "discarded_for": list(chosen)},
+            "advance": _economy_advance(state, action, payload)}
+
+
+def _h_pay_before_disband(state: GameState,
+                          action: dict[str, Any]) -> dict[str, Any]:
+    """Response to the voluntary Pay (4.8.2) prompt that precedes the
+    mandatory at-limit Disband. A `done` advances Christians -> Muslims
+    -> Disband; otherwise the action is a Pay (3.2) applied via the
+    shared pay_lord handler."""
+    side = _require_side(action)
+    pd = _require_pending(state, "pay_before_disband", side)
+    payload = pd.payload
+    _require(side == payload["cursor_side"],
+             f"Pay step is waiting on {payload['cursor_side']}, not {side}",
+             code="not_pay_side")
+    if action.get("done"):
+        state.pending = None
+        if side == "christian":
+            payload["cursor_side"] = "muslim"
+            return {"pay_before_disband": "done", "next_side": "muslim",
+                    "advance": _economy_advance(state, action, payload)}
+        # Restore the card-owner as active_player so the card-to-card baton
+        # flips from the SAME side the synchronous path would (the Pay
+        # cursor ended on Muslim; _advance_or_end_campaign flips from
+        # active_player inside _economy_finalize).
+        state.meta.active_player = payload["active_side"]
+        return {"pay_before_disband": "done",
+                "finalize": _economy_finalize(
+                    state, action, payload["active_side"],
+                    payload["active_lord_id"], payload["feed_result"])}
+    from almoravid.actions import _h_pay_lord
+    with _MetaCtx(state, phase="levy", levy_step="pay", active_player=side):
+        res = _h_pay_lord(state, {**action, "type": "pay_lord"})
+    state.pending = PendingDecision(
+        kind="pay_before_disband", waiting_on=side, payload=payload)
+    state.meta.active_player = side
+    return {"pay_before_disband": res}
+
 
 
 def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -761,9 +919,17 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _unstack_all_lieutenants(state)
     # Phase 7g: Wastage (4.9.4) — each Mustered Lord with more than one
     # of any Asset type, or more than one This-Lord Capability card,
-    # discards one excess (greedy: drop one Asset of the largest stack,
-    # else one This-Lord Capability).
-    _apply_wastage(state)
+    # discards one excess. With `interactive_wastage` the owning player
+    # (Christians then Muslims) chooses WHICH item each eligible Lord
+    # discards (the rule allows ANY one Asset or This-Lord Capability,
+    # even a single Loot); otherwise the deterministic default runs.
+    if (bool(action.get("interactive_wastage"))
+            and not action.get("_wastage_done")):
+        started = _wastage_begin(state, action)
+        if started is not None:
+            return started
+    if not action.get("_wastage_done"):
+        _apply_wastage(state)
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -2987,11 +3153,91 @@ def _begin_interactive_battle(
     pl["defender"] = battle_side_to_snapshot(dfd)
     pl["defender_walls_range"] = (list(defender_walls_range)
                                   if defender_walls_range else None)
+    # 4.4.1 one-Round effect timing (opt-in): before Round 1, let each
+    # owner choose WHICH Round its Javelins / M7 Spear Wall fire.
+    if bool(action.get("interactive_timing")):
+        queue = _oneround_timing_queue(state, atk, dfd)
+        if queue:
+            pl["timing_queue"] = queue
+            return _oneround_timing_pend(state, atk, dfd, pl)
+    return _battle_pend_concede(state, pl)
+
+
+def _battle_pend_concede(state: GameState,
+                         pl: dict[str, Any]) -> dict[str, Any]:
+    """Pend the Round-1 Concede declaration to start the round-stepped
+    Battle (shared by the timing-prompt resume and the direct start)."""
     state.pending = PendingDecision(
         kind="battle_concede", waiting_on=pl["side"], payload=pl)
     state.meta.active_player = pl["side"]
-    return {"battle": "awaiting_concede", "round": 1,
+    return {"battle": "awaiting_concede", "round": pl["round_idx"],
             "engagement": pl["engagement_label"]}
+
+
+def _oneround_timing_queue(state: GameState, atk: Any,
+                           dfd: Any) -> list[str]:
+    """Roles ("attacker"/"defender") whose side owns a one-Round effect
+    (Javelins or M7) and therefore gets a timing prompt, attacker first."""
+    from almoravid.battle import build_strike_rows
+    queue: list[str] = []
+    for role, bs in (("attacker", atk), ("defender", dfd)):
+        rows = build_strike_rows(state, bs, context="battle")
+        has_jav = any(getattr(r, "one_round_only", False) for r in rows)
+        has_m7 = bool(getattr(bs, "m7_owned", False))
+        if has_jav or has_m7:
+            queue.append(role)
+    return queue
+
+
+def _oneround_timing_pend(state: GameState, atk: Any, dfd: Any,
+                          pl: dict[str, Any]) -> dict[str, Any]:
+    """Emit the timing prompt for the front of pl["timing_queue"]."""
+    from almoravid.battle import build_strike_rows
+    role = pl["timing_queue"][0]
+    bs = atk if role == "attacker" else dfd
+    rows = build_strike_rows(state, bs, context="battle")
+    has_jav = any(getattr(r, "one_round_only", False) for r in rows)
+    has_m7 = bool(getattr(bs, "m7_owned", False))
+    pl["timing_effects"] = {"javelin": has_jav, "m7": has_m7}
+    state.pending = PendingDecision(
+        kind="oneround_timing", waiting_on=bs.side, payload=pl)
+    state.meta.active_player = bs.side
+    return {"pending": "oneround_timing", "side": bs.side, "role": role,
+            "effects": pl["timing_effects"], "max_rounds": pl["max_rounds"]}
+
+
+def _h_oneround_timing(state: GameState,
+                       action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a one-Round effect timing prompt (4.4.1). `javelin_round`
+    and/or `m7_round` (1..max_rounds) set when the owner's one-Round Strikes
+    / Spear Wall fire. Defaults to Round 1 when omitted."""
+    side = _require_side(action)
+    pd = _require_pending(state, "oneround_timing", side)
+    pl = pd.payload
+    role = pl["timing_queue"][0]
+    snap = pl["attacker"] if role == "attacker" else pl["defender"]
+    maxr = int(pl["max_rounds"])
+    effects = pl.get("timing_effects", {"javelin": False, "m7": False})
+    if effects.get("javelin"):
+        jr = int(action.get("javelin_round", 1))
+        _require(1 <= jr <= maxr, f"javelin_round must be 1..{maxr}",
+                 code="bad_arg")
+        snap["oneround_round"] = jr
+    if effects.get("m7"):
+        mr = int(action.get("m7_round", 1))
+        _require(1 <= mr <= maxr, f"m7_round must be 1..{maxr}",
+                 code="bad_arg")
+        snap["m7_round"] = mr
+    pl["timing_queue"] = pl["timing_queue"][1:]
+    state.pending = None
+    if pl["timing_queue"]:
+        from almoravid.battle import battle_side_from_snapshot
+        atk = battle_side_from_snapshot(pl["attacker"])
+        dfd = battle_side_from_snapshot(pl["defender"])
+        return {"oneround_timing": "set",
+                "advance": _oneround_timing_pend(state, atk, dfd, pl)}
+    return {"oneround_timing": "set",
+            "advance": _battle_pend_concede(state, pl)}
 
 
 def _h_battle_concede(state: GameState,
@@ -4871,6 +5117,142 @@ def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
             out.append({"lord_id": lid, "discarded_capability": drop})
     return out
 
+def _wastage_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
+    """4.9.4: Lords (this side) on the map who must discard one item --
+    i.e. they hold MORE THAN ONE of any Asset type OR more than one
+    This-Lord Capability. `options` lists every discardable item (any
+    Asset they hold, even count-1, plus each This-Lord Capability), since
+    the rule lets the owner pick ANY single one."""
+    from almoravid.capabilities import capabilities_for_lord
+    out: list[dict[str, Any]] = []
+    for lid in sorted(state.lords):
+        lord = state.lords[lid]
+        if lord.side != side or lord.cylinder.kind != "locale":
+            continue
+        caps = capabilities_for_lord(state, lid)
+        triggered = any(n > 1 for n in lord.assets.values()) or len(caps) > 1
+        if not triggered:
+            continue
+        options: list[dict[str, str]] = []
+        for atype, n in sorted(lord.assets.items()):
+            if n > 0:
+                options.append({"asset": atype})
+        for cid in sorted(caps):
+            options.append({"capability": cid})
+        out.append({"lord_id": lid, "options": options})
+    return out
+
+
+def _default_wastage_item(state: GameState, lid: str) -> dict[str, str] | None:
+    """The deterministic default discard for a Lord (largest Asset stack
+    > 1, else a This-Lord Capability) -- the legacy _apply_wastage pick."""
+    from almoravid.capabilities import capabilities_for_lord
+    lord = state.lords[lid]
+    over = [(n, a) for a, n in lord.assets.items() if n > 1]
+    if over:
+        over.sort(reverse=True)
+        return {"asset": over[0][1]}
+    caps = capabilities_for_lord(state, lid)
+    if len(caps) > 1:
+        return {"capability": sorted(caps)[-1]}
+    return None
+
+
+def _apply_one_wastage(state: GameState, lid: str,
+                       item: dict[str, str]) -> dict[str, Any]:
+    """Discard a single chosen Asset or This-Lord Capability for a Lord."""
+    from almoravid.state import AssetType
+    lord = state.lords[lid]
+    if "asset" in item:
+        atype = cast(AssetType, item["asset"])
+        _require(lord.assets.get(atype, 0) > 0,
+                 f"{lid} has no {atype} to discard (Wastage)", code="bad_arg")
+        lord.assets[atype] -= 1
+        if lord.assets[atype] == 0:
+            lord.assets.pop(atype, None)
+        return {"lord_id": lid, "discarded_asset": atype}
+    cid = item["capability"]
+    _require(cid in lord.capabilities,
+             f"{lid} does not hold capability {cid} (Wastage)", code="bad_arg")
+    lord.capabilities.remove(cid)
+    state.decks.capabilities_in_play = [
+        c for c in state.decks.capabilities_in_play
+        if not (c.card_id == cid and c.owner_lord_id == lid)
+    ]
+    state.decks.discard.append(cid)
+    return {"lord_id": lid, "discarded_capability": cid}
+
+
+def _wastage_begin(state: GameState,
+                   action: dict[str, Any]) -> dict[str, Any] | None:
+    """Start the interactive Wastage (4.9.4) flow. Returns the pending
+    result, or None when no Lord on either side needs to discard (the
+    caller then runs the deterministic no-op _apply_wastage)."""
+    if not (_wastage_eligible_lords(state, "christian")
+            or _wastage_eligible_lords(state, "muslim")):
+        return None
+    payload: dict[str, Any] = {"cursor_side": "christian", "prompted": []}
+    return _wastage_advance(state, action, payload)
+
+
+def _wastage_advance(state: GameState, action: dict[str, Any],
+                     payload: dict[str, Any]) -> dict[str, Any]:
+    """Emit the next Wastage prompt (Christians then Muslims) or, when
+    both sides are done, finish end-Campaign via a re-entrant call."""
+    order: tuple[Side, Side] = ("christian", "muslim")
+    prompted = set(payload["prompted"])
+    start = order.index(payload["cursor_side"])
+    for sd in order[start:]:
+        if sd in prompted:
+            continue
+        eligible = _wastage_eligible_lords(state, sd)
+        if eligible:
+            payload["cursor_side"] = sd
+            payload["eligible"] = eligible
+            state.pending = PendingDecision(
+                kind="wastage_choice", waiting_on=sd, payload=payload)
+            state.meta.active_player = sd
+            return {"pending": "wastage_choice", "side": sd,
+                    "eligible": eligible}
+        payload["prompted"].append(sd)
+    # Both sides done -> resume the rest of end-Campaign (skip re-applying
+    # Wastage, which was applied incrementally per choice).
+    state.pending = None
+    return _h_end_campaign(state, {"type": "end_campaign",
+                                   "_wastage_done": True})
+
+
+def _h_wastage_choice(state: GameState,
+                      action: dict[str, Any]) -> dict[str, Any]:
+    """Response to a Wastage (4.9.4) prompt. `discards` maps lord_id ->
+    {"asset": type} or {"capability": id}. Any eligible Lord omitted
+    from `discards` takes the deterministic default discard."""
+    side = _require_side(action)
+    pd = _require_pending(state, "wastage_choice", side)
+    payload = pd.payload
+    eligible = _wastage_eligible_lords(state, side)
+    chosen: dict[str, Any] = action.get("discards", {}) or {}
+    _require(isinstance(chosen, dict),
+             "discards must be a dict lord_id -> item", code="bad_arg")
+    applied: list[dict[str, Any]] = []
+    for rec in eligible:
+        lid = rec["lord_id"]
+        item = chosen.get(lid)
+        if item is None:
+            item = _default_wastage_item(state, lid)
+        if item is None:
+            continue
+        _require(item in rec["options"],
+                 f"{item} is not a legal Wastage discard for {lid}",
+                 code="bad_arg")
+        applied.append(_apply_one_wastage(state, lid, item))
+    payload["prompted"].append(side)
+    state.pending = None
+    _record(state, action, f"{side} Wastage discards: {applied}")
+    return {"wastage_choice": {"side": side, "applied": applied},
+            "advance": _wastage_advance(state, action, payload)}
+
+
 
 def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
@@ -5590,6 +5972,10 @@ CAMPAIGN_HANDLERS = {
     "finalize_plan": _h_finalize_plan,
     "command_reveal": _h_command_reveal,
     "end_card": _h_end_card,
+    "greed_mule_choice": _h_greed_mule_choice,
+    "pay_before_disband": _h_pay_before_disband,
+    "wastage_choice": _h_wastage_choice,
+    "oneround_timing": _h_oneround_timing,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
     "cmd_supply": _h_cmd_supply,

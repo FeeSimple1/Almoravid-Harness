@@ -83,6 +83,26 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "defender_concede": True})
         return moves
 
+    # 4.4.1 ONE-ROUND EFFECT TIMING — before Round 1, the owner picks which
+    # Round its Javelins / M7 Spear Wall fire. Offer Round 1 (default) and
+    # the explicit per-Round options for whichever effect(s) it owns.
+    if (state.pending is not None
+            and state.pending.kind == "oneround_timing"):
+        side = state.pending.waiting_on
+        pl = state.pending.payload
+        maxr = int(pl.get("max_rounds", 6))
+        effects = pl.get("timing_effects", {})
+        moves.append({"type": "oneround_timing", "side": side})
+        if effects.get("javelin"):
+            for rnd_i in range(1, maxr + 1):
+                moves.append({"type": "oneround_timing", "side": side,
+                              "javelin_round": rnd_i})
+        if effects.get("m7"):
+            for rnd_i in range(1, maxr + 1):
+                moves.append({"type": "oneround_timing", "side": side,
+                              "m7_round": rnd_i})
+        return moves
+
     # S10 Storm Concede — Attacker only (4.5.2), reactive per Round (2+).
     if (state.pending is not None
             and state.pending.kind == "storm_concede"):
@@ -102,6 +122,50 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "attacker_concede": True})
         moves.append({"type": "relief_concede", "side": side,
                       "defender_concede": True})
+        return moves
+
+    # 4.8.1 GREED — optional Mule discard during the interactive Feed/Pay/
+    # Disband step. The waiting side may discard the unfeedable excess Mules
+    # of any subset of its eligible Lords (default: discard none).
+    if (state.pending is not None
+            and state.pending.kind == "greed_mule_choice"):
+        side = state.pending.waiting_on
+        from almoravid.campaign import _greed_eligible_lords
+        eligible = [e["lord_id"] for e in _greed_eligible_lords(state, side)]
+        moves.append({"type": "greed_mule_choice", "side": side,
+                      "discard_lords": []})
+        if eligible:
+            moves.append({"type": "greed_mule_choice", "side": side,
+                          "discard_lords": eligible})
+        return moves
+
+    # 4.8.2 voluntary PAY before the mandatory at-limit Disband (interactive
+    # Feed/Pay/Disband). The waiting side may Pay (3.2) any eligible Lord to
+    # shift Service rightward, or declare `done` to proceed to Disband.
+    if (state.pending is not None
+            and state.pending.kind == "pay_before_disband"):
+        side = state.pending.waiting_on
+        for mv in _pay_moves(state, side):
+            moves.append({**mv, "type": "pay_before_disband"})
+        moves.append({"type": "pay_before_disband", "side": side,
+                      "done": True})
+        return moves
+
+    # 4.9.4 WASTAGE — the owning side (Christians then Muslims) chooses
+    # which one item each over-stocked Lord discards. The default move
+    # lets every eligible Lord take its deterministic default discard;
+    # per-(Lord, item) overrides are also offered.
+    if (state.pending is not None
+            and state.pending.kind == "wastage_choice"):
+        side = state.pending.waiting_on
+        from almoravid.campaign import _wastage_eligible_lords
+        eligible = _wastage_eligible_lords(state, side)
+        moves.append({"type": "wastage_choice", "side": side, "discards": {}})
+        for rec in eligible:
+            lid = rec["lord_id"]
+            for item in rec["options"]:
+                moves.append({"type": "wastage_choice", "side": side,
+                              "discards": {lid: item}})
         return moves
 
     # 6.3.2 Winter Siege (Scenario F): the besieging side acts one Lord

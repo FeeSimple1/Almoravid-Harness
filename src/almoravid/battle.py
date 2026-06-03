@@ -141,6 +141,14 @@ class BattleSide:
     garrison_forces: dict[UnitType, int] = field(default_factory=dict)
     # Bug T (Pattern 9) — M7 Spear Wall cap.
     m7_boosts_remaining: int = 0
+    # 4.4.1 "any 1 Round" timing (owner choice; default Round 1):
+    # `oneround_round` is the Round this side's one_round_only Strikes
+    # (Javelins) fire; `m7_round` is the Round M7 Spear Wall is in effect;
+    # `m7_owned` marks that M7 was set up for this side (Muslim) so the
+    # Round loop can gate its activation/discard to `m7_round`.
+    oneround_round: int = 1
+    m7_round: int = 1
+    m7_owned: bool = False
     # Phase 6e: per-Lord Array slots. None for single-Lord (legacy).
     array: list[LordPosition] | None = None
     # Phase 6e: Concede flag set this Round.
@@ -224,6 +232,7 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
         return
     if "M7" not in state.decks.this_levy_events.get("muslim", []):
         return
+    side.m7_owned = True
     contribs: list[tuple[int, str]] = []
     for lid in side.lord_ids:
         lord = state.lords.get(lid)
@@ -624,7 +633,7 @@ def _resolve_step(
     # Round"); we default to Round 1 (full-strength, max effect) and drop
     # one_round_only rows thereafter. (Owner round-choice TODO: a per-combat
     # policy, consistent with the atomic resolver's Concede/Reposition.)
-    if round_index != 1:
+    if round_index != actor.oneround_round:
         rows = [r for r in rows if not r.one_round_only]
     raw, by_kind = _step_hits(rows, step_type, unit_class)
 
@@ -862,6 +871,9 @@ def battle_side_from_snapshot(d: dict[str, Any]) -> BattleSide:
         routed_units=dict(d["routed_units"]),
         garrison_forces=dict(d["garrison_forces"]),
         m7_boosts_remaining=d["m7_boosts_remaining"],
+        oneround_round=d.get("oneround_round", 1),
+        m7_round=d.get("m7_round", 1),
+        m7_owned=d.get("m7_owned", False),
         array=array,
         conceded=d["conceded"],
     )
@@ -884,6 +896,25 @@ def _battle_one_round(
     synchronous resolve_battle (pre-declared concede) and the interactive
     round-stepped driver (reactive per-Round concede, 4.4.2)."""
     rnd = BattleRound(index=round_idx)
+    # 4.4.1 one-Round timing: M7 Spear Wall is in effect only during its
+    # owner-chosen Round (default 1). We gate its presence in
+    # this_levy_events so the protection-roll hook (which keys on that
+    # presence) fires only in `m7_round`: suppress it in earlier Rounds,
+    # (re)activate it in `m7_round`, and discard it after.
+    _mus = attacker if attacker.side == "muslim" else defender
+    if _mus.m7_owned:
+        _held = state.decks.this_levy_events.setdefault("muslim", [])
+        if round_idx < _mus.m7_round:
+            # Suppress (not "Used") before the chosen Round: just remove it
+            # from the in-effect set. If the Battle ends before m7_round the
+            # card never reaches decks.discard, but that is harmless -- the
+            # AoW discard pile is a pure sink (no reshuffle) and
+            # this_levy_events is fully cleared at Battle aftermath.
+            if "M7" in _held:
+                _held.remove("M7")
+        elif round_idx == _mus.m7_round:
+            if "M7" not in _held:
+                _held.append("M7")
     # Phase 6e Reposition (Round 2+ only -- rule 4.4.2 skipped_round_1).
     if round_idx > 1:
         _reposition_array(attacker)
@@ -917,9 +948,12 @@ def _battle_one_round(
         rnd.steps.append(step_res)
         if _battle_over(attacker, defender):
             break
-    # End-of-Round-1 discards (C8 Cantador, M7 Spear Wall, Hills C1/M1).
+    # End-of-Round discards: C8 Cantador (Round 1 only, per card text);
+    # M7 Spear Wall after its owner-chosen Round (default 1).
     if round_idx == 1:
-        _discard_round1_events(state, ["C8", "M7"])
+        _discard_round1_events(state, ["C8"])
+    if _mus.m7_owned and round_idx >= _mus.m7_round:
+        _discard_round1_events(state, ["M7"])
     # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
     if round_idx == 2:
         _discard_round1_events(state, ["M6"])
@@ -3271,8 +3305,9 @@ def _resolve_step_per_pair(
 
         rows = _build_strike_rows_for_position(state, actor, actor_lp,
                                                context="battle")
-        # (a) one_round_only Strikes (Javelins) fire on Round 1 only.
-        if round_index != 1:
+        # (a) one_round_only Strikes (Javelins) fire on the owner's
+        # chosen Round (4.4.1 "any 1 Round"; default Round 1).
+        if round_index != actor.oneround_round:
             rows = [r for r in rows if not r.one_round_only]
         raw, by_kind = _step_hits(rows, step_type, unit_class)
 
