@@ -977,6 +977,19 @@
           "title": "Array Reserve Priority",
           "type": "object"
         },
+        "array_flank_absorb": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Array Flank Absorb",
+          "type": "object"
+        },
         "surprise_storm_pending_locale_id": {
           "anyOf": [
             {

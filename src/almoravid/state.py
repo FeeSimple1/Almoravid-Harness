@@ -191,6 +191,16 @@ class Meta(StrictModel):
     array_reserve_priority: dict[Side, list[str]] = Field(
         default_factory=lambda: cast("dict[Side, list[str]]",
                                      {"christian": [], "muslim": []}))
+    # 4.4.2 APPLY HITS — Flanking absorb: "A Player with a Flanking Lord
+    # selects either the Flanking or directly opposed Lord to take Hits."
+    # "opposed" (default) lands Hits on the directly-opposed Lord; "flanking"
+    # redirects a directly-opposed Lord's Hits onto a friendly Flanking Lord
+    # (one of this side's Front Lords with no Enemy directly opposite) when
+    # one exists, letting it shield the opposed Lord.
+    array_flank_absorb: dict[Side, str] = Field(
+        default_factory=lambda: cast("dict[Side, str]",
+                                     {"christian": "opposed",
+                                      "muslim": "opposed"}))
     # Phase 6i: Surprise (C6) consumed on March into empty Enemy
     # Stronghold — payload tells the next cmd_storm to use Walls-1
     # and applies +2 Siege markers (already placed by the cmd_march

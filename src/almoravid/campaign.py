@@ -3476,6 +3476,7 @@ def _begin_interactive_storm(
     *,
     walls_range_override: tuple[int, int] | None = None,
     reposition_defender: bool = True,
+    reposition_attacker: bool = True,
 ) -> dict[str, Any]:
     """Start a reactive Storm: build the per-Lord context, resolve Round 1
     immediately (S10 Concede is Attacker-only, Round 2+), then pause on a
@@ -3492,7 +3493,8 @@ def _begin_interactive_storm(
     )
     ss, max_rounds = _storm_setup(
         state, atk, dfd, walls_range_override=walls_range_override,
-        reposition_defender=reposition_defender)
+        reposition_defender=reposition_defender,
+        reposition_attacker=reposition_attacker)
     result = BattleResult(engagement="storm", attacker=atk, defender=dfd)
     result.rounds.append(_storm_run_round(state, atk, dfd, ss, 1))
     pl = dict(pl)
@@ -3786,6 +3788,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         base_walls = load_strongholds()["strongholds"][loc.base_type]["walls_range"]
         walls_override = (base_walls[0], max(0, base_walls[1] - 1))
     reposition_defender = bool(action.get("reposition_defender", True))
+    reposition_attacker = bool(action.get("reposition_attacker", True))
     pl: dict[str, Any] = {
         "engagement_label": "storm",
         "finish": "storm",
@@ -3802,12 +3805,14 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         return _begin_interactive_storm(
             state, action, atk, dfd, pl,
             walls_range_override=walls_override,
-            reposition_defender=reposition_defender)
+            reposition_defender=reposition_defender,
+            reposition_attacker=reposition_attacker)
     concede_after_round = action.get("concede_after_round")
     result = resolve_storm(
         state, atk, dfd, walls_range_override=walls_override,
         concede_after_round=concede_after_round,
-        reposition_defender=reposition_defender)
+        reposition_defender=reposition_defender,
+        reposition_attacker=reposition_attacker)
     if surprise_loc == here:
         state.meta.surprise_storm_pending_locale_id = None
     return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
@@ -5529,6 +5534,7 @@ def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[s
 
 _FLANK_CHOICES = ("larger", "left", "right")
 _CENTER_FILL = ("left", "right")
+_FLANK_ABSORB = ("opposed", "flanking")
 
 
 def _h_set_array_tactics(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -5561,6 +5567,12 @@ def _h_set_array_tactics(state: GameState, action: dict[str, Any]) -> dict[str, 
                  f"center_fill must be one of {_CENTER_FILL}", code="bad_arg")
         state.meta.array_center_fill[side] = cast(str, cf)
         res["center_fill"] = cf
+    if "flank_absorb" in action:
+        fa = action.get("flank_absorb")
+        _require(fa in _FLANK_ABSORB,
+                 f"flank_absorb must be one of {_FLANK_ABSORB}", code="bad_arg")
+        state.meta.array_flank_absorb[side] = cast(str, fa)
+        res["flank_absorb"] = fa
     if "reserve_priority" in action:
         rp = action.get("reserve_priority")
         _require(isinstance(rp, list)
@@ -5571,7 +5583,8 @@ def _h_set_array_tactics(state: GameState, action: dict[str, Any]) -> dict[str, 
         state.meta.array_reserve_priority[side] = rp_list
         res["reserve_priority"] = list(rp_list)
     _require(len(res) > 1, "set_array_tactics needs at least one of "
-             "flank_choice / center_fill / reserve_priority", code="bad_arg")
+             "flank_choice / center_fill / flank_absorb / reserve_priority",
+             code="bad_arg")
     _record(state, action, f"{side} sets array tactics: "
             + ", ".join(f"{k}={v}" for k, v in res.items() if k != "side"))
     return res
