@@ -3120,6 +3120,61 @@ def _finish_open_field_battle(
     }
 
 
+def _finish_approach_battle(
+    state: GameState,
+    action: dict[str, Any],
+    *,
+    atk: Any,
+    dfd: Any,
+    result: Any,
+    pl: dict[str, Any],
+) -> dict[str, Any]:
+    """Post-Battle aftermath for a March-triggered Approach (Stand & Fight)
+    Battle (4.3.4 / 4.4.3-.5), shared by the synchronous Stand path and the
+    interactive (round-stepped) battle_concede driver so the two cannot
+    diverge. Unlike the end-of-card Battle (`_finish_open_field_battle`),
+    this passes the Approach context (from-Locale + Way type) to the Retreat
+    aftermath and clears the Approach pending / sets Besiege-or-Bypass."""
+    from almoravid.battle import (
+        apply_aftermath,
+        apply_battle_losses,
+        apply_retreat_aftermath,
+        commit_forces_after_battle,
+    )
+    locale_id: str = pl["locale_id"]
+    active_side: Side = pl["active_side"]
+    side: Side = pl["side"]
+    commit_forces_after_battle(state, atk)
+    commit_forces_after_battle(state, dfd)
+    # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire; pass the
+    # Approach context so Retreat can route back along the Approach Way.
+    retreat_summary = apply_retreat_aftermath(
+        state, result,
+        approach_from_locale=pl.get("from_locale_id"),
+        approach_way_type=pl.get("via_way_type"))
+    apply_battle_losses(state, result, retreat_summary)
+    apply_aftermath(state, result)
+    # End the active side's card (rule 4.4.5).
+    consumed = state.meta.actions_remaining
+    state.meta.actions_remaining = 0
+    # C1b (4.3.5): force Besiege-or-Bypass if the loser Withdrew inside;
+    # otherwise restore control to the Active side.
+    if not _set_besiege_or_bypass_pending(
+            state, locale_id, active_side, pl.get("active_lord_id")):
+        _clear_approach_pending(state, active_side)
+    _record(state, action,
+            f"{side} stands; Battle at {locale_id}: "
+            f"winner={result.winner}, rounds={len(result.rounds)}")
+    return {
+        "winner": result.winner,
+        "rounds": len(result.rounds),
+        "attacker_routed": dict(atk.routed_units),
+        "defender_routed": dict(dfd.routed_units),
+        "actions_consumed": consumed,
+        "retreat_summary": retreat_summary,
+    }
+
+
 def _begin_interactive_battle(
     state: GameState,
     action: dict[str, Any],
@@ -3308,6 +3363,9 @@ def _h_battle_concede(state: GameState,
     if pl.get("finish") == "sally":
         return _finish_sally(state, action, atk=atk, dfd=dfd,
                              result=result, pl=pl)
+    if pl.get("finish") == "approach":
+        return _finish_approach_battle(state, action, atk=atk, dfd=dfd,
+                                       result=result, pl=pl)
     return _finish_open_field_battle(state, action, atk=atk, dfd=dfd,
                                      result=result, pl=pl)
 
@@ -4434,9 +4492,7 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
     card (rule 4.4.5)."""
     from almoravid.battle import (
         _front_lord_count,
-        apply_aftermath,
         battleside_for_lords,
-        commit_forces_after_battle,
         resolve_battle,
     )
 
@@ -4478,11 +4534,6 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
              "no attacker Lords at Battle locale", code="no_attacker")
     _require(defender_lord_ids, "no defender Lords at Battle locale",
              code="no_defender")
-
-    from almoravid.battle import (
-        apply_battle_losses,
-        apply_retreat_aftermath,
-    )
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
@@ -4530,23 +4581,41 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
         dfd = battleside_for_lords(state, defender_lord_ids, other,
                                    "defender",
                                    front_limit=_front_lord_count(atk))
+        # Build the shared aftermath payload (used by both the synchronous
+        # and the interactive round-stepped paths). `finish="approach"`
+        # routes the battle_concede driver to _finish_approach_battle so the
+        # Approach Retreat context + Besiege-or-Bypass tail are applied.
+        approach_pl: dict[str, Any] = {
+            "engagement_label": "battle",
+            "side": side,
+            "here": locale_id,
+            "locale_id": locale_id,
+            "active_side": active_side,
+            "active_lord_id": payload.get("active_lord_id"),
+            "from_locale_id": payload.get("from_locale_id"),
+            "via_way_type": payload.get("via_way_type"),
+            "our_at_here": marcher_ids,
+            "enemy_lord_ids": defender_lord_ids,
+            "finish": "approach",
+        }
+        # Reactive (round-stepped) Concede / one-Round timing for a normal
+        # field Battle (opt-in). Without this, the Stand & Fight Battle can
+        # only take pre-declared *_concede_round args and otherwise resolves
+        # deterministically; with it, the Active and Defending players make
+        # per-Round Concede declarations (and, with interactive_timing, pick
+        # the Round their one-Round effects fire) just like the end-of-card
+        # Battle and the Relief Sally already allow.
+        if bool(action.get("interactive_concede")):
+            return _begin_interactive_battle(
+                state, action, atk, dfd, approach_pl)
         result = resolve_battle(
             state, atk, dfd,
             attacker_concede_round=_concede_round_arg(
                 action, "attacker_concede_round"),
             defender_concede_round=_concede_round_arg(
                 action, "defender_concede_round"))
-        commit_forces_after_battle(state, atk)
-        commit_forces_after_battle(state, dfd)
-        # Bug P fix: Retreat aftermath FIRST so it can consult Hold events
-        # (C7 Baggage Parapet opt-out) in this_levy_events before
-        # apply_aftermath clears that bucket.
-        retreat_summary = apply_retreat_aftermath(
-            state, result,
-            approach_from_locale=payload.get("from_locale_id"),
-            approach_way_type=payload.get("via_way_type"))
-        apply_battle_losses(state, result, retreat_summary)
-        apply_aftermath(state, result)
+        return _finish_approach_battle(state, action, atk=atk, dfd=dfd,
+                                       result=result, pl=approach_pl)
 
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining
