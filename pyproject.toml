@@ -21,6 +21,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "hypothesis>=6",  # optional: enables tests/test_property_fuzz.py fuzz tests
 ]
 
 [project.scripts]

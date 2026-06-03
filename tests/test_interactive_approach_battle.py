@@ -92,3 +92,22 @@ def test_interactive_attacker_concede_defender_wins() -> None:
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
                          "attacker_concede": True})
     assert r["winner"] == "muslim"
+
+
+def test_hit_absorption_choice_discoverable_during_battle() -> None:
+    """4.4.2 ASSIGN HITS is a player choice. The owner's Hit-absorption
+    policy works at any time, but must also be *discoverable* via
+    legal_moves while a field Battle is in progress so an agent on the
+    public interface can use it (and re-set it between Rounds)."""
+    s = _march_into_battle()
+    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+                     "interactive_concede": True})
+    sap = [m for m in legal_moves(s)
+           if m["type"] == "set_absorption_policy"]
+    assert {m["policy"] for m in sap} == {"weakest_first", "armored_first"}
+    # And applying one mid-Battle is accepted (does not consume the
+    # pending Concede decision).
+    apply_action(s, {"type": "set_absorption_policy", "side": "muslim",
+                     "policy": "armored_first"})
+    assert s.pending is not None and s.pending.kind == "battle_concede"
+    assert s.meta.absorption_policy["muslim"] == "armored_first"

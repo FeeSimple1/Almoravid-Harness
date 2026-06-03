@@ -81,6 +81,13 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "attacker_concede": True})
         moves.append({"type": "battle_concede", "side": side,
                       "defender_concede": True})
+        # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
+        # a genuine player choice and may be (re)set between Rounds. Surface
+        # it here so an agent on the public interface can discover it; the
+        # set_absorption_policy action leaves the Concede decision pending.
+        for _pol in ("weakest_first", "armored_first"):
+            moves.append({"type": "set_absorption_policy", "side": side,
+                          "policy": _pol})
         return moves
 
     # 4.4.1 ONE-ROUND EFFECT TIMING — before Round 1, the owner picks which
@@ -110,6 +117,13 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "storm_concede", "side": side})
         moves.append({"type": "storm_concede", "side": side,
                       "attacker_concede": True})
+        # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
+        # a genuine player choice and may be (re)set between Rounds. Surface
+        # it here so an agent on the public interface can discover it; the
+        # set_absorption_policy action leaves the Concede decision pending.
+        for _pol in ("weakest_first", "armored_first"):
+            moves.append({"type": "set_absorption_policy", "side": side,
+                          "policy": _pol})
         return moves
 
     # 4.4.2 CONCEDE THE FIELD? — reactive Relief-Sally Concede (either
@@ -122,6 +136,13 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "attacker_concede": True})
         moves.append({"type": "relief_concede", "side": side,
                       "defender_concede": True})
+        # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
+        # a genuine player choice and may be (re)set between Rounds. Surface
+        # it here so an agent on the public interface can discover it; the
+        # set_absorption_policy action leaves the Concede decision pending.
+        for _pol in ("weakest_first", "armored_first"):
+            moves.append({"type": "set_absorption_policy", "side": side,
+                          "policy": _pol})
         return moves
 
     # 4.8.1 GREED — optional Mule discard during the interactive Feed/Pay/
