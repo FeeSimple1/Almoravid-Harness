@@ -8,7 +8,7 @@ directly-opposed Front position is empty or absent.
 from __future__ import annotations
 
 from almoravid.battle import (
-    BattleResult, BattleSide, LordPosition,
+    BattleSide,
     _pick_flank_target,
     _resolve_step,
     _sync_side_forces_from_array,
@@ -131,18 +131,39 @@ def test_per_pair_reserve_does_not_strike_or_absorb() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_pick_flank_target_returns_largest_front_lord() -> None:
+def test_pick_flank_target_center_picks_larger_of_left_right() -> None:
+    """4.4.2: a CENTER Flanker may choose left or right (equidistant); we
+    take the larger as the owner's sensible default."""
+    s = load_scenario("scenario_a_toledo_beset", seed=11)
+    muslims = [lid for lid, l in s.lords.items()
+               if l.side == "muslim"][:3]
+    # index 0 -> front_center, 1 -> front_left, 2 -> front_right
+    bs = _make_array_side(s, muslims, "muslim", "defender", {
+        muslims[0]: {"sergeants": 1},   # center
+        muslims[1]: {"sergeants": 5},   # left
+        muslims[2]: {"sergeants": 3},   # right
+    })
+    target = _pick_flank_target(bs, "front_center")
+    assert target is not None
+    assert target.lord_id == muslims[1]  # larger of left(5)/right(3)
+
+
+def test_pick_flank_target_left_flanker_prefers_center() -> None:
+    """4.4.2: a LEFT Flanker (no Enemy opposite) Strikes the CLOSEST Front
+    Enemy — the center — even if a far (right) Lord is larger."""
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     muslims = [lid for lid, l in s.lords.items()
                if l.side == "muslim"][:3]
     bs = _make_array_side(s, muslims, "muslim", "defender", {
-        muslims[0]: {"sergeants": 1},
-        muslims[1]: {"sergeants": 5},
-        muslims[2]: {"sergeants": 3},
+        muslims[0]: {"sergeants": 1},   # center (closest to a left Flanker)
+        muslims[1]: {"sergeants": 0},   # left (the directly-opposite slot)
+        muslims[2]: {"sergeants": 9},   # right (far, but larger)
     })
-    target = _pick_flank_target(bs)
+    bs.array[1].forces = {}
+    bs.array[1].position = "routed"     # left slot empty -> would-be opposite gone
+    target = _pick_flank_target(bs, "front_left")
     assert target is not None
-    assert target.lord_id == muslims[1]  # the 5-unit Lord
+    assert target.lord_id == muslims[0]  # center (closest), not the bigger right
 
 
 def test_pick_flank_target_skips_routed_position() -> None:
@@ -155,7 +176,7 @@ def test_pick_flank_target_skips_routed_position() -> None:
     })
     bs.array[0].forces = {}
     bs.array[0].position = "routed"
-    target = _pick_flank_target(bs)
+    target = _pick_flank_target(bs, "front_center")
     assert target is not None
     assert target.lord_id == muslims[1]
 
@@ -210,7 +231,8 @@ def test_multi_lord_resolve_battle_produces_winner_and_commits() -> None:
     """End-to-end: a 2-Lord vs 2-Lord Battle resolves and writes per-
     Lord forces back via commit_forces_after_battle."""
     from almoravid.battle import (
-        apply_aftermath, commit_forces_after_battle,
+        apply_aftermath,
+        commit_forces_after_battle,
     )
     s = load_scenario("scenario_a_toledo_beset", seed=17)
     christians = [lid for lid, l in s.lords.items()

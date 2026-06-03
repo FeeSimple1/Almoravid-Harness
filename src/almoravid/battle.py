@@ -3102,21 +3102,36 @@ def _resolve_protection_roll_for_lp(
     return (False, chosen)
 
 
-def _pick_flank_target(side: BattleSide) -> LordPosition | None:
-    """Greedy flank target: pick the Front-position Lord with the most
-    unrouted units. Per rule 4.4.2 the Flanking Lord's owner chooses
-    between Flanking or directly-opposed Enemy — here we route to the
-    largest target deterministically."""
+def _pick_flank_target(side: BattleSide,
+                       actor_pos: ArrayPosition) -> LordPosition | None:
+    """4.4.2 Flanking: a Front Lord with no Enemy directly opposite Strikes
+    the CLOSEST Front Enemy Lord. Positional closeness on the 3-slot Front:
+    a left/right Flanker prefers the center, then the far slot; a center
+    Flanker may choose left or right (equidistant) — we take the larger of
+    the two as the owner's sensible default."""
     if side.array is None:
         return None
-    front_lords = [
-        lp for lp in side.array
+    fronts = {
+        lp.position: lp for lp in side.array
         if lp.position in ("front_center", "front_left", "front_right")
         and lp.has_unrouted()
-    ]
-    if not front_lords:
+    }
+    if not fronts:
         return None
-    return max(front_lords, key=lambda lp: sum(lp.forces.values()))
+    if actor_pos == "front_left":
+        order: list[ArrayPosition] = ["front_center", "front_right"]
+    elif actor_pos == "front_right":
+        order = ["front_center", "front_left"]
+    else:  # center: left and right are equidistant — owner picks the larger.
+        cands = [fronts[p] for p in ("front_left", "front_right")
+                 if p in fronts]
+        if cands:
+            return max(cands, key=lambda lp: sum(lp.forces.values()))
+        order = []
+    for p in order:
+        if p in fronts:
+            return fronts[p]
+    return next(iter(fronts.values()))
 
 
 def _sync_side_forces_from_array(side: BattleSide) -> None:
@@ -3187,13 +3202,13 @@ def _resolve_step_per_pair(
                          and lp.has_unrouted()), None)
         if actor_lp is None:
             continue
-        # Find target: same position first, else Flanking to closest
-        # (here: largest) Front enemy Lord.
+        # 4.4.2: Strike the directly-opposite Enemy if present, else
+        # Flank to the closest Front Enemy Lord.
         target_lp = next((lp for lp in target.array
                           if lp.position == actor_pos
                           and lp.has_unrouted()), None)
         if target_lp is None:
-            target_lp = _pick_flank_target(target)
+            target_lp = _pick_flank_target(target, actor_pos)
         if target_lp is None:
             continue
 

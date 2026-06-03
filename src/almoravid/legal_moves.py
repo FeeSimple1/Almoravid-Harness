@@ -921,7 +921,10 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 out.append({"type": "cmd_supply",
                                             "side": active,
                                             "source_seat": s})
-                        if here in seats:
+                        from almoravid.capabilities import effective_command
+                        _fresh = (state.meta.actions_remaining
+                                  == effective_command(state, lord_id))
+                        if here in seats and _fresh:
                             out.append({"type": "cmd_tax", "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
@@ -966,7 +969,12 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 cur = (loc.siege_yellow
                                        if active == "christian"
                                        else loc.siege_green)
-                                if cur < 4:
+                                from almoravid.capabilities import (
+                                    effective_command as _ec,
+                                )
+                                _fresh_s = (state.meta.actions_remaining
+                                            == _ec(state, lord_id))
+                                if cur < 4 and _fresh_s:
                                     out.append({"type": "cmd_siege",
                                                 "side": active})
                             # Battle: single-Lord against single enemy

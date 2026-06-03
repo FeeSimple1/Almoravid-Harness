@@ -179,7 +179,8 @@ def test_c21_mozarabes_auto_succeeds_surrender() -> None:
     s.meta.campaign_step = "activation"
     s.meta.active_player = "christian"
     s.meta.active_lord_id = "alfonso"
-    s.meta.actions_remaining = 1
+    from almoravid.capabilities import effective_command
+    s.meta.actions_remaining = effective_command(s, "alfonso")  # fresh card; was 1
     r = apply_action(s, {"type": "cmd_siege", "side": "christian"})
     assert r["surrender"] is not None, "expected a Surrender roll"
     assert r["surrender"]["succeeded"] is True

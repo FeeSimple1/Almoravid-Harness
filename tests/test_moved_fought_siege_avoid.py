@@ -28,7 +28,8 @@ def test_siege_marks_all_lords_there_moved_fought() -> None:
     s.meta.active_lord_id = "alfonso"
     s.meta.phase = "campaign"
     s.meta.campaign_step = "activation"
-    s.meta.actions_remaining = 3
+    from almoravid.capabilities import effective_command
+    s.meta.actions_remaining = effective_command(s, "alfonso")  # fresh card; was 3
     r = apply_action(s, {"type": "cmd_siege", "side": "christian",
                          "surrender": False})
     assert "alfonso" in r["fought_marked"]

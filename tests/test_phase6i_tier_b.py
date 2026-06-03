@@ -142,7 +142,8 @@ def test_c9_betrayal_doubles_spoils_and_adds_jihad() -> None:
     s.meta.campaign_step = "activation"
     s.meta.active_player = "christian"
     s.meta.active_lord_id = "alfonso"
-    s.meta.actions_remaining = 1
+    from almoravid.capabilities import effective_command
+    s.meta.actions_remaining = effective_command(s, "alfonso")  # fresh card
     jihad_before = sum(loc.jihad_markers for loc in s.locales.values())
     result = apply_action(s, {"type": "cmd_siege", "side": "christian"})
     assert result["surrender"] is not None, "expected a Surrender roll"

@@ -2319,6 +2319,10 @@ def _h_cmd_tax(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_besieged(state, lord_id),
              "Besieged Lord cannot Tax (4.7.3)",
              code="besieged")
+    from almoravid.capabilities import effective_command
+    _require(state.meta.actions_remaining == effective_command(state, lord_id),
+             "Tax takes an ENTIRE Command card (4.2.1); no other action may "
+             "precede it this card", code="not_fresh_card")
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale",
              code="not_on_map")
@@ -2714,6 +2718,10 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Siege Friendly Locale {here}",
              code="friendly_locale")
+    from almoravid.capabilities import effective_command
+    _require(state.meta.actions_remaining == effective_command(state, lord_id),
+             "Siege takes an ENTIRE Command card (4.2.1); no other action may "
+             "precede it this card", code="not_fresh_card")
 
     color = "yellow" if side == "christian" else "green"
     marker_field = "siege_yellow" if color == "yellow" else "siege_green"
