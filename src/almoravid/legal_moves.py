@@ -241,8 +241,21 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
             lord = state.lords.get(lord_id)
             moves.append({"type": "winter_siege_action", "side": side,
                           "lord_id": lord_id, "mode": "pass"})
-            moves.append({"type": "winter_siege_action", "side": side,
-                          "lord_id": lord_id, "mode": "ravage"})
+            # 4.7.2: Ravage may only target an un-Ravaged, non-Friendly
+            # Locale (mirror _h_cmd_ravage), so don't advertise it when the
+            # Siege Locale is already Ravaged.
+            try:
+                from almoravid.effective import is_friendly_locale
+                _rhere = (lord.cylinder.locale_id
+                          if lord is not None
+                          and lord.cylinder.kind == "locale" else None)
+                if (_rhere is not None
+                        and state.locales[_rhere].ravaged == "none"
+                        and not is_friendly_locale(state, _rhere, side)):
+                    moves.append({"type": "winter_siege_action", "side": side,
+                                  "lord_id": lord_id, "mode": "ravage"})
+            except (ImportError, KeyError, AttributeError, FileNotFoundError):
+                pass
             # Supply: one option per reachable Seat (mirror cmd_supply).
             try:
                 from almoravid.campaign import _find_supply_routes, _own_seats
@@ -269,9 +282,13 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         siege_lords = [lid for lid in _siege_locale_lords(state)
                        if state.lords[lid].side == side]
         for lid in siege_lords:
-            moves.append({"type": "winter_siege_pay", "side": side,
-                          "resource": "coin", "amount": 1,
-                          "target_lord_id": lid})
+            # 3.2.1: the paying Lord spends his OWN Coin to shift his Service
+            # marker; the executor requires payer_lord_id. Only advertise the
+            # Pay when that Lord has Coin to spend.
+            if state.lords[lid].assets.get("coin", 0) >= 1:
+                moves.append({"type": "winter_siege_pay", "side": side,
+                              "resource": "coin", "amount": 1,
+                              "payer_lord_id": lid, "target_lord_id": lid})
         moves.append({"type": "winter_siege_pay", "side": side, "done": True})
         return moves
 
@@ -979,7 +996,12 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # offering a phantom-legal move that the handler will
                 # reject.
                 try:
-                    from almoravid.campaign import _is_laden
+                    from almoravid.campaign import (
+                        _counts_as_marshal_for_march,
+                        _group_laden,
+                        _is_laden,
+                        _is_marshal,
+                    )
                     from almoravid.effective import is_besieged
                     from almoravid.map import neighbors_via
                     if (not is_besieged(state, lord_id)
@@ -988,26 +1010,57 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             # this card may not March again (handler mirror).
                             and state.meta.swollen_river_blocked_card_lord_id
                             != lord_id):
-                        cost = 2 if _is_laden(lord) else 1
-                        if state.meta.actions_remaining >= cost:
-                            from_loc = lord.cylinder.locale_id
-                            assert from_loc is not None
-                            for way_type in ("road", "pass"):
-                                for nbr in neighbors_via(from_loc, way_type):
-                                    # Pattern 9 mirror: pre-check
-                                    # Cart-over-Pass so legal_moves
-                                    # doesn't surface a move that
-                                    # apply_action would reject.
-                                    if (way_type == "pass"
-                                            and lord.assets.get("cart", 0) > 0
-                                            and lord.assets.get("prov", 0) > 0):
-                                        continue
+                        from_loc = lord.cylinder.locale_id
+                        assert from_loc is not None
+                        # 4.3.1 Group March: a Marshal (or Hueste bearer for
+                        # a Taifa endpoint) may bring eligible co-located,
+                        # Unbesieged, independent Lords. Advertise the
+                        # "bring all eligible" group; a custom subset can
+                        # still be submitted via explicit group_lord_ids.
+                        companions = [
+                            lo.id for lo in state.lords.values()
+                            if lo.side == active and lo.id != lord_id
+                            and lo.cylinder.kind == "locale"
+                            and lo.cylinder.locale_id == from_loc
+                            and lo.lieutenant_of is None
+                            and not is_besieged(state, lo.id)
+                        ]
+                        for way_type in ("road", "pass"):
+                            # Single-Lord cost mirrors the handler: a
+                            # Cart-over-Pass (or 2-Provender / Loot) March is
+                            # Laden and costs 2 actions — NOT suppressed.
+                            cost = 2 if _is_laden(lord, way_type) else 1
+                            can_single = state.meta.actions_remaining >= cost
+                            for nbr in neighbors_via(from_loc, way_type):
+                                if can_single:
                                     out.append({
                                         "type": "cmd_march",
                                         "side": active,
                                         "target_locale_id": nbr,
                                         "way_type": way_type,
                                     })
+                                if (companions
+                                        and _counts_as_marshal_for_march(
+                                            state, lord_id, active,
+                                            from_loc, nbr)):
+                                    grp = companions
+                                    # C8 Hueste lead (not the true Marshal)
+                                    # may not take Alfonso along.
+                                    if not _is_marshal(lord_id, active):
+                                        grp = [g for g in grp
+                                               if g != "alfonso"]
+                                    if grp:
+                                        gcost = (2 if _group_laden(
+                                            state, [lord_id, *grp], way_type)
+                                            else 1)
+                                        if state.meta.actions_remaining >= gcost:
+                                            out.append({
+                                                "type": "cmd_march",
+                                                "side": active,
+                                                "target_locale_id": nbr,
+                                                "way_type": way_type,
+                                                "group_lord_ids": list(grp),
+                                            })
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     # Safe: omit March moves; the agent can still
                     # cmd_pass / end_card. CROSS_PROJECT_LESSONS.md §1.
