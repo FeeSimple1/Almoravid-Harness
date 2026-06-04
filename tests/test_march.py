@@ -177,20 +177,24 @@ def test_legal_moves_enumerates_march_destinations() -> None:
     assert ("burgos", "road") in targets
 
 
-def test_legal_moves_filters_cart_over_pass_with_prov() -> None:
-    """Pattern 1/9 mirror: legal_moves doesn't offer a March that
-    apply_action would reject."""
+def test_legal_moves_offers_legal_cart_over_pass_with_prov() -> None:
+    """Pattern 1/9 mirror, corrected: a Cart-over-Pass March is LEGAL but
+    Laden (4.3.2, see test_march_cart_over_pass_with_prov_is_legal_laden),
+    so legal_moves MUST advertise it — and it must round-trip. (Regression
+    for the menu defect that suppressed this legal central-route March.)"""
     s = _setup_alfonso_active()
-    # Move Alfonso to Pamplona (which has Pass to Jaca)
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="pamplona")
-    moves = legal_moves(s)
-    marches = [m for m in moves if m["type"] == "cmd_march"]
-    # Pamplona has Pass to Jaca but Alfonso has Cart+Prov -> Pass excluded
-    pass_moves = [m for m in marches if m["way_type"] == "pass"]
-    assert pass_moves == [], (
-        f"legal_moves offered Pass marches that apply_action would "
-        f"reject (cart_over_pass_with_prov): {pass_moves}"
-    )
+    s.lords["alfonso"].assets = {"cart": 1, "prov": 1}   # Laden over a Pass
+    pass_moves = [m for m in legal_moves(s)
+                  if m["type"] == "cmd_march" and m["way_type"] == "pass"
+                  and m["target_locale_id"] == "jaca"
+                  and "group_lord_ids" not in m]
+    assert pass_moves, "legal_moves suppressed a legal Cart-over-Pass March"
+    before = s.meta.actions_remaining
+    r = apply_action(s, pass_moves[0])
+    assert r["laden"] is True and r["cost"] == 2
+    assert s.lords["alfonso"].cylinder.locale_id == "jaca"
+    assert s.meta.actions_remaining == before - 2
 
 
 @pytest.mark.parametrize("name", ["scenario_a_toledo_beset", "scenario_d_arrival"])
