@@ -2046,4 +2046,14 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Lords, regardless of which path moved/removed the Lord. Idempotent.
     from almoravid.campaign import _sweep_all_orphaned_markers
     _sweep_all_orphaned_markers(state)
+    # Rule 5.2: a side reduced to zero Mustered Lords on the map at ANY
+    # moment during the Campaign loses immediately. Previously this was only
+    # checked at Campaign entry and at final scoring, so a side eliminated by
+    # a Battle/Storm removal or the 4.8.2 end-of-card Disband sweep could
+    # keep playing. Check after every handler while in the Campaign phase.
+    if state.meta.phase == "campaign":
+        from almoravid.campaign import check_campaign_victory, compute_victory
+        if check_campaign_victory(state) is not None:
+            compute_victory(state)
+            state.meta.phase = "ended"
     return result
