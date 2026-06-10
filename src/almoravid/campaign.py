@@ -799,18 +799,23 @@ def _h_cmd_pass(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _apply_grow_harvest_repairs(state: GameState, prev_box: int) -> dict[str, Any]:
+def _apply_grow_harvest_repairs(state: GameState, prev_box: int,
+                                grow_choices: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """Rules 4.9.2 GROW / HARVEST and 4.9.3 REPAIRS, applied for the
     Campaign that just concluded in `prev_box` (1-indexed). Only runs
     when the game continues (4.9.1 Game End is checked first).
 
     GROW (end of the SECOND 40 Days of Spring): the Christian then the
-    Muslim player each reduces ENEMY Ravage markers on the map to half
-    their number, rounded up (mandatory). Christian removes Muslim
+    Muslim player each SELECTS and reduces ENEMY Ravage markers on the map
+    to half their number, rounded up (mandatory). Christian removes Muslim
     (green) Ravaged markers; Muslim removes Christian (yellow). Removing
-    floor(n/2) markers leaves ceil(n/2). Which markers are removed is a
-    minor player choice with no VP-total effect (VP is count-based);
-    a deterministic selection is used.
+    floor(n/2) markers leaves ceil(n/2). WHICH markers are removed is a
+    player choice: VP-total is count-based (so the choice does not change
+    total VP), but the per-Taifa Ravaged distribution does matter — it
+    feeds the Surrender roll bonus (4.5.1) and Enforcing Parias (4.7.2). The
+    optional `grow_choices` ({"green": [...], "yellow": [...]}) lets each
+    side pick exactly which of its enemy's markers to reduce; the default
+    is a deterministic selection (sorted), preserving prior behaviour.
 
     HARVEST (end of the SECOND 40 Days of Summer): each Lord reduces his
     Carts and Mules EACH to half, rounded up.
@@ -835,7 +840,22 @@ def _apply_grow_harvest_repairs(state: GameState, prev_box: int) -> dict[str, An
                        if loc.ravaged == color]
             n = len(ravaged)
             remove = n - _m.ceil(n / 2) if n > 0 else 0  # = floor(n/2)
-            removed = sorted(ravaged)[:remove]
+            explicit = (grow_choices or {}).get(color)
+            if explicit is not None:
+                # Player's explicit selection (4.9.2 "selects"): must be
+                # exactly `remove` distinct Ravaged Locales of this color.
+                _require(len(set(explicit)) == len(explicit),
+                         "grow_choices has duplicate Locales", code="bad_arg")
+                _require(all(lid in ravaged for lid in explicit),
+                         f"grow_choices[{color}] must be {color}-Ravaged "
+                         f"Locales on the map", code="bad_arg")
+                _require(len(explicit) == remove,
+                         f"grow_choices[{color}] must remove exactly "
+                         f"{remove} marker(s) (half of {n}, rounded down)",
+                         code="bad_arg")
+                removed = list(explicit)
+            else:
+                removed = sorted(ravaged)[:remove]
             for lid in removed:
                 state.locales[lid].ravaged = "none"
                 # 4.9.2 "adjust VP": removing a Ravage marker drops its
@@ -948,7 +968,8 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # 4.9.2 Grow/Harvest + 4.9.3 Repairs for the just-concluded Campaign
     # (only reached when the game continues, i.e. 4.9.1 Game End did not
     # fire above). `prev_box` is the box whose Campaign just ended.
-    ghr = _apply_grow_harvest_repairs(state, prev_box)
+    ghr = _apply_grow_harvest_repairs(
+        state, prev_box, grow_choices=action.get("grow_choices"))
     # Otherwise return to Levy
     _return_to_levy(state)
 
