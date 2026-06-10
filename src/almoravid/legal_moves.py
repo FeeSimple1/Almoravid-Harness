@@ -1140,6 +1140,32 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 out.append({"type": "cmd_supply",
                                             "side": active,
                                             "source_seat": s})
+                        # 4.6.1 Important: a Lord may draw from MULTIPLE Seats
+                        # in one Supply action, dedicating Transport per Way
+                        # of each Route. Advertise the largest affordable
+                        # combination (at-Seat first, then nearest Seats
+                        # while own+Shared Transport covers the cumulative
+                        # Ways); custom subsets remain submittable via
+                        # source_seats.
+                        _reach = [(s, route) for s, route in routes.items()
+                                  if s == here or (route is not None
+                                                   and len(route) <= cart + mule)]
+                        if len(_reach) >= 2:
+                            _ordered = sorted(
+                                _reach,
+                                key=lambda sr: 0 if sr[0] == here
+                                else len(sr[1] or []))
+                            _chosen: list[str] = []
+                            _used = 0
+                            for _s, _route in _ordered:
+                                _hops = 0 if _s == here else len(_route or [])
+                                if _used + _hops <= cart + mule:
+                                    _chosen.append(_s)
+                                    _used += _hops
+                            if len(_chosen) >= 2:
+                                out.append({"type": "cmd_supply",
+                                            "side": active,
+                                            "source_seats": _chosen})
                         from almoravid.capabilities import effective_command
                         _fresh = (state.meta.actions_remaining
                                   == effective_command(state, lord_id))
@@ -1196,6 +1222,22 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 if cur < 4 and _fresh_s:
                                     out.append({"type": "cmd_siege",
                                                 "side": active})
+                                    # 4.5.1: with no Besieged enemy Lords
+                                    # inside, the Besieger MAY roll for
+                                    # Surrender OR decline ("including
+                                    # because the Besieger declined to
+                                    # roll"). Default cmd_siege rolls;
+                                    # advertise the decline form too.
+                                    _enemy_inside = any(
+                                        lo.side != active
+                                        and lo.cylinder.kind == "locale"
+                                        and lo.cylinder.locale_id == here
+                                        and lo.in_stronghold
+                                        for lo in state.lords.values())
+                                    if not _enemy_inside:
+                                        out.append({"type": "cmd_siege",
+                                                    "side": active,
+                                                    "surrender": False})
                             # Battle: single-Lord against single enemy
                             # Lord at this Locale (Phase 5e baseline).
                             our_here = [

@@ -392,3 +392,29 @@ legal_moves enumeration, state.schema.json.
 **Revisit:** if a fully reactive per-Round Array / REPOSITION prompt (each
 owner deciding live, with mid-step new-Flanking Hit spill) is preferred over
 the standing-policy exposure.
+
+## DECISION-008 — GROW Ravage-marker removal is a player choice (4.9.2)
+
+**Date:** 2026-06-03
+**Type:** [INTERPRETATION]
+**Trigger:** Audit follow-up — the GROW code picked which Enemy Ravage
+markers to reduce deterministically (sorted), with a comment claiming the
+choice was immaterial.
+
+**Decision:** 4.9.2 GROW says the Christian then the Muslim player each
+"selects and reduces" Enemy Ravage markers to half (rounded up). WHICH
+markers are removed is a genuine player choice. VP-total is count-based, so
+the choice does not change total VP — but the per-Taifa Ravaged
+distribution does matter: it feeds the Surrender roll bonus (4.5.1,
+`_ravaged_count_in_taifa_for_side`) and Enforcing Parias (4.7.2). The prior
+"no effect" comment was therefore wrong and has been corrected.
+
+`_apply_grow_harvest_repairs` now accepts an optional `grow_choices`
+({"green": [...], "yellow": [...]}, supplied on the `end_campaign` action):
+each side lists exactly the floor(n/2) Enemy-colored Ravaged Locales it
+removes (validated). When omitted, the deterministic `sorted()` selection is
+used, so existing behaviour and tests are unchanged.
+
+**Scope:** campaign.py (`_apply_grow_harvest_repairs`, `_h_end_campaign`).
+**Revisit:** if GROW is made a fully interactive per-side pending decision
+rather than an optional argument on end_campaign.
