@@ -1582,8 +1582,15 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """
     from almoravid.state import Cylinder
     side = _require_side(action)
-    _require_levy_step(state, "service_disband")
-    _require_active(state, side)
+    # 4.8.2 end-of-card / Winter auto-Disband may reuse this handler from a
+    # Campaign-phase sweep covering BOTH sides; `auto_service_disband` skips
+    # the Levy-step / active-player guards (the caller has already
+    # established at-or-beyond Service-limit eligibility). Phase is left as
+    # the caller's so _compute_disband_target_box keeps the Errata "next box
+    # if Campaign" +1 for the at-limit (3.3.2) Calendar placement.
+    if not bool(action.get("auto_service_disband")):
+        _require_levy_step(state, "service_disband")
+        _require_active(state, side)
     lord_id = action.get("lord_id")
     _require(isinstance(lord_id, str), "lord_id required", code="bad_arg")
     lord_id = cast(str, lord_id)

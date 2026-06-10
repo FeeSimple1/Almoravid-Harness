@@ -510,44 +510,30 @@ def _feed_all_moved_fought(state: GameState, *,
 
 
 def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, Any]:
-    """Rule 4.8.3 / 3.3.2: auto-Disband when Lord's Service marker is
-    at or beyond the Campaign marker. Uses _compute_disband_target_box
-    so Errata p.12 'next box if Campaign' (Bug N) is honored.
+    """Rule 4.8.2 / 4.8.3 -> 3.3: auto-Disband a Lord at or beyond his
+    Service limit. Routes through the full 3.3 handler (_h_disband_lord) so
+    that, unlike the old shortcut which sent everyone to the Calendar:
+      - a Beyond-Service Lord (Service marker LEFT of the marker) is
+        PERMANENTLY removed from the game (3.3.1), and
+      - an Independent-Taifa Lord's Disband adjusts his Taifa to Parias,
+        awarding Parias Coin and 1 Christian VP (3.3 Important / 1.4.3).
+    Phase is left as Campaign so _compute_disband_target_box keeps the
+    Errata "next box if Campaign" +1 for the at-limit (3.3.2) placement.
+    Mirrors _winter_siege_disband (which reuses the same handler).
     """
-    from almoravid.actions import _compute_disband_target_box
-    from almoravid.state import Cylinder
+    from almoravid.actions import _h_disband_lord
     lord = state.lords[lord_id]
+    if lord.cylinder.kind != "locale":
+        return {"no_op": True, "reason": "not on map"}
     sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id), None)
-    # Service marker at-or-before current Campaign box -> at-Service-limit
-    if sm is None:
-        return {"no_op": True, "reason": "no service marker (already off-Calendar)"}
-    if sm.box > state.calendar.current_box:
+               if s.lord_id == lord_id and s.vassal_id is None), None)
+    at_or_beyond = (sm is None) or (sm.box <= state.calendar.current_box)
+    if not at_or_beyond:
         return {"no_op": True, "reason": "not at service limit"}
-    # Locale being vacated — for the 4.3.5 Siege/Bypass-marker cleanup.
-    left_locale = (lord.cylinder.locale_id
-                   if lord.cylinder.kind == "locale" else None)
-    new_box = _compute_disband_target_box(state, lord)
-    if new_box > 16:
-        new_box = 17
-        state.calendar.off_right.append(lord_id)
-    lord.cylinder = Cylinder(kind="calendar", box=new_box)
-    # 4.3.5 / playtest F7: a Stronghold free of the besieging side's
-    # Lords loses that side's Siege/Bypass markers.
-    if left_locale is not None:
-        _remove_orphaned_siege_bypass(state, left_locale)
-    # Pattern 8: cleanup
-    lord.forces = {}
-    lord.assets = {}
-    lord.capabilities = []
-    lord.vassals = []
-    lord.in_stronghold = False
-    lord.moved_fought = False
-    lord.routed_units = {}
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers if s.lord_id != lord_id
-    ]
-    return {"disbanded": lord_id, "to_box": new_box}
+    res = _h_disband_lord(state, {"type": "disband_lord", "side": lord.side,
+                                  "lord_id": lord_id,
+                                  "auto_service_disband": True})
+    return {"disbanded": lord_id, **res}
 
 
 def _clear_per_card_event_flags(state: GameState) -> None:
