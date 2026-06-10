@@ -991,6 +991,35 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _ct in _cabalgadas_targets(state, lord_id, active):
                         out.append({"type": "cmd_cabalgadas", "side": active,
                                     "target_locale": _ct})
+                # M19 African Fleet (Hold): a Muslim Lord may use his entire
+                # Command card to March directly between two Ports free of
+                # Christian Lords (Arts of War ref M19). The handler exists
+                # but was never advertised; mirror its gates here.
+                if (active == "muslim"
+                        and "M19" in state.decks.this_levy_events.get(
+                            "muslim", [])):
+                    try:
+                        from almoravid.effective import is_besieged as _isb_m19
+                        _here_m19 = (lord.cylinder.locale_id
+                                     if lord.cylinder.kind == "locale"
+                                     else None)
+                        if (_here_m19 is not None
+                                and state.locales[_here_m19].has_port
+                                and not _isb_m19(state, lord_id)):
+                            for _pid, _ploc in state.locales.items():
+                                if (_pid != _here_m19 and _ploc.has_port
+                                        and not any(
+                                            lo.side == "christian"
+                                            and lo.cylinder.kind == "locale"
+                                            and lo.cylinder.locale_id == _pid
+                                            for lo in state.lords.values())):
+                                    out.append({
+                                        "type": "cmd_march_port_to_port",
+                                        "side": active,
+                                        "target_locale_id": _pid,
+                                    })
+                    except (KeyError, AttributeError):
+                        pass
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.
