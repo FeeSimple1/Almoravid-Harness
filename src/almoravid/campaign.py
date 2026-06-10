@@ -4816,40 +4816,41 @@ def _h_play_cluniacs(state: GameState, action: dict[str, Any]) -> dict[str, Any]
 
 
 def _h_play_de_vivar_reconcile(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """C25 (Hold) De Vivar: Reconcile with Rodrigo (3.5.1) — Rodrigo
-    al-Sayyid leaves the map; Muslim side gains 1 VP "to Taifas box"
-    (modeled as +1 Muslim score).
+    """C25 (Hold) De Vivar: during Christian Call to Arms, Reconcile with
+    Rodrigo per the 3.5.1 procedure but for exactly 1 VP to the Taifas box
+    regardless of al-Sayyid's Service (card text). al-Sayyid must be on the
+    map. Rodrigo al-Sayyid is set ASIDE and Rodrigo Campeador is placed on
+    the Calendar two boxes ahead (the shared 3.5.1 effect).
 
     Args:
       side: 'christian'
     """
+    from almoravid.actions import (
+        _cta_finish_option,
+        _cta_require_turn,
+        _reconcile_rodrigo_effect,
+    )
     side = _require_side(action)
     _require(side == "christian", "C25 is a Christian event",
              code="wrong_side")
     _require("C25" in state.decks.this_levy_events.get("christian", []),
              "C25 not held in this_levy_events", code="card_not_held")
+    # Play must be during Christian Call to Arms, as the side's single
+    # option that Levy (card text + 3.5).
+    _cta_require_turn(state, side)
     sayyid = state.lords.get("rodrigo_al_sayyid")
     _require(sayyid is not None and sayyid.cylinder.kind == "locale",
              "Rodrigo al-Sayyid not on map", code="not_on_map")
-    assert sayyid is not None
-    # Reconcile: remove al-Sayyid from the map; Muslim +1 VP.
-    from almoravid.state import Cylinder
-    for field_name in sayyid.cleanup_on_removal_fields:
-        try:
-            setattr(sayyid, field_name,
-                    type(getattr(sayyid, field_name))())
-        except Exception:
-            pass
-    sayyid.cylinder = Cylinder(kind="removed")
-    from almoravid.actions import _shift_service_left as _ssl
-    _ssl(state, "rodrigo_al_sayyid", boxes=20)
-    state.score.muslim += 1.0
-    state.taifas_box_vp += 1.0  # Phase 7g: 1 VP banked in the Taifas box
+    box = _reconcile_rodrigo_effect(state, 1.0)   # exactly 1 VP for C25
     state.decks.this_levy_events["christian"].remove("C25")
     state.decks.discard.append("C25")
-    _record(state, action, "Christian Reconciles Rodrigo via C25 "
-            "(al-Sayyid removed; +1 VP to Muslim)")
-    return {"reconciled": True, "muslim_vp_delta": 1.0}
+    _record(state, action,
+            "Christian Reconciles Rodrigo via C25 De Vivar (1 VP to Taifas "
+            f"box; al-Sayyid set aside; Campeador onto Calendar box {box})")
+    result = {"reconciled": True, "muslim_vp_delta": 1.0,
+              "campeador_calendar_box": box}
+    _cta_finish_option(state, side)
+    return result
 
 
 def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[str, Any]:

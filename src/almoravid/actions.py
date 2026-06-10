@@ -846,6 +846,39 @@ def _cta_collect_payment(state: GameState, side: Side,
 # ----- 3.5.1 Christian options ---------------------------------------------
 
 
+def _reconcile_rodrigo_effect(state: GameState, vp: float) -> int:
+    """Shared 3.5.1 Reconcile-with-Rodrigo effect: bank `vp` to the Taifas
+    box (Muslim), Disband Rodrigo al-Sayyid by setting his green cylinder
+    ASIDE (clear his pieces; remove his Service + Seat markers), and place
+    Rodrigo Campeador's yellow cylinder onto the Calendar two boxes ahead.
+    Returns Campeador's Calendar box. Shared by the 3.5.1 Call-to-Arms
+    option and the C25 De Vivar Hold event (which passes vp=1)."""
+    from almoravid.state import Cylinder
+    sayyid = state.lords["rodrigo_al_sayyid"]
+    campeador = state.lords["rodrigo_campeador"]
+    state.taifas_box_vp += vp
+    state.score.muslim += vp
+    if sayyid.cylinder.kind == "locale":
+        for field_name in sayyid.cleanup_on_removal_fields:
+            try:
+                setattr(sayyid, field_name,
+                        type(getattr(sayyid, field_name))())
+            except Exception:
+                pass
+    sayyid.cylinder = Cylinder(kind="set_aside")
+    state.calendar.service_markers = [
+        sm for sm in state.calendar.service_markers
+        if sm.lord_id != "rodrigo_al_sayyid"]
+    if "rodrigo_al_sayyid" in state.calendar.off_left_service:
+        state.calendar.off_left_service.remove("rodrigo_al_sayyid")
+    for loc in state.locales.values():
+        if "rodrigo_al_sayyid" in loc.seat_marker_lord_ids:
+            loc.seat_marker_lord_ids.remove("rodrigo_al_sayyid")
+    box = min(16, state.calendar.current_box + 2)
+    campeador.cylinder = Cylinder(kind="calendar", box=box)
+    return box
+
+
 def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """3.5.1 Reconcile with Rodrigo. Available if Rodrigo al-Sayyid
     (green) is on the map OR Disband/combat has permanently removed any
@@ -861,9 +894,7 @@ def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[s
     _require(side == "christian", "Reconcile is a Christian option (3.5.1)",
              code="wrong_side")
     _cta_require_turn(state, side)
-    from almoravid.state import Cylinder
     sayyid = state.lords["rodrigo_al_sayyid"]
-    campeador = state.lords["rodrigo_campeador"]
     sayyid_on_map = sayyid.cylinder.kind == "locale"
     christian_removed = any(
         lord.side == "christian" and lord.cylinder.kind == "removed"
@@ -877,29 +908,7 @@ def _h_cta_reconcile_rodrigo(state: GameState, action: dict[str, Any]) -> dict[s
               None)
     ahead = max(0, sm.box - state.calendar.current_box) if sm is not None else 0
     vp = 1.0 + float(ahead)
-    state.taifas_box_vp += vp
-    state.score.muslim += vp
-    # Disband al-Sayyid if on the map: clear his pieces, set cylinder
-    # aside, remove his Service marker and Seat marker.
-    if sayyid_on_map:
-        for field_name in sayyid.cleanup_on_removal_fields:
-            try:
-                setattr(sayyid, field_name,
-                        type(getattr(sayyid, field_name))())
-            except Exception:
-                pass
-    sayyid.cylinder = Cylinder(kind="set_aside")
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers
-        if s.lord_id != "rodrigo_al_sayyid"]
-    if "rodrigo_al_sayyid" in state.calendar.off_left_service:
-        state.calendar.off_left_service.remove("rodrigo_al_sayyid")
-    for loc in state.locales.values():
-        if "rodrigo_al_sayyid" in loc.seat_marker_lord_ids:
-            loc.seat_marker_lord_ids.remove("rodrigo_al_sayyid")
-    # Place Campeador's yellow cylinder on the Calendar two boxes ahead.
-    box = min(16, state.calendar.current_box + 2)
-    campeador.cylinder = Cylinder(kind="calendar", box=box)
+    box = _reconcile_rodrigo_effect(state, vp)
     _record(state, action,
             f"Christian Reconciles Rodrigo: +{vp:g} VP to Taifas box; "
             f"al-Sayyid set aside; Campeador onto Calendar box {box}")

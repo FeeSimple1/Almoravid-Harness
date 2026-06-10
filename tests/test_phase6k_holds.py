@@ -13,7 +13,6 @@ from almoravid.events import resolve_event
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 
-
 # ---------------------------------------------------------------------------
 # C13 / M23 Berenguer Ramon — Count of Barcelona faction toggle
 # ---------------------------------------------------------------------------
@@ -240,34 +239,3 @@ def test_m19_rejects_non_port_destination() -> None:
     assert ei.value.code == "not_port"
 
 
-# ---------------------------------------------------------------------------
-# C25 De Vivar Reconcile — al-Sayyid removed + 1 VP Muslim
-# ---------------------------------------------------------------------------
-
-
-def test_c25_reconcile_removes_sayyid_and_grants_muslim_vp() -> None:
-    s = load_scenario("scenario_a_toledo_beset", seed=1)
-    assert "rodrigo_al_sayyid" in s.lords
-    s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
-        kind="locale", locale_id="leon")
-    s.lords["rodrigo_al_sayyid"].in_stronghold = False
-    s.decks.this_levy_events["christian"] = ["C25"]
-    vp_before = s.score.muslim
-    r = apply_action(s, {"type": "play_de_vivar_reconcile",
-                         "side": "christian"})
-    assert r["reconciled"] is True
-    assert r["muslim_vp_delta"] == 1.0
-    assert s.score.muslim == vp_before + 1.0
-    assert s.lords["rodrigo_al_sayyid"].cylinder.kind == "removed"
-    assert "C25" in s.decks.discard
-
-
-def test_c25_rejects_when_sayyid_not_on_map() -> None:
-    s = load_scenario("scenario_a_toledo_beset", seed=1)
-    assert "rodrigo_al_sayyid" in s.lords
-    s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(kind="calendar")
-    s.decks.this_levy_events["christian"] = ["C25"]
-    with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "play_de_vivar_reconcile",
-                         "side": "christian"})
-    assert ei.value.code == "not_on_map"

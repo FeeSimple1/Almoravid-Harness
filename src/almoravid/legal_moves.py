@@ -721,6 +721,14 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for lord in state.lords.values())
         if sayyid.cylinder.kind == "locale" or christian_removed:
             out.append({"type": "cta_reconcile_rodrigo", "side": "christian"})
+        # C25 De Vivar (Hold): an alternate Reconcile played as the
+        # Christian Call-to-Arms option, available only when C25 is held
+        # AND al-Sayyid is on the map (card text). Reconciles for 1 VP.
+        if (sayyid.cylinder.kind == "locale"
+                and "C25" in state.decks.this_levy_events.get(
+                    "christian", [])):
+            out.append({"type": "play_de_vivar_reconcile",
+                        "side": "christian"})
         if ready(camp):
             pay = build_payment("christian", 2, False)
             if pay is not None:
