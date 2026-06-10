@@ -2290,6 +2290,21 @@ def _route_blocked_by_enemy(state: GameState, route: list[str],
 
 
 
+def _shared_transport_at(state: GameState, locale_id: str,
+                         side: Side) -> tuple[int, int]:
+    """4.6.1 / 1.5.2 SHARED TRANSPORT: total (Carts, Mules) available to a
+    Lord Supplying from `locale_id` — his own plus those of co-located
+    same-side Lords, which he may Share (1.5.2). Mirrors the Cart/Mule
+    pooling already used for Group March / Avoid Battle Laden status."""
+    carts = mules = 0
+    for other in state.lords.values():
+        if (other.side == side and other.cylinder.kind == "locale"
+                and other.cylinder.locale_id == locale_id):
+            carts += other.assets.get("cart", 0)
+            mules += other.assets.get("mule", 0)
+    return carts, mules
+
+
 def _find_supply_routes(state: GameState, here: str, seats: list[str],
                           side: Side, lord: Lord) -> dict[str, list[str] | None]:
     """BFS from `here` looking for an unblocked path to each Seat.
@@ -2324,10 +2339,14 @@ def _find_supply_routes(state: GameState, here: str, seats: list[str],
             # destination Seat itself — by definition our own Seat,
             # not Enemy).
             if nbr in seat_set:
-                # Reached a Seat. Record route and continue (Seats
-                # don't propagate further as intervening Locales).
+                # Reached a Seat. Record the route. An own Seat is a
+                # Friendly Locale, so it may also serve as an intervening
+                # Locale on the Route to a FARTHER Seat (4.6.1) — keep
+                # expanding through it unless an Enemy blocks it.
                 visited[nbr] = visited[node] + [nbr]
                 target_routes[nbr] = visited[nbr]
+                if not _route_blocked_by_enemy(state, [nbr], side):
+                    queue.append(nbr)
                 continue
             # Not a Seat — check blocking
             if _route_blocked_by_enemy(state, [nbr], side):
@@ -2430,12 +2449,14 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         per_seat_hops[s] = len(route)
         total_hops += len(route)
 
-    has_cart = lord.assets.get("cart", 0)
-    has_mule = lord.assets.get("mule", 0)
+    # 4.6.1: the Active Lord must "have or Share (1.5.2)" enough Transport
+    # — count co-located same-side Lords' Carts/Mules too.
+    has_cart, has_mule = _shared_transport_at(state, here, side)
     if has_cart + has_mule < total_hops:
         raise IllegalAction(
             f"Supply needs {total_hops} Cart/Mule(s) for "
-            f"{requested}; have {has_cart} Cart + {has_mule} Mule (4.6.1)",
+            f"{requested}; have/Share {has_cart} Cart + {has_mule} Mule "
+            f"(4.6.1)",
             code="no_transport",
         )
     if total_hops > 0:

@@ -258,13 +258,17 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                 pass
             # Supply: one option per reachable Seat (mirror cmd_supply).
             try:
-                from almoravid.campaign import _find_supply_routes, _own_seats
+                from almoravid.campaign import (
+                    _find_supply_routes,
+                    _own_seats,
+                    _shared_transport_at,
+                )
                 if lord is not None and lord.cylinder.kind == "locale":
                     seats = _own_seats(state, lord_id)
                     here = lord.cylinder.locale_id
                     assert here is not None
-                    cart = lord.assets.get("cart", 0)
-                    mule = lord.assets.get("mule", 0)
+                    # 4.6.1: own OR Shared (1.5.2) Transport.
+                    cart, mule = _shared_transport_at(state, here, side)
                     routes = _find_supply_routes(state, here, seats,
                                                  side, lord)
                     for seat, route in routes.items():
@@ -1072,6 +1076,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.campaign import (
                         _find_supply_routes,
                         _own_seats,
+                        _shared_transport_at,
                     )
                     from almoravid.effective import is_besieged
                     if (not is_besieged(state, lord_id)
@@ -1085,8 +1090,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         #   - at-Seat is always offered (no Transport).
                         #   - others require sufficient Cart+Mule and
                         #     an unblocked BFS route.
-                        cart = lord.assets.get("cart", 0)
-                        mule = lord.assets.get("mule", 0)
+                        # 4.6.1: own OR Shared (1.5.2) Transport.
+                        cart, mule = _shared_transport_at(state, here, active)
                         routes = _find_supply_routes(state, here, seats,
                                                      active, lord)
                         for s, route in routes.items():
