@@ -130,6 +130,12 @@ def test_c10_includes_taifas_box_coin() -> None:
 def test_c25_taifas_box_vp_counts_for_muslim() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     assert "rodrigo_al_sayyid" in s.lords
+    # C25 De Vivar must be played during the Christian Call to Arms.
+    from tests._plan_helpers import step_levy
+    from tests.test_real_levy import _drive_to_levy_step
+    _drive_to_levy_step(s, "call_to_arms")
+    while s.meta.active_player != "christian":
+        step_levy(s)
     s.lords["rodrigo_al_sayyid"].cylinder = Cylinder(
         kind="locale", locale_id="leon")
     s.lords["rodrigo_al_sayyid"].in_stronghold = False

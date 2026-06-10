@@ -510,44 +510,30 @@ def _feed_all_moved_fought(state: GameState, *,
 
 
 def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, Any]:
-    """Rule 4.8.3 / 3.3.2: auto-Disband when Lord's Service marker is
-    at or beyond the Campaign marker. Uses _compute_disband_target_box
-    so Errata p.12 'next box if Campaign' (Bug N) is honored.
+    """Rule 4.8.2 / 4.8.3 -> 3.3: auto-Disband a Lord at or beyond his
+    Service limit. Routes through the full 3.3 handler (_h_disband_lord) so
+    that, unlike the old shortcut which sent everyone to the Calendar:
+      - a Beyond-Service Lord (Service marker LEFT of the marker) is
+        PERMANENTLY removed from the game (3.3.1), and
+      - an Independent-Taifa Lord's Disband adjusts his Taifa to Parias,
+        awarding Parias Coin and 1 Christian VP (3.3 Important / 1.4.3).
+    Phase is left as Campaign so _compute_disband_target_box keeps the
+    Errata "next box if Campaign" +1 for the at-limit (3.3.2) placement.
+    Mirrors _winter_siege_disband (which reuses the same handler).
     """
-    from almoravid.actions import _compute_disband_target_box
-    from almoravid.state import Cylinder
+    from almoravid.actions import _h_disband_lord
     lord = state.lords[lord_id]
+    if lord.cylinder.kind != "locale":
+        return {"no_op": True, "reason": "not on map"}
     sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id), None)
-    # Service marker at-or-before current Campaign box -> at-Service-limit
-    if sm is None:
-        return {"no_op": True, "reason": "no service marker (already off-Calendar)"}
-    if sm.box > state.calendar.current_box:
+               if s.lord_id == lord_id and s.vassal_id is None), None)
+    at_or_beyond = (sm is None) or (sm.box <= state.calendar.current_box)
+    if not at_or_beyond:
         return {"no_op": True, "reason": "not at service limit"}
-    # Locale being vacated — for the 4.3.5 Siege/Bypass-marker cleanup.
-    left_locale = (lord.cylinder.locale_id
-                   if lord.cylinder.kind == "locale" else None)
-    new_box = _compute_disband_target_box(state, lord)
-    if new_box > 16:
-        new_box = 17
-        state.calendar.off_right.append(lord_id)
-    lord.cylinder = Cylinder(kind="calendar", box=new_box)
-    # 4.3.5 / playtest F7: a Stronghold free of the besieging side's
-    # Lords loses that side's Siege/Bypass markers.
-    if left_locale is not None:
-        _remove_orphaned_siege_bypass(state, left_locale)
-    # Pattern 8: cleanup
-    lord.forces = {}
-    lord.assets = {}
-    lord.capabilities = []
-    lord.vassals = []
-    lord.in_stronghold = False
-    lord.moved_fought = False
-    lord.routed_units = {}
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers if s.lord_id != lord_id
-    ]
-    return {"disbanded": lord_id, "to_box": new_box}
+    res = _h_disband_lord(state, {"type": "disband_lord", "side": lord.side,
+                                  "lord_id": lord_id,
+                                  "auto_service_disband": True})
+    return {"disbanded": lord_id, **res}
 
 
 def _clear_per_card_event_flags(state: GameState) -> None:
@@ -2290,6 +2276,21 @@ def _route_blocked_by_enemy(state: GameState, route: list[str],
 
 
 
+def _shared_transport_at(state: GameState, locale_id: str,
+                         side: Side) -> tuple[int, int]:
+    """4.6.1 / 1.5.2 SHARED TRANSPORT: total (Carts, Mules) available to a
+    Lord Supplying from `locale_id` — his own plus those of co-located
+    same-side Lords, which he may Share (1.5.2). Mirrors the Cart/Mule
+    pooling already used for Group March / Avoid Battle Laden status."""
+    carts = mules = 0
+    for other in state.lords.values():
+        if (other.side == side and other.cylinder.kind == "locale"
+                and other.cylinder.locale_id == locale_id):
+            carts += other.assets.get("cart", 0)
+            mules += other.assets.get("mule", 0)
+    return carts, mules
+
+
 def _find_supply_routes(state: GameState, here: str, seats: list[str],
                           side: Side, lord: Lord) -> dict[str, list[str] | None]:
     """BFS from `here` looking for an unblocked path to each Seat.
@@ -2324,10 +2325,14 @@ def _find_supply_routes(state: GameState, here: str, seats: list[str],
             # destination Seat itself — by definition our own Seat,
             # not Enemy).
             if nbr in seat_set:
-                # Reached a Seat. Record route and continue (Seats
-                # don't propagate further as intervening Locales).
+                # Reached a Seat. Record the route. An own Seat is a
+                # Friendly Locale, so it may also serve as an intervening
+                # Locale on the Route to a FARTHER Seat (4.6.1) — keep
+                # expanding through it unless an Enemy blocks it.
                 visited[nbr] = visited[node] + [nbr]
                 target_routes[nbr] = visited[nbr]
+                if not _route_blocked_by_enemy(state, [nbr], side):
+                    queue.append(nbr)
                 continue
             # Not a Seat — check blocking
             if _route_blocked_by_enemy(state, [nbr], side):
@@ -2430,12 +2435,14 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         per_seat_hops[s] = len(route)
         total_hops += len(route)
 
-    has_cart = lord.assets.get("cart", 0)
-    has_mule = lord.assets.get("mule", 0)
+    # 4.6.1: the Active Lord must "have or Share (1.5.2)" enough Transport
+    # — count co-located same-side Lords' Carts/Mules too.
+    has_cart, has_mule = _shared_transport_at(state, here, side)
     if has_cart + has_mule < total_hops:
         raise IllegalAction(
             f"Supply needs {total_hops} Cart/Mule(s) for "
-            f"{requested}; have {has_cart} Cart + {has_mule} Mule (4.6.1)",
+            f"{requested}; have/Share {has_cart} Cart + {has_mule} Mule "
+            f"(4.6.1)",
             code="no_transport",
         )
     if total_hops > 0:
@@ -4809,40 +4816,41 @@ def _h_play_cluniacs(state: GameState, action: dict[str, Any]) -> dict[str, Any]
 
 
 def _h_play_de_vivar_reconcile(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """C25 (Hold) De Vivar: Reconcile with Rodrigo (3.5.1) — Rodrigo
-    al-Sayyid leaves the map; Muslim side gains 1 VP "to Taifas box"
-    (modeled as +1 Muslim score).
+    """C25 (Hold) De Vivar: during Christian Call to Arms, Reconcile with
+    Rodrigo per the 3.5.1 procedure but for exactly 1 VP to the Taifas box
+    regardless of al-Sayyid's Service (card text). al-Sayyid must be on the
+    map. Rodrigo al-Sayyid is set ASIDE and Rodrigo Campeador is placed on
+    the Calendar two boxes ahead (the shared 3.5.1 effect).
 
     Args:
       side: 'christian'
     """
+    from almoravid.actions import (
+        _cta_finish_option,
+        _cta_require_turn,
+        _reconcile_rodrigo_effect,
+    )
     side = _require_side(action)
     _require(side == "christian", "C25 is a Christian event",
              code="wrong_side")
     _require("C25" in state.decks.this_levy_events.get("christian", []),
              "C25 not held in this_levy_events", code="card_not_held")
+    # Play must be during Christian Call to Arms, as the side's single
+    # option that Levy (card text + 3.5).
+    _cta_require_turn(state, side)
     sayyid = state.lords.get("rodrigo_al_sayyid")
     _require(sayyid is not None and sayyid.cylinder.kind == "locale",
              "Rodrigo al-Sayyid not on map", code="not_on_map")
-    assert sayyid is not None
-    # Reconcile: remove al-Sayyid from the map; Muslim +1 VP.
-    from almoravid.state import Cylinder
-    for field_name in sayyid.cleanup_on_removal_fields:
-        try:
-            setattr(sayyid, field_name,
-                    type(getattr(sayyid, field_name))())
-        except Exception:
-            pass
-    sayyid.cylinder = Cylinder(kind="removed")
-    from almoravid.actions import _shift_service_left as _ssl
-    _ssl(state, "rodrigo_al_sayyid", boxes=20)
-    state.score.muslim += 1.0
-    state.taifas_box_vp += 1.0  # Phase 7g: 1 VP banked in the Taifas box
+    box = _reconcile_rodrigo_effect(state, 1.0)   # exactly 1 VP for C25
     state.decks.this_levy_events["christian"].remove("C25")
     state.decks.discard.append("C25")
-    _record(state, action, "Christian Reconciles Rodrigo via C25 "
-            "(al-Sayyid removed; +1 VP to Muslim)")
-    return {"reconciled": True, "muslim_vp_delta": 1.0}
+    _record(state, action,
+            "Christian Reconciles Rodrigo via C25 De Vivar (1 VP to Taifas "
+            f"box; al-Sayyid set aside; Campeador onto Calendar box {box})")
+    result = {"reconciled": True, "muslim_vp_delta": 1.0,
+              "campeador_calendar_box": box}
+    _cta_finish_option(state, side)
+    return result
 
 
 def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[str, Any]:

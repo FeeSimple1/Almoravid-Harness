@@ -258,13 +258,17 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                 pass
             # Supply: one option per reachable Seat (mirror cmd_supply).
             try:
-                from almoravid.campaign import _find_supply_routes, _own_seats
+                from almoravid.campaign import (
+                    _find_supply_routes,
+                    _own_seats,
+                    _shared_transport_at,
+                )
                 if lord is not None and lord.cylinder.kind == "locale":
                     seats = _own_seats(state, lord_id)
                     here = lord.cylinder.locale_id
                     assert here is not None
-                    cart = lord.assets.get("cart", 0)
-                    mule = lord.assets.get("mule", 0)
+                    # 4.6.1: own OR Shared (1.5.2) Transport.
+                    cart, mule = _shared_transport_at(state, here, side)
                     routes = _find_supply_routes(state, here, seats,
                                                  side, lord)
                     for seat, route in routes.items():
@@ -717,6 +721,14 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for lord in state.lords.values())
         if sayyid.cylinder.kind == "locale" or christian_removed:
             out.append({"type": "cta_reconcile_rodrigo", "side": "christian"})
+        # C25 De Vivar (Hold): an alternate Reconcile played as the
+        # Christian Call-to-Arms option, available only when C25 is held
+        # AND al-Sayyid is on the map (card text). Reconciles for 1 VP.
+        if (sayyid.cylinder.kind == "locale"
+                and "C25" in state.decks.this_levy_events.get(
+                    "christian", [])):
+            out.append({"type": "play_de_vivar_reconcile",
+                        "side": "christian"})
         if ready(camp):
             pay = build_payment("christian", 2, False)
             if pay is not None:
@@ -987,6 +999,35 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _ct in _cabalgadas_targets(state, lord_id, active):
                         out.append({"type": "cmd_cabalgadas", "side": active,
                                     "target_locale": _ct})
+                # M19 African Fleet (Hold): a Muslim Lord may use his entire
+                # Command card to March directly between two Ports free of
+                # Christian Lords (Arts of War ref M19). The handler exists
+                # but was never advertised; mirror its gates here.
+                if (active == "muslim"
+                        and "M19" in state.decks.this_levy_events.get(
+                            "muslim", [])):
+                    try:
+                        from almoravid.effective import is_besieged as _isb_m19
+                        _here_m19 = (lord.cylinder.locale_id
+                                     if lord.cylinder.kind == "locale"
+                                     else None)
+                        if (_here_m19 is not None
+                                and state.locales[_here_m19].has_port
+                                and not _isb_m19(state, lord_id)):
+                            for _pid, _ploc in state.locales.items():
+                                if (_pid != _here_m19 and _ploc.has_port
+                                        and not any(
+                                            lo.side == "christian"
+                                            and lo.cylinder.kind == "locale"
+                                            and lo.cylinder.locale_id == _pid
+                                            for lo in state.lords.values())):
+                                    out.append({
+                                        "type": "cmd_march_port_to_port",
+                                        "side": active,
+                                        "target_locale_id": _pid,
+                                    })
+                    except (KeyError, AttributeError):
+                        pass
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.
@@ -1072,6 +1113,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.campaign import (
                         _find_supply_routes,
                         _own_seats,
+                        _shared_transport_at,
                     )
                     from almoravid.effective import is_besieged
                     if (not is_besieged(state, lord_id)
@@ -1085,8 +1127,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         #   - at-Seat is always offered (no Transport).
                         #   - others require sufficient Cart+Mule and
                         #     an unblocked BFS route.
-                        cart = lord.assets.get("cart", 0)
-                        mule = lord.assets.get("mule", 0)
+                        # 4.6.1: own OR Shared (1.5.2) Transport.
+                        cart, mule = _shared_transport_at(state, here, active)
                         routes = _find_supply_routes(state, here, seats,
                                                      active, lord)
                         for s, route in routes.items():
