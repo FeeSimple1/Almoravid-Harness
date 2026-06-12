@@ -487,7 +487,7 @@
     },
     "Lord": {
       "additionalProperties": false,
-      "description": "A Lord (Christian or Muslim).\n\nPer-flag scope conventions (Pattern 3 / SMOKE-001, 035, 036, 037, 095):\n    moved_fought:            scope = per-Levy\n    just_arrived_this_levy:  scope = per-Levy (reset on Levy->Campaign->Levy)\n    lordship_used:           scope = per-card (Muster segment)\n    in_stronghold:           scope = lifecycle (cleared on move / re-Muster)\n    routed_units:            scope = per-engagement (cleared on aftermath)\n    first_march_used_this_card: scope = per-card\n    raiders_used_this_card:  scope = per-card\n\nLifecycle cleanup contract (Pattern 8 / SMOKE-033, 038, 087, 088, 095):\n`Lord.cleanup_on_removal_fields` lists every field that MUST be\ncleared when this Lord is permanently removed OR Disbanded at limit.\nRemoval handlers added in later phases must consult this list.",
+      "description": "A Lord (Christian or Muslim).\n\nPer-flag scope conventions (Pattern 3 / SMOKE-001, 035, 036, 037, 095):\n    moved_fought:            scope = per-Levy\n    just_arrived_this_levy:  scope = per-Levy (reset on Levy->Campaign->Levy)\n    lordship_used:           scope = per-card (Muster segment)\n    in_stronghold:           scope = lifecycle (cleared on move / re-Muster)\n    routed_units:            scope = per-engagement (cleared on aftermath)\n    first_march_used_this_card: scope = per-card\n    raiders_used_this_card:  scope = per-card\n    bypassed_this_card:      scope = per-card\n\nLifecycle cleanup contract (Pattern 8 / SMOKE-033, 038, 087, 088, 095):\n`Lord.cleanup_on_removal_fields` lists every field that MUST be\ncleared when this Lord is permanently removed OR Disbanded at limit.\nRemoval handlers added in later phases must consult this list.",
       "properties": {
         "id": {
           "title": "Id",
@@ -633,6 +633,11 @@
         "raiders_used_this_card": {
           "default": false,
           "title": "Raiders Used This Card",
+          "type": "boolean"
+        },
+        "bypassed_this_card": {
+          "default": false,
+          "title": "Bypassed This Card",
           "type": "boolean"
         },
         "routed_units": {

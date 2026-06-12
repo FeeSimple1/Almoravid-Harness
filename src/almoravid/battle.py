@@ -2932,11 +2932,13 @@ def _retreat_target_clear(
     state: GameState, locale_id: str, retreating_side: Side,
 ) -> bool:
     """Per rule 4.4.3 retreat requires: no Enemy Lord and no Enemy
-    Stronghold (unless Besieged or Bypassed)."""
+    Stronghold (unless Besieged or Bypassed). A NEUTRAL Stronghold
+    (e.g. an unmarked Parias-Taifa one) is not Enemy and does NOT
+    block Retreat (1.3.1)."""
     from almoravid.effective import (
         is_besieged,
         is_bypassed,
-        is_friendly_locale,
+        is_enemy_locale,
     )
     other = "muslim" if retreating_side == "christian" else "christian"
     for lord in state.lords.values():
@@ -2945,7 +2947,7 @@ def _retreat_target_clear(
             if not (is_besieged(state, lord.id) or is_bypassed(state, lord.id)):
                 return False
     loc = state.locales[locale_id]
-    if loc.base_type != "region" and not is_friendly_locale(
+    if loc.base_type != "region" and is_enemy_locale(
             state, locale_id, retreating_side):
         # Enemy Stronghold blocks Retreat unless Besieged/Bypassed by
         # the retreating side.

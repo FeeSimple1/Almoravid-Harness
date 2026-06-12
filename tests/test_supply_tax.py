@@ -76,13 +76,17 @@ def test_supply_rejects_not_own_seat() -> None:
 
 
 def test_supply_no_reachable_seat() -> None:
-    """If Lord is not at a Seat and no Road-adjacent Seat exists, reject."""
+    """Lord away from his Seat with NO Transport cannot Supply.
+
+    Alvar Fanez starts at Toledo; his Seat is Burgos (several Ways
+    away). Since the Neutral-Stronghold fix, intervening Neutral
+    Locales no longer break the Route (4.6.1 blocks on ENEMY
+    Strongholds only) — but each Way still needs a dedicated Cart or
+    Mule, and he has none, so the Supply fails on Transport."""
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
-    # Alvar Fanez starts at Toledo; his Seat is Burgos. Toledo is NOT
-    # Road-adjacent to Burgos. So Supply has no route.
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "cmd_supply", "side": "christian"})
-    assert ei.value.code == "no_supply_route"
+    assert ei.value.code in ("no_supply_route", "no_transport")
 
 
 def test_supply_caps_provender_at_8() -> None:

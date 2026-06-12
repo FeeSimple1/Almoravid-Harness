@@ -138,6 +138,10 @@ def test_m24_enables_cabalgadas_for_taifa_muslim_bearer() -> None:
     am.cylinder = Cylinder(kind="locale", locale_id="sevilla")
     am.in_stronghold = False
     am.assets["prov"] = 1
+    # Ravage requires an ENEMY Locale (4.7.2/1.3.1): every Sevilla-Taifa
+    # neighbor is Friendly to al-Mutamid, so mark Jerez as Christian-
+    # Conquered to give the cabalgada a legal Enemy target.
+    s.locales["jerez"].conquered_markers = 1
     for l in s.lords.values():
         if l.side == "christian" and l.cylinder.kind == "locale":
             l.cylinder = Cylinder(kind="locale", locale_id="jaca")

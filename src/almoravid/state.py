@@ -328,6 +328,7 @@ class Lord(StrictModel):
         routed_units:            scope = per-engagement (cleared on aftermath)
         first_march_used_this_card: scope = per-card
         raiders_used_this_card:  scope = per-card
+        bypassed_this_card:      scope = per-card
 
     Lifecycle cleanup contract (Pattern 8 / SMOKE-033, 038, 087, 088, 095):
     `Lord.cleanup_on_removal_fields` lists every field that MUST be
@@ -366,6 +367,12 @@ class Lord(StrictModel):
     lordship_used: int = 0
     first_march_used_this_card: bool = False
     raiders_used_this_card: bool = False
+    # 4.3.5 Bypass: set when this Lord places a Bypass marker DURING the
+    # current Command card; he may then "continue any actions on that
+    # Command card without leaving that Locale" — March away is barred
+    # until the card ends (4.3.6 DEPART requires BEGINNING a card
+    # Bypassing). scope = per-card.
+    bypassed_this_card: bool = False
     routed_units: dict[UnitType, int] = Field(default_factory=dict)
     # Phase 6i: Crusader marker count placed by C11 Indulgences /
     # C12 Song of Roland. Each marker is a transient resource with
@@ -390,6 +397,7 @@ class Lord(StrictModel):
         "lordship_used",
         "first_march_used_this_card",
         "raiders_used_this_card",
+        "bypassed_this_card",
         "routed_units",
         "crusader_markers",
         "is_lieutenant",

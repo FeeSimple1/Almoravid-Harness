@@ -31,6 +31,9 @@ def test_no_siege_winter_resolves_automatically_to_box9() -> None:
 
 def _setup_besieger(s, loc="calatayud"):
     _clear_all_lords_off_map(s)
+    # A Siege can only exist at an ENEMY Stronghold (1.3.1/4.3.5) — a
+    # Parias Zaragoza would make Calatayud Neutral, so set Independent.
+    s.taifas["zaragoza"].status = "independent"
     al = s.lords["alfonso"]
     al.cylinder = Cylinder(kind="locale", locale_id=loc)
     al.in_stronghold = False

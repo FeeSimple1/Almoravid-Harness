@@ -116,6 +116,24 @@ def is_friendly_locale(state: GameState, locale_id: str, side: Side) -> bool:
     return False
 
 
+def is_enemy_locale(state: GameState, locale_id: str, side: Side) -> bool:
+    """Is `locale_id` Enemy to `side` per rule 1.3.1?
+
+    Locales are Friendly, ENEMY, or NEUTRAL — three states, not two.
+    A Locale is Enemy to `side` iff it is Friendly to the opposing side.
+    A Parias-Taifa Stronghold with no Conquered/Jihad/Seat markers is
+    NEUTRAL: Friendly to neither side and Enemy to neither side.
+
+    Rule 1.3.1: "Siege (4.3.5) and Ravage (4.7.2) require an Enemy
+    Locale as a target. EXAMPLES: Lords do not Bypass and cannot
+    Besiege Neutral Strongholds." Likewise 4.6.1 Supply Routes and
+    4.4.3 Retreat are blocked only by ENEMY Strongholds — a Neutral
+    Stronghold blocks neither.
+    """
+    other: Side = "muslim" if side == "christian" else "christian"
+    return is_friendly_locale(state, locale_id, other)
+
+
 # ---------------------------------------------------------------------------
 # Besieged state — rule 4.3.5 / 4.5
 # ---------------------------------------------------------------------------

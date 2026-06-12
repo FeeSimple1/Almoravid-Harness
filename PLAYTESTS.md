@@ -52,3 +52,21 @@ because keeping both sides mustered+paid through the Calendar requires
 deliberate play. Both this project's survivalist run (reached box 15, natural VP
 end) and ChatGPT's sustain run (box 13) confirm the late game IS reachable; it
 just needs a non-greedy policy. Not a defect — 5.2 fires correctly.
+
+## 2026-06-11 — Scenario F long-scenario audit (Claude playtest session)
+
+Played Scenario F (Reconquista and Riposte, boxes 1-15) via greedy +
+strategic agents (30+ seeds), stress_invariants profiles (survival /
+combat / siege), and manual history audits against the Rules of Play.
+Calendar flow verified in play: Grow at boxes 2/10, Harvest 4/12, Repairs
+each Campaign, Winter sequence 7-8 (Disband-to-mats, Winter Siege,
+Spring Muster — Alfonso to León, Taifa Lords to free Seats), Scenario End
+at box 15; rule 5.2 endings confirmed legitimate for naive agents.
+
+FINDINGS (all fixed, see VERIFICATION_LOG 2026-06-11): Neutral-vs-Enemy
+conflation cluster (Ravage/Siege/Storm at Neutral; Supply/Retreat blocked
+by Neutral; Avoid-Battle Bypass marking at Neutral), missing 4.3.5 March
+stop at empty Enemy Strongholds (lone-Lord sieges were impossible),
+Bypass-then-March-away on the same card, end_card x T4 pending/active
+desync, and Disband-at-own-Stronghold ordering (departing Taifa Lord
+force-Conquered his own city via HOSTAGE POPULACE).

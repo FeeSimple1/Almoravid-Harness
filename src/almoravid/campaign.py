@@ -610,6 +610,7 @@ def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
     # 4.8.3 Remove Moved/Fought markers from ALL Lords (both sides).
     for _l in state.lords.values():
         _l.moved_fought = False
+        _l.bypassed_this_card = False  # per-card scope (4.3.5)
     # Pattern 3 per-card flag reset (only if Lord still exists in state
     # — disband doesn't remove Lord from state.lords, just changes
     # cylinder, so this is safe)
@@ -618,7 +619,19 @@ def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
         lord.first_march_used_this_card = False
         lord.raiders_used_this_card = False
     _clear_per_card_event_flags(state)
+    # T4 interaction: a 4.8.2 auto-Disband above may have flipped a Taifa
+    # to Parias and set a RECOGNITION OF NEUTRALITY pending (1.4.3) for a
+    # side Besieging/Bypassing a now-Neutral Stronghold. The Campaign
+    # still advances past this card, but the pending must own the turn:
+    # re-point resume_active at the post-advance active player and hand
+    # control to the side owing the choice (else pending/active desync).
+    _t4_pending = (state.pending
+                   if state.pending is not None
+                   and state.pending.kind == "neutrality_choice" else None)
     _advance_or_end_campaign(state)
+    if _t4_pending is not None and state.pending is _t4_pending:
+        _t4_pending.payload["resume_active"] = state.meta.active_player
+        state.meta.active_player = _t4_pending.waiting_on
     _record(state, action,
             f"{side} ends {lord_id}'s card; Feed: "
             f"fed={len(feed_result.get('fed', []))} "
@@ -2005,6 +2018,10 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_besieged(state, lord_id),
              "Besieged Lord may only Sally / Forage (Gardens) / Pass (4.5.3)",
              code="besieged")
+    _require(not lord.bypassed_this_card,
+             "A Lord who Bypassed this card may not leave the Locale until "
+             "the card ends (4.3.5; DEPART requires beginning a card "
+             "Bypassing, 4.3.6)", code="bypassed_this_card")
     _require(lord.cylinder.kind == "locale",
              f"Lord {lord_id} is not at a Locale (cannot March)",
              code="not_on_map")
@@ -2064,6 +2081,10 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             _require(not _isb_grp(state, gid),
                      f"{gid} is Besieged and cannot Group March (4.3.1)",
                      code="besieged")
+            _require(not g.bypassed_this_card,
+                     f"{gid} Bypassed this card and may not leave the "
+                     f"Locale until the card ends (4.3.5)",
+                     code="bypassed_this_card")
     # The full moving set: the active Lord + the chosen group + every
     # Lower Lord stacked under any mover (Lieutenants move their Lower
     # Lord, 4.1.3/4.3.1).
@@ -2182,10 +2203,9 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     if side == "christian" and "C6" in state.decks.this_levy_events.get(
             "christian", []):
         target_loc = state.locales[target]
-        from almoravid.effective import is_friendly_locale
+        from almoravid.effective import is_enemy_locale as _iel_c6
         is_enemy_stronghold = (target_loc.base_type != "region"
-                               and not is_friendly_locale(state, target,
-                                                          "christian"))
+                               and _iel_c6(state, target, "christian"))
         any_lord_there = any(
             lord_obj.cylinder.kind == "locale" and lord_obj.cylinder.locale_id == target
             for lord_obj in state.lords.values()
@@ -2243,6 +2263,15 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             "actions_remaining": state.meta.actions_remaining}
     if trigger is not None:
         base["pending"] = trigger
+        return base
+    # 4.3.5 — March STOPS at an Unbesieged/Unbypassed ENEMY Stronghold
+    # (even an empty one): the arriving side must immediately Besiege
+    # (1 Siege marker, card over) or Bypass (continue actions here).
+    # Joining an already-Besieged/Bypassed Stronghold, or arriving at a
+    # Friendly/Neutral one, sets no pending (may March on).
+    if _set_besiege_or_bypass_pending(state, target, side, lord_id):
+        base["pending"] = {"kind": "besiege_or_bypass",
+                           "locale_id": target}
     return base
 
 
@@ -2284,9 +2313,13 @@ def _route_blocked_by_enemy(state: GameState, route: list[str],
                     and lord.cylinder.locale_id == locale_id):
                 if not (is_besieged(state, lord.id) or is_bypassed(state, lord.id)):
                     return True
-        # Enemy Stronghold (Locale not Friendly to active side and has Stronghold)
+        # Enemy Stronghold (4.6.1): only an ENEMY Stronghold blocks the
+        # Route. A NEUTRAL Stronghold (e.g. unmarked Parias-Taifa) does
+        # not block — and could never be exempted, since Lords can never
+        # Besiege or Bypass a Neutral Stronghold (1.3.1/4.3.5).
         loc = state.locales[locale_id]
-        if loc.base_type != "region" and not is_friendly_locale(state, locale_id, side):
+        from almoravid.effective import is_enemy_locale as _iel_rt
+        if loc.base_type != "region" and _iel_rt(state, locale_id, side):
             # An Enemy Stronghold is exempt only if Besieged or Bypassed by us
             if not ((side == "christian" and (loc.siege_yellow > 0 or loc.bypass_yellow))
                     or (side == "muslim" and (loc.siege_green > 0 or loc.bypass_green))):
@@ -2677,9 +2710,16 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     here = lord.cylinder.locale_id
     assert here is not None
     loc = state.locales[here]
-    # Enemy Locale: not Friendly to active side (rule 4.7.2 "locale_is_enemy")
+    # Enemy Locale (rule 4.7.2 / 1.3.1): Ravage requires an ENEMY Locale.
+    # A Neutral Locale (e.g. a Parias-Taifa Stronghold with no markers)
+    # is NOT a legal target — "Christians within a Parias or Reconquista
+    # Taifa may Ravage only at a Jihad Stronghold" (1.3.1 EXAMPLES).
+    from almoravid.effective import is_enemy_locale as _iel_rav
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Ravage Friendly Locale {here}", code="friendly_locale")
+    _require(_iel_rav(state, here, side),
+             f"Cannot Ravage {here} — Neutral Locale, not Enemy "
+             f"(4.7.2/1.3.1)", code="not_enemy_locale")
     # 4.7.2: Ravage may only target a Locale "not yet Ravaged" — neither
     # color. (Markers flip to Enemy color only via Conquest, 1.3.1.)
     _require(loc.ravaged == "none",
@@ -2917,9 +2957,16 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(loc.base_type != "region",
              f"Siege requires a Stronghold; {here} is a Region",
              code="region_no_siege")
+    # Rule 1.3.1: "Siege ... require[s] an Enemy Locale as a target ...
+    # Lords ... cannot Besiege Neutral Strongholds" (4.3.5 NOTES:
+    # "Lords never Besiege or Bypass Friendly or Neutral Strongholds").
+    from almoravid.effective import is_enemy_locale as _iel_sg
     _require(not is_friendly_locale(state, here, side),
              f"Cannot Siege Friendly Locale {here}",
              code="friendly_locale")
+    _require(_iel_sg(state, here, side),
+             f"Cannot Siege {here} — Neutral Stronghold, not Enemy "
+             f"(1.3.1/4.3.5)", code="not_enemy_locale")
     from almoravid.capabilities import effective_command
     _require(state.meta.actions_remaining == effective_command(state, lord_id),
              "Siege takes an ENTIRE Command card (4.2.1); no other action may "
@@ -3747,9 +3794,11 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     loc = state.locales[here]
     _require(loc.base_type != "region",
              f"No Stronghold at {here} to Storm", code="region_no_storm")
-    _require(not is_friendly_locale(state, here, side),
-             f"Cannot Storm Friendly Stronghold {here}",
-             code="friendly_locale")
+    from almoravid.effective import is_enemy_locale as _iel_st
+    _require(_iel_st(state, here, side),
+             f"Cannot Storm {here} — not an Enemy Stronghold (4.5.2; a "
+             f"Storm continues a Siege, which requires an Enemy target)",
+             code="not_enemy_locale")
     siege_markers = (loc.siege_yellow if side == "christian"
                      else loc.siege_green)
     _require(siege_markers > 0,
@@ -4092,10 +4141,13 @@ def _resolve_or_repend_approach(state: GameState, payload: dict[str, Any],
             payload=payload)
         state.meta.active_player = _other(active_side)
         return True
-    # Fully resolved. If Enemy Lords Withdrew inside, force Besiege/Bypass.
+    # Fully resolved. 4.3.5: whether Enemy Lords Withdrew inside OR all
+    # Avoided away leaving an (empty) unbesieged Enemy Stronghold, the
+    # arriving side owes the Besiege-or-Bypass choice; the helper itself
+    # no-ops at Friendly/Neutral Locales or already-marked Strongholds.
     locale_id = payload["locale_id"]
     active_lord_id = payload.get("active_lord_id")
-    if some_withdrew and _set_besiege_or_bypass_pending(
+    if _set_besiege_or_bypass_pending(
             state, locale_id, active_side, active_lord_id):
         return True
     _clear_approach_pending(state, active_side)
@@ -4222,10 +4274,12 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     # already Besieged/Bypassed, place a Bypass marker of that side's
     # color (per-Locale, like _h_respond_bypass). Lords arriving at an
     # already-Bypassed/Besieged Stronghold simply join it.
-    from almoravid.effective import is_friendly_locale as _is_friendly
+    from almoravid.effective import is_enemy_locale as _iel_av
     dest = state.locales.get(target)
     if (avoiding and dest is not None and dest.base_type != "region"
-            and not _is_friendly(state, target, side)):
+            and _iel_av(state, target, side)):
+        # ENEMY Stronghold only — Lords never Bypass a Neutral
+        # Stronghold (1.3.1 / 4.3.5 NOTES).
         if side == "christian" and not dest.bypass_yellow and dest.siege_yellow == 0:
             dest.bypass_yellow = True
         elif side == "muslim" and not dest.bypass_green and dest.siege_green == 0:
@@ -4325,21 +4379,41 @@ def _h_respond_withdraw(state: GameState, action: dict[str, Any]) -> dict[str, A
 def _set_besiege_or_bypass_pending(state: GameState, locale_id: str,
                                    active_side: Side,
                                    active_lord_id: str | None) -> bool:
-    """4.3.5: if `active_side` has Lord(s) outside the Enemy Stronghold
-    at `locale_id`, that Stronghold is not already Besieged/Bypassed by
-    that side, and Enemy Lords are inside it, set a `besiege_or_bypass`
-    pending decision (waiting on the Active side) and return True."""
+    """4.3.5: "Whenever a side has Lord(s) in a Locale outside an Enemy
+    Stronghold that is not already Besieged or Bypassed and any Enemy
+    Lords there have Withdrawn inside, the Lords outside must
+    immediately either" Besiege or Bypass.
+
+    Per the SoP reference (march.stronghold_stop_rule): "March stops at
+    Unbesieged/Unbypassed Enemy Stronghold; mandatory_choice: [besiege,
+    bypass]" — the choice fires at ANY unbesieged/unbypassed ENEMY
+    Stronghold the side's Lords are outside of, including an EMPTY one
+    (otherwise an unoccupied Enemy Stronghold could never be Besieged:
+    the 4.5.1 Siege command requires an already-"Besieging Lord").
+    Lords never Besiege or Bypass Friendly or NEUTRAL Strongholds
+    (4.3.5 NOTES), so a Neutral Locale never triggers this.
+
+    Not triggered while Unbesieged/Unbypassed Enemy Lords stand OUTSIDE
+    the Stronghold — the 4.3.4 Approach (Avoid/Withdraw/Battle) flow
+    owes resolution first; its aftermath re-calls this function."""
+    from almoravid.effective import is_enemy_locale as _iel_bb
     from almoravid.state import PendingDecision
     loc = state.locales.get(locale_id)
     if loc is None or loc.base_type == "region":
         return False
+    if not _iel_bb(state, locale_id, active_side):
+        return False  # Friendly or Neutral: never Besiege/Bypass (4.3.5)
     other = _other(active_side)
-    # Enemy Lords inside the Stronghold here?
-    enemy_inside = any(
+    # Unbesieged/Unbypassed Enemy Lords OUTSIDE the Stronghold here owe
+    # an Approach resolution (4.3.4) before any Besiege-or-Bypass.
+    from almoravid.effective import is_besieged as _isb_bb
+    from almoravid.effective import is_bypassed as _isby_bb
+    enemy_outside = any(
         lord.side == other and lord.cylinder.kind == "locale"
-        and lord.cylinder.locale_id == locale_id and lord.in_stronghold
+        and lord.cylinder.locale_id == locale_id and not lord.in_stronghold
+        and not (_isb_bb(state, lord.id) or _isby_bb(state, lord.id))
         for lord in state.lords.values())
-    if not enemy_inside:
+    if enemy_outside:
         return False
     # Active-side Lord(s) outside the Stronghold here?
     ours_outside = [
@@ -4401,6 +4475,11 @@ def _h_respond_bypass(state: GameState, action: dict[str, Any]) -> dict[str, Any
         loc.bypass_yellow = True
     else:
         loc.bypass_green = True
+    # 4.3.5: the Bypassing Lord(s) "continue any actions on that Command
+    # card without leaving that Locale" — bar March-away until card end.
+    for _bid in pd.payload.get("lord_ids", []):
+        if _bid in state.lords:
+            state.lords[_bid].bypassed_this_card = True
     state.pending = None
     state.meta.active_player = side
     # Card continues with whatever actions remain (4.3.5 / 4.3.6).
@@ -5887,9 +5966,10 @@ def _cabalgadas_targets(state: GameState, lord_id: str,
     assert here is not None
 
     def ravageable(t: str) -> bool:
+        from almoravid.effective import is_enemy_locale as _iel_cab
         loc = state.locales.get(t)
         return (loc is not None and t != here
-                and not is_friendly_locale(state, t, side)
+                and _iel_cab(state, t, side)
                 and loc.ravaged == "none"
                 and not _has_unbesieged_enemy_lord(state, t, side))
 

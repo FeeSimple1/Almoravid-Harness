@@ -656,3 +656,60 @@ fixed the cosmetic history line (build_sagrajas reused the Scenario F skeleton):
 history[0] now reads "Loaded scenario S: Battle of Sagrajas (minigame)". Sweep:
 seeds 1-150 x both branches -> 0 winner=None, 0 co-location, max 7 Rounds. Tests:
 tests/test_sagrajas_minigame.py (seeds 57/96 + 1-40 x 2 sweep + history label).
+
+### Playtest session 2026-06-11 — Neutral≠Enemy cluster + 4.3.5 March stop (Scenario F self-play audit)
+Self-play of Scenario F (greedy/strategic/stress profiles, history audits vs
+the Rules of Play) surfaced a cluster of Friendly/Neutral/Enemy conflations
+(rule 1.3.1 is three-valued; the code used two-valued "not Friendly"):
+- N1 Ravage/Siege at NEUTRAL Locales allowed (1.3.1: "Siege and Ravage require
+  an Enemy Locale ... cannot Besiege Neutral Strongholds"). Seen in play:
+  greedy agents Ravaging unmarked Parias-Taifa Strongholds. FIX: new
+  effective.is_enemy_locale (Enemy iff Friendly to the opponent); cmd_ravage /
+  cmd_siege / cmd_storm handlers + enumerators, Cabalgadas targets, and the
+  Winter-Siege ravage option now gate on ENEMY (friendly keeps the legacy
+  friendly_locale code; Neutral rejects with not_enemy_locale).
+- N2 Supply Routes (4.6.1) and Retreat (4.4.3) were BLOCKED by Neutral
+  Strongholds (both block on ENEMY Strongholds only — and a Neutral
+  Stronghold could never be exempted since it can never be Besieged or
+  Bypassed). FIX: _route_blocked_by_enemy and _retreat_target_clear use
+  is_enemy_locale. C6 Surprise likewise requires a genuine Enemy Stronghold.
+- N3 March did not stop at an EMPTY unbesieged/unbypassed Enemy Stronghold:
+  the 4.3.5 Besiege-or-Bypass choice fired only when Enemy Lords had
+  Withdrawn inside (C1 scope). Without the stop, a lone Lord could never
+  place the FIRST Siege marker at an unoccupied Enemy Stronghold (cmd_siege's
+  Siegeworks needs Lords >= Capacity; seen in play: al-Mundir "Sieging" Jaca
+  forever at 0 markers, Surrender threshold 0). Per SoP
+  march.stronghold_stop_rule ("March stops at Unbesieged/Unbypassed Enemy
+  Stronghold; mandatory_choice: [besiege, bypass]") _set_besiege_or_bypass_
+  pending now fires at any unbesieged/unbypassed ENEMY Stronghold with our
+  Lords outside and no Unbesieged/Unbypassed Enemy Lords outside (Approach
+  still resolves first; its aftermath re-checks). cmd_march and
+  _resolve_or_repend_approach call it; arrival at an already-marked
+  Stronghold joins the Siege/Bypass (may March on); Friendly/Neutral never
+  trigger. Avoid-Battle-to-Stronghold Bypass marking (4.3.4) is now
+  Enemy-only too (it had marked NEUTRAL Barbastro as Bypassed in play).
+- N4 A Lord who Bypassed THIS card could March away on the same card
+  (4.3.5: "continue any actions ... without leaving that Locale"; 4.3.6
+  DEPART requires BEGINNING a card Bypassing). FIX: per-card
+  Lord.bypassed_this_card flag (set by respond_bypass, cleared at end_card
+  4.8.3, in cleanup_on_removal_fields), enforced in cmd_march (incl. group
+  members) and mirrored in the enumerator. Schema regenerated.
+- N5 end_card x T4: a 4.8.2 auto-Disband flipping a Taifa to Parias set a
+  RECOGNITION OF NEUTRALITY pending, but end_card then advanced the active
+  player past it (pending/active desync; deep-invariants random walk,
+  scenario B seed 2). FIX: end_card re-points resume_active at the
+  post-advance player and hands the turn to pending.waiting_on.
+- N6 Disband ordering x HOSTAGE POPULACE: _h_disband_lord adjusted the Taifa
+  to Parias BEFORE taking the disbanding Lord off-map, so an Independent
+  Taifa Lord Disbanding AT his own Stronghold force-Conquered it with Jihad
+  markers on his way out (1.4.3 counted him as "present"). Per 3.3.2 the
+  Lord Disbands first, then the Taifa adjusts. FIX: cylinder goes off-map
+  before adjust_taifa_status (final Calendar placement unchanged).
+Tests: tests/test_fix_neutral_enemy_435.py (12) + updated
+test_winter_siege_632 (siege host must be Enemy), test_cap_cabalgadas (M24
+needs an Enemy target), test_supply_tax (route legal through Neutral; fails
+on Transport), test_forage_ravage/test_siege (friendly_locale code kept).
+Full suite green; Scenario F stress sweeps (survival/siege/combat x seeds)
+all complete with 0 invariant violations; a 4-seed audit asserts every
+enumerated/applied Ravage/Siege/Besiege-or-Bypass target is ENEMY at that
+moment and no residual Siege/Bypass markers sit at non-Enemy Locales.

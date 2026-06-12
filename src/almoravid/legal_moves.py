@@ -245,13 +245,13 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
             # Locale (mirror _h_cmd_ravage), so don't advertise it when the
             # Siege Locale is already Ravaged.
             try:
-                from almoravid.effective import is_friendly_locale
+                from almoravid.effective import is_enemy_locale as _iel_w
                 _rhere = (lord.cylinder.locale_id
                           if lord is not None
                           and lord.cylinder.kind == "locale" else None)
                 if (_rhere is not None
                         and state.locales[_rhere].ravaged == "none"
-                        and not is_friendly_locale(state, _rhere, side)):
+                        and _iel_w(state, _rhere, side)):
                     moves.append({"type": "winter_siege_action", "side": side,
                                   "lord_id": lord_id, "mode": "ravage"})
             except (ImportError, KeyError, AttributeError, FileNotFoundError):
@@ -1047,6 +1047,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.map import neighbors_via
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
+                            # 4.3.5: a Lord who Bypassed THIS card may not
+                            # leave the Locale until the card ends.
+                            and not lord.bypassed_this_card
                             # C3/M3 Swollen River: a Lord already blocked
                             # this card may not March again (handler mirror).
                             and state.meta.swollen_river_blocked_card_lord_id
@@ -1065,6 +1068,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             and lo.cylinder.locale_id == from_loc
                             and lo.lieutenant_of is None
                             and not is_besieged(state, lo.id)
+                            and not lo.bypassed_this_card
                         ]
                         for way_type in ("road", "pass"):
                             # Single-Lord cost mirrors the handler: a
@@ -1199,18 +1203,21 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         if (gardens_path
                                 or (not besieged and loc.ravaged == "none")):
                             out.append({"type": "cmd_forage", "side": active})
-                        # Ravage: not Besieged, Enemy Locale, not already
-                        # Ravaged by us. Pattern 9 mirror against handler.
+                        # Ravage: not Besieged, ENEMY Locale (1.3.1 —
+                        # Neutral is not a target), not already Ravaged.
+                        # Pattern 9 mirror against handler.
+                        from almoravid.effective import (
+                            is_enemy_locale as _iel,
+                        )
                         if not besieged:
-                            if (not is_friendly_locale(state, here, active)
+                            if (_iel(state, here, active)
                                     and loc.ravaged == "none"):
                                 out.append({"type": "cmd_ravage",
                                             "side": active})
-                            # Siege: enemy Stronghold, marker cap not
-                            # reached. Uses entire card.
+                            # Siege: ENEMY Stronghold (1.3.1/4.3.5 — never
+                            # Neutral), marker cap not reached. Entire card.
                             if (loc.base_type != "region"
-                                    and not is_friendly_locale(state, here,
-                                                               active)):
+                                    and _iel(state, here, active)):
                                 cur = (loc.siege_yellow
                                        if active == "christian"
                                        else loc.siege_green)
@@ -1258,10 +1265,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             if our_here and enemy_here:
                                 out.append({"type": "cmd_battle",
                                             "side": active})
-                            # Storm: at enemy Stronghold with our Siege.
+                            # Storm: at ENEMY Stronghold with our Siege.
                             if (loc.base_type != "region"
-                                    and not is_friendly_locale(state, here,
-                                                               active)):
+                                    and _iel(state, here, active)):
                                 siege_markers = (loc.siege_yellow
                                                  if active == "christian"
                                                  else loc.siege_green)
