@@ -6266,9 +6266,109 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     return {"winner": winner, "rounds": len(result.rounds),
             "attacker": atk_side, "defender": def_side}
 
+def _fueros_targets(state: GameState) -> list[str]:
+    """C20 Fueros: Reconquista-Taifa Locales with Jihad markers to which
+    Alfonso (holding C20, on the map) is STRICTLY closer than every Muslim
+    Lord (shortest adjacency chain; co-location = not closer). Shared by
+    handler + enumerator."""
+    from almoravid.capabilities import side_has_capability
+    from almoravid.map import hop_distances
+    alf = state.lords.get("alfonso")
+    if (alf is None or alf.cylinder.kind != "locale"
+            or not side_has_capability(state, "christian", "C20")):
+        return []
+    muslim_locs = [cast(str, l.cylinder.locale_id)
+                   for l in state.lords.values()
+                   if l.side == "muslim" and l.cylinder.kind == "locale"]
+    out: list[str] = []
+    for tid, taifa in state.taifas.items():
+        if taifa.status != "reconquista":
+            continue
+        for lid in taifa.locale_ids:
+            if state.locales[lid].jihad_markers <= 0:
+                continue
+            dist = hop_distances(lid)
+            a = dist.get(cast(str, alf.cylinder.locale_id))
+            if a is None:
+                continue
+            if all(dist.get(ml) is None or a < dist[ml] for ml in muslim_locs):
+                out.append(lid)
+    return out
+
+
+def _h_cap_fueros(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C20 Fueros (Arts of War ref): once each Levy, the Christians remove
+    up to 2 Jihad from a Reconquista-Taifa Locale to which Alfonso is
+    closer than any Muslim (1.4.4). Free (0-action), modeled at Alfonso's
+    Activation; gated once per turn via meta.aow_cap_state."""
+    side = _require_side(action)
+    _require(side == "christian", "Fueros is Christian", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index,
+             "Fueros already used this turn", code="cap_used")
+    targets = _fueros_targets(state)
+    target = action.get("target_locale")
+    _require(target in targets,
+             f"target must be a Fueros-eligible Locale {targets}",
+             code="bad_target")
+    target = cast(str, target)
+    loc = state.locales[target]
+    removed = min(2, loc.jihad_markers)
+    loc.jihad_markers -= removed
+    state.meta.aow_cap_state["fueros_turn"] = state.meta.turn_index
+    _record(state, action, f"Fueros (C20): remove {removed} Jihad at {target}")
+    return {"locale": target, "jihad_removed": removed}
+
+
+def _sisnando_targets(state: GameState) -> list[str]:
+    """C21 Sisnando Davidez: Locales with a Jihad marker, no Lord of
+    either side present, and not Besieged or Bypassed. Requires Alfonso
+    on the map holding C21."""
+    from almoravid.capabilities import lord_has_capability
+    alf = state.lords.get("alfonso")
+    if (alf is None or alf.cylinder.kind != "locale"
+            or not lord_has_capability(state, "alfonso", "C21")):
+        return []
+    occupied = {cast(str, l.cylinder.locale_id) for l in state.lords.values()
+                if l.cylinder.kind == "locale"}
+    out: list[str] = []
+    for lid, loc in state.locales.items():
+        if (loc.jihad_markers > 0 and lid not in occupied
+                and loc.siege_yellow == 0 and loc.siege_green == 0
+                and not loc.bypass_yellow and not loc.bypass_green):
+            out.append(lid)
+    return out
+
+
+def _h_cap_sisnando(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C21 Sisnando Davidez (Arts of War ref): once each Levy, remove up
+    to 1 Jihad from a Locale with no Lord of either side (and not
+    Besieged/Bypassed). Free (0-action) at Alfonso's Activation; gated
+    once per turn."""
+    side = _require_side(action)
+    _require(side == "christian", "Sisnando is Christian", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    _require(state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index,
+             "Sisnando already used this turn", code="cap_used")
+    targets = _sisnando_targets(state)
+    target = action.get("target_locale")
+    _require(target in targets,
+             f"target must be a Sisnando-eligible Locale {targets}",
+             code="bad_target")
+    target = cast(str, target)
+    state.locales[target].jihad_markers -= 1
+    state.meta.aow_cap_state["sisnando_turn"] = state.meta.turn_index
+    _record(state, action, f"Sisnando (C21): remove 1 Jihad at {target}")
+    return {"locale": target, "jihad_removed": 1}
+
+
 CAMPAIGN_HANDLERS = {
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
+    "cap_fueros": _h_cap_fueros,
+    "cap_sisnando": _h_cap_sisnando,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,

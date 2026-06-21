@@ -1022,6 +1022,11 @@
           ],
           "default": "christian",
           "title": "Count Of Barcelona Side"
+        },
+        "aow_cap_state": {
+          "additionalProperties": true,
+          "title": "Aow Cap State",
+          "type": "object"
         }
       },
       "required": [

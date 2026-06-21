@@ -945,6 +945,21 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         and _gate):
                     out.append({"type": "place_cathedral_seat",
                                 "side": "christian"})
+            # C20 Fueros / C21 Sisnando Davidez: Alfonso (bearer) may once
+            # per turn remove Jihad markers (free, 0-action) -- Fueros up to
+            # 2 from a Reconquista Locale he is closer to; Sisnando 1 from a
+            # Lord-free unbesieged Locale (Arts of War ref).
+            if state.meta.active_lord_id == "alfonso":
+                from almoravid.campaign import (_fueros_targets as _ft,
+                                                _sisnando_targets as _st)
+                if state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index:
+                    for _fl in _ft(state):
+                        out.append({"type": "cap_fueros", "side": "christian",
+                                    "target_locale": _fl})
+                if state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index:
+                    for _sl in _st(state):
+                        out.append({"type": "cap_sisnando", "side": "christian",
+                                    "target_locale": _sl})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

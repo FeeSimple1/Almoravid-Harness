@@ -211,6 +211,11 @@ class Meta(StrictModel):
     # or Eudes can buy the C13 capability units).
     count_of_barcelona_side: Side | None = "christian"
 
+    # Generic Arts-of-War capability gating state (Pattern: once-ever and
+    # once-per-turn flags keyed by capability). Once flags store True;
+    # per-turn flags store the turn_index they were last used.
+    aow_cap_state: dict[str, Any] = Field(default_factory=dict)
+
 
 class Cylinder(StrictModel):
     """Where a Lord's cylinder currently is.
