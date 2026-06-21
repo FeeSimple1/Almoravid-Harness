@@ -1107,7 +1107,7 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
                  f"jihad_locale must be a Jihad-eligible Locale "
                  f"{eligible} (3.5.2/1.4.4)", code="bad_jihad_target")
         jihad_locale = cast(str, jihad_locale)
-        state.locales[jihad_locale].jihad_markers += 1
+        state.locales[jihad_locale].add_jihad(1)
         placed = jihad_locale
     _record(state, action,
             f"Muslim Upholds the Dynasties: Yusuf+Sir -> Calendar box "
@@ -1214,7 +1214,7 @@ def _h_cta_add_crusade_jihad(state: GameState, action: dict[str, Any]) -> dict[s
              f"jihad_locale must be eligible {eligible} (1.4.4)",
              code="bad_jihad_target")
     jihad_locale = cast(str, jihad_locale)
-    state.locales[jihad_locale].jihad_markers += 1
+    state.locales[jihad_locale].add_jihad(1)
     state.meta.cta_crusade_jihad_pending = False
     _record(state, action,
             f"Muslim adds one Crusade Jihad marker at {jihad_locale} (3.5.1)")

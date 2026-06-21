@@ -40,11 +40,19 @@ MUSLIM_RAIDERS_SEVEN = frozenset({
     "al_mutawakkil",          # the six Taifa Muslim Lords
     "rodrigo_al_sayyid",      # named separately on the card
 })
+# M14 & M18 Ribat Monks are held by "Taifa Muslim" only (Arts of War ref
+# M14&M18 "Lords." line) — the six Taifa Lords, NOT Yusuf/Sir/Rodrigo.
+MUSLIM_TAIFA_SIX = frozenset({
+    "abd_allah", "abu_bakr", "al_mundir", "al_mustain", "al_mutamid",
+    "al_mutawakkil",
+})
 _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
     "C24": CHRISTIAN_CAPTAINS_FOUR,   # Garcia Jimenez
     "M24": MUSLIM_RAIDERS_SEVEN,      # Al-Garada (Muslim Cabalgadas) [Q-002]
+    "M14": MUSLIM_TAIFA_SIX,          # Ribat Monks (Taifa Muslim only)
+    "M18": MUSLIM_TAIFA_SIX,          # Ribat Monks (Taifa Muslim only)
 }
 
 

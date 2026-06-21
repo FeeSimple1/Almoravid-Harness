@@ -713,3 +713,47 @@ Full suite green; Scenario F stress sweeps (survival/siege/combat x seeds)
 all complete with 0 invariant violations; a 4-seed audit asserts every
 enumerated/applied Ravage/Siege/Besiege-or-Bypass target is ENEMY at that
 moment and no residual Siege/Bypass markers sit at non-Enemy Locales.
+
+## Reconciliation matrix pass 2026-06-21 — clause-by-clause audit + 4 fixes
+
+Built an exhaustive clause-by-clause reconciliation matrix for the entire
+Rules of Play (Chapters 1–6), mapping every numbered clause to its code
+symbol and covering test (see RECONCILIATION_MATRIX.md). Method: automated
+grep-grounded first pass per chapter, then hand-verification of every
+flagged item against rules + code. The matrix surfaced four
+materially-incorrect or unimplemented clauses; all four were verified by
+hand and fixed, each with regression tests.
+
+- **4.5.4 Jihad removes a Muslim Siege — was NOT IMPLEMENTED.** No
+  Jihad-placement path cleared Siege markers. FIX: new `Locale.add_jihad()`
+  (state.py) increments Jihad and zeroes Muslim-placed `siege_green`; every
+  runtime Jihad-placement site (events.py, campaign.py, actions.py) now
+  routes through it. Christian `siege_yellow` sieges are untouched (that is
+  Recognition of Neutrality / Hostage Populace, 1.4.3).
+- **4.3.6 / 4.3.1 group Sortie leadership — INVERTED.** The gate allowed a
+  Marshal OR `lord.is_lieutenant`, but the internal `is_lieutenant` flag
+  marks the LOWER Lord while rule 4.3.6 lets the LIEUTENANT (upper Lord)
+  lead. FIX: gate now keys off `any(other.lieutenant_of == lord_id)`.
+- **6.3.3 Spring Muster — stranded Taifa Lord status adjustment MISSING.**
+  The no-free-seat branch only relocated the cylinder. FIX: for an
+  Independent Taifa Lord it now mirrors the Disband cascade — off-map,
+  `adjust_taifa_status(..., "parias")`, Parias Coin, +1 Christian VP.
+- **M14/M18 Ribat Monks — capability was a no-op (data + logic).**
+  cards.json had `no_capability:true`; the Scenario-D grant did nothing.
+  FIX: M14/M18 now carry a `this_lord` "Ribat Monks" capability restricted
+  to the six Taifa Muslim Lords, and a Christian Ravage Command in that
+  Lord's Taifa rolls 1-3 for effect (`_h_cmd_ravage`); on 4-6 the action
+  is spent but no Ravaged marker is placed. Schema regenerated.
+
+Background Book validation: two "Examples of Play" encoded as exact-outcome
+anchors against GMT's printed numbers — the Conquest of Toledo
+(Parias→Reconquista) and Uphold the Dynasties (Scenario E box 9, Muslim
+8 → 9½). Both reproduce the booklet exactly.
+
+Tests: tests/test_reconciliation_matrix_fixes.py (10) +
+tests/test_background_book_examples.py (2) = 12 new. Full suite green
+(1135 tests). Documented abstractions retained (6.2.1 Curias colour-by-
+territory; 4.4.2 pooled Walls roll; status-vs-marker VP) per
+RULES_DECISIONS / the matrix Findings section. Lower-impact open items
+(4.9.5 optional AoW Reset discard; Advanced Vassal Service marker shifts)
+recorded in the matrix for a future pass.

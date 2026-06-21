@@ -357,9 +357,9 @@
       "event_name": "Devaluation",
       "event_persistence": "immediate",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Ribat Monks",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M15": {
       "side": "muslim",
@@ -393,9 +393,9 @@
       "event_name": "Refugees",
       "event_persistence": "immediate",
       "no_event": false,
-      "capability_name": null,
-      "capability_scope": null,
-      "no_capability": true
+      "capability_name": "Ribat Monks",
+      "capability_scope": "this_lord",
+      "no_capability": false
     },
     "M19": {
       "side": "muslim",

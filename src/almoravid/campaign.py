@@ -1290,7 +1290,25 @@ def spring_muster(state: GameState) -> dict[str, Any]:
                     ServiceMarker(lord_id=lid, box=min(new_box, 17)))
                 results[f"{side}_mustered"].append((lid, chosen))
             else:
-                # No free Seat: place on Calendar
+                # No free Seat: place on Calendar as if Disbanded this
+                # turn (3.3.2). 6.3.3: for a Taifa Lord who would Muster
+                # now but has no free Seat, ALSO adjust his Taifa status
+                # (1.4.1, 1.4.3, including any Parias Coin). Mirror the
+                # Disband cascade: take the cylinder off-map first so
+                # 1.4.3 HOSTAGE POPULACE does not count the departing
+                # Lord himself, then settle his Calendar box.
+                if (lord.is_taifa and lord.home_taifa
+                        and state.taifas.get(lord.home_taifa) is not None
+                        and state.taifas[lord.home_taifa].status
+                        == "independent"):
+                    lord.cylinder = Cylinder(kind="mat")
+                    lord.in_stronghold = False
+                    adj = adjust_taifa_status(state, lord.home_taifa,
+                                              "parias")
+                    # Running-score tracker (+1 VP for imposing Parias);
+                    # final VP is recomputed from Taifa status (5.1).
+                    state.score.christian += 1.0
+                    results.setdefault("taifa_adjust", []).append((lid, adj))
                 new_box = state.calendar.current_box + lord.service_rating
                 lord.cylinder = Cylinder(kind="calendar",
                                        box=min(new_box, 17))
@@ -1841,7 +1859,7 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
                         {"locale_id": lid, "side": "christian", "value": v})
                     choice = None
                 if choice == "add":
-                    loc.jihad_markers += v
+                    loc.add_jihad(v)
                     state.score.muslim += 0.5 * v
                     results["jihad_added"].append((lid, v))
                 elif choice == "remove":
@@ -2726,13 +2744,42 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"{here} is already Ravaged (4.7.2 targets an un-Ravaged Locale)",
              code="already_ravaged")
 
+    # M14 & M18 RIBAT MONKS (Arts of War 1.9.1): a Christian Ravage
+    # Command in a Taifa whose Taifa Lord holds Ribat Monks "must roll
+    # 1-3 for effect". The roll is made as the action is expended; on
+    # 4-6 the action is spent but no Ravaged marker is placed (the
+    # Capability affects Ravage Commands, not Event-placed markers).
+    ribat_roll = None
+    if side == "christian" and loc.territory in state.taifas:
+        from almoravid.capabilities import lord_has_capability
+        ribat_holders = [
+            lid for lid, lord_obj in state.lords.items()
+            if lord_obj.is_taifa and lord_obj.home_taifa == loc.territory
+            and (lord_has_capability(state, lid, "M14")
+                 or lord_has_capability(state, lid, "M18"))
+        ]
+        if ribat_holders:
+            from almoravid.rng import roll_d6
+            ribat_roll = roll_d6(state)
+            if ribat_roll > 3:
+                state.meta.actions_remaining -= 1
+                _record(state, action,
+                        f"{side} {lord_id} Ravage at {here} has no effect "
+                        f"(Ribat Monks: rolled {ribat_roll}, needs 1-3)")
+                return {"locale": here, "color": None, "rustling": None,
+                        "enforcing_parias": False, "ribat_monks_roll": ribat_roll,
+                        "no_effect": True,
+                        "actions_remaining": state.meta.actions_remaining}
+
     res = _apply_ravage_effect(state, lord, side, here)
     state.meta.actions_remaining -= 1
     _record(state, action,
             f"{side} {lord_id} Ravages {here}: {res['rustling']}, "
-            f"+0.5 VP{', Enforcing Parias triggered' if res['enforcing_parias'] else ''}")
+            f"+0.5 VP{', Enforcing Parias triggered' if res['enforcing_parias'] else ''}"
+            f"{f' (Ribat Monks roll {ribat_roll})' if ribat_roll else ''}")
     return {"locale": here, "color": res["color"], "rustling": res["rustling"],
             "enforcing_parias": res["enforcing_parias"],
+            "ribat_monks_roll": ribat_roll,
             "actions_remaining": state.meta.actions_remaining}
 
 
@@ -2869,7 +2916,7 @@ def _conquer_stronghold(state: GameState, locale_id: str,
         if locale_id in state.cathedral_seat_locales:
             state.cathedral_seat_locales.remove(locale_id)
             removed["cathedral_seat"] = locale_id
-        loc.jihad_markers += sh_value
+        loc.add_jihad(sh_value)
         vp_delta = 0.5 * sh_value
         marker = "jihad"
     else:
@@ -5531,7 +5578,13 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     sortie_ids = [lord_id]
     group_req = list(action.get("group_lord_ids", []) or [])
     if group_req:
-        _require(_is_marshal(lord_id, side) or lord.is_lieutenant,
+        # 4.3.1/4.3.6: a group is led by a Marshal or a Lieutenant. NOTE
+        # the internal `is_lieutenant` flag marks the LOWER Lord; the
+        # actual Lieutenant (upper Lord, the eligible leader) is the Lord
+        # referenced by some other Lord's `lieutenant_of`.
+        _is_lt_leader = any(o.lieutenant_of == lord_id
+                            for o in state.lords.values())
+        _require(_is_marshal(lord_id, side) or _is_lt_leader,
                  "only a Marshal or Lieutenant may Sortie a group (4.3.1)",
                  code="not_group_leader")
         for gid in group_req:
@@ -5819,7 +5872,7 @@ def _h_respond_neutrality_choice(state: GameState, action: dict[str, Any]) -> di
                 loc.conquered_markers += v
                 state.score.christian += v
             else:
-                loc.jihad_markers += v
+                loc.add_jihad(v)
                 state.score.muslim += 0.5 * v
         else:
             if side == "muslim":

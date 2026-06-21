@@ -12,6 +12,12 @@ recorded in `RULES_DECISIONS.md` (DECISION-003/004).
 Verdict key: **OK** = faithful; **FIXED** = gap found and corrected in
 this pass; **DOC** = deliberate documented deviation (RULES_DECISIONS).
 
+> **See also `RECONCILIATION_MATRIX.md`** for the exhaustive clause-by-clause
+> matrix (every numbered clause → code symbol → covering test). The 2026-06-21
+> matrix pass fixed four further clauses: 4.5.4 (Jihad removes a Muslim
+> Siege), 4.3.6 (group Sortie leadership was inverted), 6.3.3 (stranded
+> Spring-Muster Taifa Lord status), and M14/M18 Ribat Monks (was a no-op).
+
 ## Chapter 1 — Components (1.1–1.9)
 All mechanic-bearing clauses faithful. Verified: Taifa status/characteristics
 /Jihad (1.4, incl. the Hostage-Populace erratum: no Spoils + flip Ravaged);

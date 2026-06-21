@@ -440,6 +440,19 @@ class Locale(StrictModel):
     bypass_green: bool = False
     ravaged: RavagedState = "none"
 
+    def add_jihad(self, n: int = 1) -> None:
+        """Place `n` Jihad marker(s) here (1.4.4).
+
+        Rule 4.5.4: any Jihad added at a Muslim Siege removes ALL Siege
+        markers there. Muslim-placed (green) Siege markers represent a
+        Muslim Siege, so adding a Jihad clears them. (Christian-placed
+        yellow Siege markers are unaffected — that case is governed by
+        Recognition of Neutrality / Hostage Populace, 1.4.3.)
+        """
+        self.jihad_markers += n
+        if self.siege_green:
+            self.siege_green = 0
+
 
 class Taifa(StrictModel):
     """One of the 7 Muslim Taifas.

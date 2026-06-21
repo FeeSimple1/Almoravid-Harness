@@ -680,7 +680,7 @@ def _m15_parias_revolt(state: GameState, side: Side, card_id: str,
                      and lord.cylinder.locale_id == locale_id]
     if "yusuf" in here_lord_ids or "sir" in here_lord_ids:
         add = 3
-    loc.jihad_markers += add
+    loc.add_jihad(add)
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "locale_id": locale_id, "jihad_added": add,
@@ -886,21 +886,21 @@ def _add_jihad(
             if placed >= count:
                 break
             if lid in eligible:
-                state.locales[lid].jihad_markers += 1
+                state.locales[lid].add_jihad(1)
                 placement[lid] = placement.get(lid, 0) + 1
                 placed += 1
         # Any leftover markers spill round-robin onto eligible Locales.
         i = 0
         while placed < count and eligible:
             lid = eligible[i % len(eligible)]
-            state.locales[lid].jihad_markers += 1
+            state.locales[lid].add_jihad(1)
             placement[lid] = placement.get(lid, 0) + 1
             placed += 1
             i += 1
     else:
         for n in range(count):
             lid = eligible[n % len(eligible)]
-            state.locales[lid].jihad_markers += 1
+            state.locales[lid].add_jihad(1)
             placement[lid] = placement.get(lid, 0) + 1
     return placement
 
@@ -1172,7 +1172,7 @@ def _m20_mudejares(state: GameState, side: Side, card_id: str,
                 and lord.cylinder.locale_id == target]
     if "yusuf" in here_ids or "sir" in here_ids:
         add = 3
-    loc.jihad_markers += add
+    loc.add_jihad(add)
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "jihad_added": add, "locale_id": target}
