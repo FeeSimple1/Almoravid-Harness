@@ -237,13 +237,22 @@ def _c9_betrayal_of_terms(state: GameState, side: Side, card_id: str,
 @register("C2")  # Camp Attack — immediate, fires at start of next Battle
 @register("M2")
 @register("C6")  # Surprise — immediate
-@register("M6")  # Feigned Retreat — immediate
 def _battle_immediate_marker(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
     """Cards whose effect manifests in a specific Battle moment.
     Buffered in this_campaign_events; Phase 5 Battle code will fish
     them out at the right moment."""
     return _move_to_hold_bucket(state, card_id, side, "this_campaign_events")
+
+
+@register("M6")  # Feigned Retreat — one-Round battle Hold
+def _feigned_retreat(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
+    """M6 Feigned Retreat reorders Round 2 Melee. Like the other
+    one-Round battle Holds (C8 Cantador, M7 Spear Wall) it lives in
+    this_levy_events — the bucket the Battle/Sally Round-2 readers and
+    _discard_round1_events actually consult (4.4.1 Events)."""
+    return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
 # ---------------------------------------------------------------------------
@@ -1409,8 +1418,18 @@ def _c20_al_qadir(state: GameState, side: Side, card_id: str,
     if not eligible:
         return _no_op_with_note(state, card_id, side,
                                 "no eligible Taifa free of Muslim Lords")
+    # Removal must stay WITHIN ONE eligible Taifa (card text: "any two
+    # Jihad markers within a single eligible Taifa"). Pick the Taifa with
+    # the most Jihad available so the Christian can remove up to two.
+    by_taifa: dict[str, list[str]] = {}
+    for _tid, lid in eligible:
+        by_taifa.setdefault(_tid, []).append(lid)
+    chosen_taifa = max(
+        by_taifa,
+        key=lambda tid: sum(state.locales[loc_id].jihad_markers
+                            for loc_id in by_taifa[tid]))
     removed = 0
-    for _taifa_id, lid in eligible:
+    for lid in by_taifa[chosen_taifa]:
         loc = state.locales[lid]
         take = min(loc.jihad_markers, 2 - removed)
         loc.jihad_markers -= take
@@ -1418,7 +1437,8 @@ def _c20_al_qadir(state: GameState, side: Side, card_id: str,
         if removed >= 2:
             break
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "jihad_removed": removed}
+    return {"card_id": card_id, "side": side, "jihad_removed": removed,
+            "taifa": chosen_taifa}
 
 
 _C22_LORDS = ("al_mutawakkil", "abd_allah", "yusuf", "sir")

@@ -2208,10 +2208,18 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                     f"Muslim discards Camels (M16) to ignore Arid "
                     f"Terrain ({arid_id})")
         else:
-            _feed_lord(state, lord_id, force=True)
+            # Card: "they immediately Feed 2 Marching Lords"; Tips: "That
+            # Lord OR any two Lords Marching as a group immediately Feed."
+            # Feed the active Lord plus any group-March members, capped at 2.
+            marching = [lord_id] + [g for g in (action.get("group_lord_ids")
+                                                or []) if g in state.lords]
+            fed_lords = []
+            for fed in marching[:2]:
+                _feed_lord(state, fed, force=True)
+                fed_lords.append(fed)
             _record(state, action,
                     f"{enemy} Arid Terrain ({arid_id}) forces "
-                    f"{lord_id} to Feed before March")
+                    f"{', '.join(fed_lords)} to Feed before March")
 
     # Phase 6i: C6 Surprise auto-trigger for Christian attacker.
     # When Christian holds C6 AND Marches to an Enemy Stronghold

@@ -757,3 +757,33 @@ territory; 4.4.2 pooled Walls roll; status-vs-marker VP) per
 RULES_DECISIONS / the matrix Findings section. Lower-impact open items
 (4.9.5 optional AoW Reset discard; Advanced Vassal Service marker shifts)
 recorded in the matrix for a future pass.
+
+## Arts of War card-by-card audit 2026-06-21 — 5 fixes + dead-data inventory
+
+Audited all 52 Arts of War cards (Event + Capability halves) against the
+card reference (see AOW_AUDIT.md). Event halves are largely faithful; the
+Capability halves have a large gap — ~16 capability EFFECTS are dead data
+(metadata present, no rules effect wired). Five contained bugs in
+already-implemented features were verified by hand and fixed:
+
+- **M6 Feigned Retreat** parked in `this_campaign_events`, but the Battle/
+  Sally Round-2 readers + `_discard_round1_events` only read
+  `this_levy_events` → the Round-2 melee reorder was a no-op via the real
+  resolver (existing tests passed only by injecting the bucket directly).
+  FIX: M6 routes to `this_levy_events` like C8/M7.
+- **C9/M7 Slingers** ignored `max_per_lord:3` (5 Militia → 5 Slingers). FIX:
+  per-Lord slinger budget of 3 in both strike-row builders.
+- **C7/M3/M6 Javelins & C9/M7 Slingers** fired x1 in Storm; 4.5.2 makes them
+  x1/2 in Storm. FIX: halve cap rows of kind javelins/slingers when storm.
+- **C20 Al-Qadir (event)** removed Jihad across multiple Taifas; card says
+  within a SINGLE Taifa. FIX: confine removal to one Taifa.
+- **C4/M4 Arid Terrain** force-fed only the active Lord; card feeds up to 2
+  Marching Lords. FIX: feed the active Lord + group-March members (cap 2).
+
+Tests: tests/test_aow_audit_fixes.py (7). Full suite green (1142). The
+unimplemented-capability inventory, partial/wrong event cases (C9 Betrayal
+OR-choice, M13 multi-option, C13/M23 Count-of-Barcelona discard, C3 Avoid-
+Battle branch, C26 Reconcile clause, M16 Camels Drought/Mules, M8 Dawud
+battle deck-search, Adalides/War Drums "Bypass without stopping"), the
+eligibility-gating gap, and metadata persistence nits are catalogued in
+AOW_AUDIT.md for a scoped follow-up.

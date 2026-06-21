@@ -276,6 +276,7 @@ def build_strike_rows(
     # runs over one Lord's force (the single-Lord pooled case; the per-pair
     # path caps per LordPosition in _build_strike_rows_for_position).
     javelin_budget = 4
+    slinger_budget = 3   # C9/M7 Slingers: up to 3 Militia per Lord
     for unit_type, count in side.forces.items():
         if count <= 0:
             continue
@@ -300,17 +301,28 @@ def build_strike_rows(
             required = set(cap_row.get("card_ids", []))
             if required and required & caps_in_play:
                 row_count = count
+                cap_kind = cap_row.get("kind")
                 if cap_row.get("cap_type") == "javelins" or \
-                        cap_row.get("kind") == "javelins":
+                        cap_kind == "javelins":
                     row_count = min(count, javelin_budget)
                     javelin_budget -= row_count
                     if row_count <= 0:
                         continue
+                elif cap_kind == "slingers" and cap_row.get("max_per_lord"):
+                    row_count = min(count, slinger_budget)
+                    slinger_budget -= row_count
+                    if row_count <= 0:
+                        continue
+                cap_rate = cap_row["rate"]
+                # 4.5.2: Javelins and Slingers fire x1/2 (not x1) in Storm.
+                if (context == "storm" and cap_kind in ("javelins", "slingers")
+                        and cap_rate == "x1"):
+                    cap_rate = "x1/2"
                 rows.append(StrikeRow(
                     unit_type=unit_type,
                     count=row_count,
                     kind=cap_row["kind"],
-                    rate=cap_row["rate"],
+                    rate=cap_rate,
                     one_round_only=cap_row.get("any_one_round", False),
                     card_ids=sorted(required & caps_in_play),
                 ))
@@ -3089,6 +3101,7 @@ def _build_strike_rows_for_position(
     caps_in_play = set(side.capabilities_in_play) | set(lp.capabilities_in_play)
     rows: list[StrikeRow] = []
     javelin_budget = 4   # (b) up to 4 Unarmored units per Lord (C7/M3/M6)
+    slinger_budget = 3   # C9/M7 Slingers: up to 3 Militia per Lord
     for unit_type, count in lp.forces.items():
         if count <= 0:
             continue
@@ -3109,15 +3122,26 @@ def _build_strike_rows_for_position(
             required = set(cap_row.get("card_ids", []))
             if required and required & caps_in_play:
                 row_count = count
+                cap_kind = cap_row.get("kind")
                 if cap_row.get("cap_type") == "javelins" or \
-                        cap_row.get("kind") == "javelins":
+                        cap_kind == "javelins":
                     row_count = min(count, javelin_budget)
                     javelin_budget -= row_count
                     if row_count <= 0:
                         continue
+                elif cap_kind == "slingers" and cap_row.get("max_per_lord"):
+                    row_count = min(count, slinger_budget)
+                    slinger_budget -= row_count
+                    if row_count <= 0:
+                        continue
+                cap_rate = cap_row["rate"]
+                # 4.5.2: Javelins and Slingers fire x1/2 (not x1) in Storm.
+                if (context == "storm" and cap_kind in ("javelins", "slingers")
+                        and cap_rate == "x1"):
+                    cap_rate = "x1/2"
                 rows.append(StrikeRow(
                     unit_type=unit_type, count=row_count,
-                    kind=cap_row["kind"], rate=cap_row["rate"],
+                    kind=cap_row["kind"], rate=cap_rate,
                     one_round_only=cap_row.get("any_one_round", False),
                     card_ids=sorted(required & caps_in_play),
                 ))
