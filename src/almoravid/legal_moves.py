@@ -1017,6 +1017,14 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_fonsadera",
                                         "side": "christian", "lord_id": _alid,
                                         "vassal_index": _vi, "mode": "coin"})
+            # M19 Guadalquivir (capability): a Taifa Lord may March across
+            # the Port + Sevilla-City network for 1 action (Arts of War ref).
+            if active == "muslim" and _al is not None and _al.is_taifa:
+                from almoravid.campaign import _guadalquivir_targets as _gqt
+                if state.meta.actions_remaining > 0:
+                    for _gd in _gqt(state, _alid):
+                        out.append({"type": "cmd_guadalquivir",
+                                    "side": "muslim", "target_locale_id": _gd})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id
@@ -1117,11 +1125,14 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     )
                     from almoravid.effective import is_besieged
                     from almoravid.map import neighbors_via
+                    from almoravid.campaign import _bypass_without_stopping as _bwos
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
                             # 4.3.5: a Lord who Bypassed THIS card may not
-                            # leave the Locale until the card ends.
-                            and not lord.bypassed_this_card
+                            # leave the Locale until the card ends -- unless
+                            # Adalides / War Drums (Bypass without stopping).
+                            and (not lord.bypassed_this_card
+                                 or _bwos(state, lord_id, active))
                             # C3/M3 Swollen River: a Lord already blocked
                             # this card may not March again (handler mirror).
                             and state.meta.swollen_river_blocked_card_lord_id

@@ -2036,7 +2036,8 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(not is_besieged(state, lord_id),
              "Besieged Lord may only Sally / Forage (Gardens) / Pass (4.5.3)",
              code="besieged")
-    _require(not lord.bypassed_this_card,
+    _require(not lord.bypassed_this_card
+             or _bypass_without_stopping(state, lord_id, side),
              "A Lord who Bypassed this card may not leave the Locale until "
              "the card ends (4.3.5; DEPART requires beginning a card "
              "Bypassing, 4.3.6)", code="bypassed_this_card")
@@ -2099,7 +2100,8 @@ def _h_cmd_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             _require(not _isb_grp(state, gid),
                      f"{gid} is Besieged and cannot Group March (4.3.1)",
                      code="besieged")
-            _require(not g.bypassed_this_card,
+            _require(not g.bypassed_this_card
+                     or _bypass_without_stopping(state, gid, side),
                      f"{gid} Bypassed this card and may not leave the "
                      f"Locale until the card ends (4.3.5)",
                      code="bypassed_this_card")
@@ -2461,6 +2463,12 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(seats, f"{lord_id} has no printed Seats; Supply impossible",
              code="no_own_seat")
 
+    # M12 Al-Yazirat al-Hadra: Yusuf/Sir Seat markers use their two-Seat
+    # side -> each of their Seats serves as TWO Supply Sources (4.6.1).
+    from almoravid.capabilities import side_has_capability as _shc_m12
+    m12_double = (lord_id in ("yusuf", "sir")
+                  and _shc_m12(state, "muslim", "M12"))
+
     here = lord.cylinder.locale_id
     assert here is not None
     # Find the shortest unblocked route from `here` to each of `seats`,
@@ -2515,6 +2523,9 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         per_seat_hops[s] = len(route)
         total_hops += len(route)
 
+    if m12_double:
+        total_hops *= 2   # two Sources per Seat -> two Routes' Transport
+
     # 4.6.1: the Active Lord must "have or Share (1.5.2)" enough Transport
     # — count co-located same-side Lords' Carts/Mules too.
     has_cart, has_mule = _shared_transport_at(state, here, side)
@@ -2539,7 +2550,7 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # Apply: +1 Provender per Seat (cap 8). Dawud ibn Aisha (M8,
     # Phase 7a) adds 1 extra Prov per Supply action (once).
     from almoravid.capabilities import lord_has_capability
-    gain = len(requested)
+    gain = len(requested) * (2 if m12_double else 1)
     if lord_has_capability(state, lord_id, "M8"):
         gain += 1
     new_prov = min(8, lord.assets.get("prov", 0) + gain)
@@ -5008,6 +5019,75 @@ def _h_play_de_vivar_reconcile(state: GameState, action: dict[str, Any]) -> dict
     return result
 
 
+_GUADALQUIVIR_CITIES = ("cordoba", "jaen", "baeza", "lorca", "murcia")
+
+
+def _guadalquivir_network(state: GameState) -> set[str]:
+    """M19 Guadalquivir endpoints: all Port Strongholds plus the named
+    Sevilla-Taifa Cities/Towns Cordoba, Jaen, Baeza, Lorca, Murcia."""
+    net = {lid for lid, loc in state.locales.items() if loc.has_port}
+    net.update(c for c in _GUADALQUIVIR_CITIES if c in state.locales)
+    return net
+
+
+def _guadalquivir_targets(state: GameState, lord_id: str) -> list[str]:
+    """Network destinations for a Taifa Lord using M19 Guadalquivir:
+    other network Locales free of (enemy) Christian Lords. Requires M19
+    the capability in play and the Lord to be a Taifa Lord on a network
+    Locale, Unbesieged."""
+    from almoravid.capabilities import side_has_capability
+    from almoravid.effective import is_besieged
+    lord = state.lords.get(lord_id)
+    if (lord is None or not lord.is_taifa or lord.cylinder.kind != "locale"
+            or not side_has_capability(state, "muslim", "M19")
+            or is_besieged(state, lord_id)):
+        return []
+    net = _guadalquivir_network(state)
+    here = lord.cylinder.locale_id
+    if here not in net:
+        return []
+    christian_at = {l.cylinder.locale_id for l in state.lords.values()
+                    if l.side == "christian" and l.cylinder.kind == "locale"}
+    return sorted(d for d in net if d != here and d not in christian_at)
+
+
+def _h_cmd_guadalquivir_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """M19 Guadalquivir capability: a Taifa Lord may March (normal cost,
+    1 action) directly between any two network Locales (Ports + Cordoba/
+    Jaen/Baeza/Lorca/Murcia) free of Christian Lords (Arts of War ref M19).
+    If the destination is an Enemy Stronghold, Besiege-or-Bypass normally."""
+    from almoravid.effective import is_enemy_locale
+    from almoravid.state import Cylinder
+    side = _require_side(action)
+    _require(side == "muslim", "Guadalquivir is Muslim", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    lord_id = cast(str, state.meta.active_lord_id)
+    _require(state.meta.actions_remaining >= 1,
+             "Guadalquivir March costs 1 action", code="not_enough_actions")
+    targets = _guadalquivir_targets(state, lord_id)
+    target = action.get("target_locale_id")
+    _require(target in targets,
+             f"target must be a Guadalquivir network Locale {targets}",
+             code="bad_target")
+    target = cast(str, target)
+    lord = state.lords[lord_id]
+    from_loc = cast(str, lord.cylinder.locale_id)
+    lord.cylinder = Cylinder(kind="locale", locale_id=target)
+    lord.in_stronghold = False
+    lord.moved_fought = True
+    state.meta.actions_remaining -= 1
+    base = {"from": from_loc, "to": target,
+            "actions_remaining": state.meta.actions_remaining}
+    loc = state.locales[target]
+    if loc.base_type != "region" and is_enemy_locale(state, target, side):
+        if _set_besiege_or_bypass_pending(state, target, side, lord_id):
+            base["pending"] = {"kind": "besiege_or_bypass"}
+    _record(state, action,
+            f"muslim {lord_id} Guadalquivir (M19): {from_loc} -> {target}")
+    return base
+
+
 def _h_cmd_march_port_to_port(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """M19 (Hold) African Fleet: Lord uses entire Command card to
     March between two Ports where no Christian Lord at destination.
@@ -6266,6 +6346,23 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     return {"winner": winner, "rounds": len(result.rounds),
             "attacker": atk_side, "defender": def_side}
 
+def _bypass_without_stopping(state: GameState, lord_id: str, side: Side) -> bool:
+    """C3/C10 Adalides + M22 War Drums: may Bypass an Enemy Stronghold and
+    then March on the SAME Command card (Arts of War ref). Adalides is a
+    this_lord cap (not Eudes); War Drums (side_wide) covers Yusuf, Sir, and
+    Muslim Lieutenants (upper Lords)."""
+    from almoravid.capabilities import lord_has_capability, side_has_capability
+    if (lord_has_capability(state, lord_id, "C3")
+            or lord_has_capability(state, lord_id, "C10")):
+        return True
+    if side == "muslim" and side_has_capability(state, "muslim", "M22"):
+        if lord_id in ("yusuf", "sir"):
+            return True
+        if any(o.lieutenant_of == lord_id for o in state.lords.values()):
+            return True
+    return False
+
+
 def _fueros_targets(state: GameState) -> list[str]:
     """C20 Fueros: Reconquista-Taifa Locales with Jihad markers to which
     Alfonso (holding C20, on the map) is STRICTLY closer than every Muslim
@@ -6649,6 +6746,7 @@ CAMPAIGN_HANDLERS = {
     "cap_milites": _h_cap_milites,
     "cap_bishoprics": _h_cap_bishoprics,
     "cap_fonsadera": _h_cap_fonsadera,
+    "cmd_guadalquivir": _h_cmd_guadalquivir_march,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,
