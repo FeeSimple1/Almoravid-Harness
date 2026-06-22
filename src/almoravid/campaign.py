@@ -390,11 +390,12 @@ def _feed_lord(state: GameState, lord_id: str, *,
 
 
 def _apply_unfed_penalty(state: GameState, lord_id: str) -> None:
-    """4.8.1 UNFED: shift the Lord's Service marker one 40-Days box left."""
-    sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id), None)
-    if sm is not None:
-        sm.box = max(0, sm.box - 1)
+    """4.8.1 UNFED: shift the Lord's Service marker one 40-Days box left.
+    Routed through _shift_service_left so it targets the Lord's OWN marker
+    and cascades to his Vassal markers under Advanced Vassal Service
+    (3.4.2)."""
+    from almoravid.actions import _shift_service_left
+    _shift_service_left(state, lord_id, 1)
 
 
 def _feed_consume_own(state: GameState, lord_id: str, *,

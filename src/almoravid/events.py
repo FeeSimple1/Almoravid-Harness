@@ -638,8 +638,8 @@ def _c25_de_vivar(state: GameState, side: Side, card_id: str,
     """C25 (Hold): Play as Christian Call to Arms if Rodrigo al-Sayyid
     on map. Reconcile with Rodrigo for 1 VP to Taifas box.
 
-    Phase 6j: parks in this_levy_events. The Reconcile + VP-to-Taifa
-    transfer is a deferred follow-up (no Taifa Coin box in state).
+    Parks in this_levy_events; the Reconcile + 1 VP to the Taifas box is
+    carried out by the play handler campaign._h_play_de_vivar_reconcile.
     """
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
@@ -683,9 +683,10 @@ def _m25_m26_freebooter(state: GameState, side: Side, card_id: str,
 def _c26_freebooter(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
     """C26 (Immediate): Disband Rodrigo al-Sayyid as if at Service
-    Limit (3.3.2). Optional Reconcile clause deferred.
+    Limit (3.3.2). Optional Reconcile-for-1VP clause via payload
+    ['reconcile'] (implemented below).
 
-    Phase 6j: greedy disband — clears Rodrigo's forces/assets, sends
+    Disband clears Rodrigo's forces/assets and sends
     his cylinder back to off-left-service.
     """
     target = "rodrigo_al_sayyid"
@@ -1675,8 +1676,8 @@ def _m19_african_fleet(state: GameState, side: Side, card_id: str,
     """M19 (Hold): Play for a Lord to use his Command card to March
     Port-to-Port where no Christian Lord at destination.
 
-    Phase 6j: parks in this_levy_events. Port-to-Port March is a
-    deferred follow-up — would require a new cmd_march_port_to_port
-    action that consumes this Hold + the active Lord's entire card.
+    Parks in this_levy_events; the Port-to-Port March is carried out by
+    the play handler campaign._h_cmd_march_port_to_port (consumes this
+    Hold + the active Lord's entire Command card).
     """
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")

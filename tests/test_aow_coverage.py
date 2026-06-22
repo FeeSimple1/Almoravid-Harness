@@ -37,3 +37,27 @@ def test_m13_siege_towers_walls_minus_one_from_round_two() -> None:
                       forces={"men_at_arms": 2})
     ss, _mr = _storm_setup(s, atk, deff)
     assert ss["siege_towers"] is True            # M13 detected for attacker
+
+
+def test_unfed_penalty_cascades_to_vassal_under_advanced_rule() -> None:
+    """4.8.1 Unfed shift must cascade to Vassal markers when the Advanced
+    Vassal Service rule (3.4.2) is on (it now routes through
+    _shift_service_left)."""
+    from almoravid.campaign import _apply_unfed_penalty
+    from almoravid.state import ServiceMarker
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
+    s.meta.advanced_vassal_service = True
+    lid = "alvar_fanez"
+    # Clear any existing markers for this lord, then plant own + vassal.
+    s.calendar.service_markers = [
+        m for m in s.calendar.service_markers if m.lord_id != lid]
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id=lid, box=8, vassal_id=None))
+    s.calendar.service_markers.append(
+        ServiceMarker(lord_id=lid, box=8, vassal_id="v1"))
+    _apply_unfed_penalty(s, lid)
+    own = next(m for m in s.calendar.service_markers
+              if m.lord_id == lid and m.vassal_id is None)
+    vas = next(m for m in s.calendar.service_markers
+              if m.lord_id == lid and m.vassal_id == "v1")
+    assert own.box == 7 and vas.box == 7        # both shifted left
