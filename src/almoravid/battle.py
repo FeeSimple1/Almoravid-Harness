@@ -255,6 +255,57 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
         side.m7_boosts_remaining = sum(af for af, _ in contribs[:2])
 
 
+def _lookup_unit(forces_data: dict[str, Any], unit_type: str) -> dict[str, Any] | None:
+    for category in ("horse", "foot"):
+        if unit_type in forces_data[category]:
+            return forces_data[category][unit_type]
+    return None
+
+
+def _cap_strike_rows(forces_data: dict[str, Any], caps_set: set[str],
+                     forces: dict[str, int],
+                     context: str) -> list[StrikeRow]:
+    """Capability-gated StrikeRows for ONE Lord's (or pooled) forces, with
+    that group's own Javelin/Slinger budgets (Arts of War C7/M3/M6 = 4
+    Unarmored per Lord; C9/M7 = 3 Militia per Lord). 4.5.2 halves
+    Javelins/Slingers in Storm."""
+    out: list[StrikeRow] = []
+    javelin_budget = 4
+    slinger_budget = 3
+    for unit_type, count in forces.items():
+        if count <= 0:
+            continue
+        unit = _lookup_unit(forces_data, unit_type)
+        if unit is None:
+            continue
+        for cap_row in unit.get("strikes_by_capability", []):
+            required = set(cap_row.get("card_ids", []))
+            if not (required and required & caps_set):
+                continue
+            row_count = count
+            cap_kind = cap_row.get("kind")
+            if cap_row.get("cap_type") == "javelins" or cap_kind == "javelins":
+                row_count = min(count, javelin_budget)
+                javelin_budget -= row_count
+                if row_count <= 0:
+                    continue
+            elif cap_kind == "slingers" and cap_row.get("max_per_lord"):
+                row_count = min(count, slinger_budget)
+                slinger_budget -= row_count
+                if row_count <= 0:
+                    continue
+            cap_rate = cap_row["rate"]
+            if (context == "storm" and cap_kind in ("javelins", "slingers")
+                    and cap_rate == "x1"):
+                cap_rate = "x1/2"
+            out.append(StrikeRow(
+                unit_type=unit_type, count=row_count, kind=cap_row["kind"],
+                rate=cap_rate,
+                one_round_only=cap_row.get("any_one_round", False),
+                card_ids=sorted(required & caps_set)))
+    return out
+
+
 def build_strike_rows(
     state: GameState,
     side: BattleSide,
@@ -267,27 +318,16 @@ def build_strike_rows(
     rows when the required card_ids are present in capabilities_in_play.
     """
     forces_data = load_forces()
-    caps_in_play = set(side.capabilities_in_play)
     rows: list[StrikeRow] = []
 
-    # (b) Jabalinas (C7) / Harbah (M3,M6): "Up to 4 of this Lord's Unarmored
-    # units have Missiles ... (mark)". Cap the Javelin-granted units at 4
-    # ACROSS the Lord's Unarmored types, not per unit-type. build_strike_rows
-    # runs over one Lord's force (the single-Lord pooled case; the per-pair
-    # path caps per LordPosition in _build_strike_rows_for_position).
-    javelin_budget = 4
-    slinger_budget = 3   # C9/M7 Slingers: up to 3 Militia per Lord
+    # Base strikes from the pooled forces (front + reserve; the pooled
+    # path is the single-Lord / asymmetric-Array fallback).
     for unit_type, count in side.forces.items():
         if count <= 0:
             continue
-        unit = None
-        for category in ("horse", "foot"):
-            if unit_type in forces_data[category]:
-                unit = forces_data[category][unit_type]
-                break
+        unit = _lookup_unit(forces_data, unit_type)
         if unit is None:
             continue
-        # Base strikes
         for s in unit[f"strikes_{context}"]:
             rows.append(StrikeRow(
                 unit_type=unit_type,
@@ -296,36 +336,19 @@ def build_strike_rows(
                 rate=s["rate"],
                 one_round_only=s.get("any_one_round", False),
             ))
-        # Capability-gated strikes (Pattern 7: card_ids must be in play).
-        for cap_row in unit.get("strikes_by_capability", []):
-            required = set(cap_row.get("card_ids", []))
-            if required and required & caps_in_play:
-                row_count = count
-                cap_kind = cap_row.get("kind")
-                if cap_row.get("cap_type") == "javelins" or \
-                        cap_kind == "javelins":
-                    row_count = min(count, javelin_budget)
-                    javelin_budget -= row_count
-                    if row_count <= 0:
-                        continue
-                elif cap_kind == "slingers" and cap_row.get("max_per_lord"):
-                    row_count = min(count, slinger_budget)
-                    slinger_budget -= row_count
-                    if row_count <= 0:
-                        continue
-                cap_rate = cap_row["rate"]
-                # 4.5.2: Javelins and Slingers fire x1/2 (not x1) in Storm.
-                if (context == "storm" and cap_kind in ("javelins", "slingers")
-                        and cap_rate == "x1"):
-                    cap_rate = "x1/2"
-                rows.append(StrikeRow(
-                    unit_type=unit_type,
-                    count=row_count,
-                    kind=cap_row["kind"],
-                    rate=cap_rate,
-                    one_round_only=cap_row.get("any_one_round", False),
-                    card_ids=sorted(required & caps_in_play),
-                ))
+
+    # Capability-gated strikes, scoped PER LORD. A this_lord missile cap
+    # (Crossbows/Bowmen/Javelins/Slingers) arms only its HOLDER's units,
+    # and the Javelin (4) / Slinger (3) budgets are per Lord. For a
+    # multi-Lord side the per-Lord forces+caps come from `side.array`; for
+    # a single-Lord side the pooled caps ARE that one Lord's caps.
+    if side.array is not None:
+        groups = [(set(lp.capabilities_in_play), lp.forces)
+                  for lp in side.array]
+    else:
+        groups = [(set(side.capabilities_in_play), dict(side.forces))]
+    for caps_set, gforces in groups:
+        rows.extend(_cap_strike_rows(forces_data, caps_set, gforces, context))
 
     # S3 (4.5.2 GARRISON FORCES DURING STORM): the Garrison adds its
     # Strikes to the Defending Lord's (rounded together by _step_hits).
