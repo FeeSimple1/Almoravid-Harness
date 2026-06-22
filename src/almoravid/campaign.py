@@ -2341,7 +2341,7 @@ def _route_blocked_by_enemy(state: GameState, route: list[str],
     Enemy Lord is any opposing-side Lord physically present. Bypassed
     /Besieged exemptions consult effective.is_besieged / is_bypassed.
     """
-    from almoravid.effective import is_besieged, is_bypassed, is_friendly_locale
+    from almoravid.effective import is_besieged, is_bypassed
     other: Side = "muslim" if side == "christian" else "christian"
     for locale_id in route:
         # Enemy Lord present unless Besieged/Bypassed
@@ -3855,7 +3855,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         battleside_for_lord,
         resolve_storm,
     )
-    from almoravid.effective import is_besieged, is_friendly_locale
+    from almoravid.effective import is_besieged
 
     side = _require_side(action)
     _require_campaign_step(state, "activation")
@@ -4950,8 +4950,8 @@ def _h_play_severed_heads(state: GameState, action: dict[str, Any]) -> dict[str,
     (The 'Christians Retreat/Sacked' trigger auto-resolves +4 Jihad in
     apply_retreat_aftermath.) action: mode ('shift'|'jihad'), target_lord
     (for shift)."""
-    from almoravid.events import _add_jihad
     from almoravid.actions import _shift_service_left
+    from almoravid.events import _add_jihad
     side = _require_side(action)
     _require(side == "muslim", "M13 is a Muslim event", code="wrong_side")
     _require("M13" in state.decks.this_levy_events.get("muslim", []),
@@ -5137,8 +5137,8 @@ def _guadalquivir_targets(state: GameState, lord_id: str) -> list[str]:
     here = lord.cylinder.locale_id
     if here not in net:
         return []
-    christian_at = {l.cylinder.locale_id for l in state.lords.values()
-                    if l.side == "christian" and l.cylinder.kind == "locale"}
+    christian_at = {lo.cylinder.locale_id for lo in state.lords.values()
+                    if lo.side == "christian" and lo.cylinder.kind == "locale"}
     return sorted(d for d in net if d != here and d not in christian_at)
 
 
@@ -6308,7 +6308,7 @@ def _cabalgadas_targets(state: GameState, lord_id: str,
     two Ways distant whose path's intervening Locale (if any) and target
     both have NO Unbesieged Enemy Lord, and the target is a legal Ravage
     target (Enemy Locale not already Ravaged by this side). 4.7.2 + C14/C17."""
-    from almoravid.effective import is_besieged, is_friendly_locale
+    from almoravid.effective import is_besieged
     from almoravid.map import all_neighbors
     lord = state.lords.get(lord_id)
     if lord is None or lord.cylinder.kind != "locale" or is_besieged(state, lord_id):
@@ -6584,11 +6584,11 @@ def _fueros_targets(state: GameState) -> list[str]:
     if (alf is None or alf.cylinder.kind != "locale"
             or not side_has_capability(state, "christian", "C20")):
         return []
-    muslim_locs = [cast(str, l.cylinder.locale_id)
-                   for l in state.lords.values()
-                   if l.side == "muslim" and l.cylinder.kind == "locale"]
+    muslim_locs = [cast(str, lo.cylinder.locale_id)
+                   for lo in state.lords.values()
+                   if lo.side == "muslim" and lo.cylinder.kind == "locale"]
     out: list[str] = []
-    for tid, taifa in state.taifas.items():
+    for _tid, taifa in state.taifas.items():
         if taifa.status != "reconquista":
             continue
         for lid in taifa.locale_ids:
@@ -6637,8 +6637,8 @@ def _sisnando_targets(state: GameState) -> list[str]:
     if (alf is None or alf.cylinder.kind != "locale"
             or not lord_has_capability(state, "alfonso", "C21")):
         return []
-    occupied = {cast(str, l.cylinder.locale_id) for l in state.lords.values()
-                if l.cylinder.kind == "locale"}
+    occupied = {cast(str, lo.cylinder.locale_id) for lo in state.lords.values()
+                if lo.cylinder.kind == "locale"}
     out: list[str] = []
     for lid, loc in state.locales.items():
         if (loc.jihad_markers > 0 and lid not in occupied
@@ -6695,7 +6695,8 @@ def _count_barcelona_user(state: GameState, side: Side) -> str | None:
     if state.meta.aow_cap_state.get(f"{card}_used"):
         return None
     lid = state.meta.active_lord_id
-    if lid in eligible and state.lords[lid].cylinder.kind == "locale":
+    if (lid in eligible and state.lords[lid].cylinder.kind == "locale"
+            and _coin_available_for_cap(state, lid, side) >= 2):
         return lid
     return None
 
@@ -6774,6 +6775,21 @@ def _h_cap_count_barcelona(state: GameState, action: dict[str, Any]) -> dict[str
     return {"lord": lid, "added": {"knights": 2, "men_at_arms": 2}}
 
 
+def _coin_available_for_cap(state: GameState, lord_id: str, side: Side) -> int:
+    """Coin a Lord could spend on a capability: own + co-located Sharing
+    (1.5.2) + (Muslim) the Taifas box. Non-mutating (enumerator guard)."""
+    lord = state.lords.get(lord_id)
+    if lord is None or lord.cylinder.kind != "locale":
+        return 0
+    here = lord.cylinder.locale_id
+    total = sum(lo.assets.get("coin", 0) for lo in state.lords.values()
+                if lo.side == side and lo.cylinder.kind == "locale"
+                and lo.cylinder.locale_id == here)
+    if side == "muslim":
+        total += state.taifas_box_coin
+    return total
+
+
 def _pay_coin_for_cap(state: GameState, lord_id: str, side: Side,
                       amount: int) -> bool:
     """Deduct `amount` Coin for a capability cost: the Lord's own Coin,
@@ -6788,15 +6804,15 @@ def _pay_coin_for_cap(state: GameState, lord_id: str, side: Side,
                 and ol.cylinder.kind == "locale"
                 and ol.cylinder.locale_id == here):
             pool.append(ol)
-    avail = sum(l.assets.get("coin", 0) for l in pool)
+    avail = sum(lo.assets.get("coin", 0) for lo in pool)
     box = state.taifas_box_coin if side == "muslim" else 0
     if avail + box < amount:
         return False
     need = amount
-    for l in pool:
-        take = min(l.assets.get("coin", 0), need)
+    for lo in pool:
+        take = min(lo.assets.get("coin", 0), need)
         if take:
-            l.assets["coin"] = l.assets.get("coin", 0) - take
+            lo.assets["coin"] = lo.assets.get("coin", 0) - take
             need -= take
         if need == 0:
             break
@@ -6813,7 +6829,7 @@ def _h_cap_saqalibah(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(side == "muslim", "Saqalibah is Muslim", code="wrong_side")
     _require_campaign_step(state, "activation")
     _require_active(state, side)
-    from almoravid.capabilities import side_has_capability, lord_has_capability
+    from almoravid.capabilities import lord_has_capability, side_has_capability
     lid = state.meta.active_lord_id
     lid = cast(str, lid)
     lord = state.lords[lid]
@@ -6839,7 +6855,7 @@ def _h_cap_al_rum(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(side == "muslim", "Al-Rum is Muslim", code="wrong_side")
     _require_campaign_step(state, "activation")
     _require_active(state, side)
-    from almoravid.capabilities import side_has_capability, lord_has_capability
+    from almoravid.capabilities import lord_has_capability, side_has_capability
     lid = cast(str, state.meta.active_lord_id)
     lord = state.lords[lid]
     _require(lord.is_taifa and lord.cylinder.kind == "locale",

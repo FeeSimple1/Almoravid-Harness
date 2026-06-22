@@ -958,8 +958,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             # 2 from a Reconquista Locale he is closer to; Sisnando 1 from a
             # Lord-free unbesieged Locale (Arts of War ref).
             if state.meta.active_lord_id == "alfonso":
-                from almoravid.campaign import (_fueros_targets as _ft,
-                                                _sisnando_targets as _st)
+                from almoravid.campaign import _fueros_targets as _ft
+                from almoravid.campaign import _sisnando_targets as _st
                 if state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index:
                     for _fl in _ft(state):
                         out.append({"type": "cap_fueros", "side": "christian",
@@ -983,7 +983,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     out.append({"type": "cap_saqalibah", "side": "muslim"})
                 if (_shc(state, "muslim", "M20")
                         and not state.meta.aow_cap_state.get("M20_used")):
-                    out.append({"type": "cap_al_rum", "side": "muslim"})
+                    from almoravid.campaign import _coin_available_for_cap as _cav
+                    if _cav(state, _alid, "muslim") >= 1:
+                        out.append({"type": "cap_al_rum", "side": "muslim"})
             # C18 Milites: active Christian Lord pays 1 Asset for <=3 units.
             if (active == "christian" and _al is not None
                     and _al.cylinder.kind == "locale"
@@ -1034,8 +1036,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         out.append({"type": "cmd_guadalquivir",
                                     "side": "muslim", "target_locale_id": _gd})
             # C25/M25 El Cid + M8 Dawud(b): play a named Event from deck.
-            from almoravid.campaign import (_ELCID_PLAYABLE, _DAWUD_PLAYABLE,
-                                            _card_available_in_deck)
+            from almoravid.campaign import _DAWUD_PLAYABLE, _ELCID_PLAYABLE, _card_available_in_deck
             from almoravid.capabilities import lord_has_capability as _lhc_deck
             if _al is not None and _alid is not None:
                 _rod = ("rodrigo_campeador" if active == "christian"
@@ -1171,6 +1172,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # offering a phantom-legal move that the handler will
                 # reject.
                 try:
+                    from almoravid.campaign import _bypass_without_stopping as _bwos
                     from almoravid.campaign import (
                         _counts_as_marshal_for_march,
                         _group_laden,
@@ -1179,7 +1181,6 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     )
                     from almoravid.effective import is_besieged
                     from almoravid.map import neighbors_via
-                    from almoravid.campaign import _bypass_without_stopping as _bwos
                     if (not is_besieged(state, lord_id)
                             and lord.cylinder.kind == "locale"
                             # 4.3.5: a Lord who Bypassed THIS card may not

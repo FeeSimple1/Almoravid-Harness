@@ -1634,6 +1634,7 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             and state.taifas.get(lord.home_taifa) is not None
             and state.taifas[lord.home_taifa].status == "independent"):
         from almoravid.campaign import adjust_taifa_status
+
         # Ordering (3.3.2 Important): the Lord DISBANDS (leaves the map)
         # and only then his Taifa adjusts to Parias. Take his cylinder
         # off-map BEFORE adjust_taifa_status so 1.4.3 HOSTAGE POPULACE

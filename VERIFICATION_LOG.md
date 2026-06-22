@@ -787,3 +787,35 @@ Battle branch, C26 Reconcile clause, M16 Camels Drought/Mules, M8 Dawud
 battle deck-search, Adalides/War Drums "Bypass without stopping"), the
 eligibility-gating gap, and metadata persistence nits are catalogued in
 AOW_AUDIT.md for a scoped follow-up.
+
+## AoW capability/event build-out 2026-06-21 — every dead-data gap closed
+
+Following the card audit (AOW_AUDIT.md), implemented ALL previously
+unimplemented/partial Arts of War capability effects and partial events.
+Capability effects modeled as gated free 0-action effects at the eligible
+Lord's Activation (the Cathedrals/Emir precedent) with meta.aow_cap_state
+gating; each shipped with regression tests and legal_moves enumeration.
+
+- Levy Jihad removal: C20 Fueros, C21 Sisnando Davidez.
+- Muster-units: C13/M23 Count of Barcelona, C18 Milites, M15 Saqalibah,
+  M20 Al-Rum, C22 Bishoprics (Bishop Vassals per Lords reference).
+- C23 Fonsadera (exchange Ready non-Bishop Vassals for 1 Coin / 3 Transport).
+- Combat: C24 Garcia Jimenez (+2 Storm rounds), M17 Arrada (+3 Missile Hits
+  at -2 Armor in Storm/Sally, new 'arrada' hit kind).
+- March/Supply: M19 Guadalquivir (Port + Sevilla-City network March), M12
+  Al-Yazirat al-Hadra (double Supply Source), Adalides (C3/C10) + War Drums
+  (M22) Bypass-without-stopping, M16 Camels Mules-double (laden + reach).
+- Deck: C25/M25 El Cid + M8 Dawud(b) (play named Events from deck), C26/M26
+  Al-Faraj (force enemy Held discard).
+- Events: C9 Betrayal OR-choice, M13 Severed Heads Ravaging trigger, C3/M3
+  Swollen River Avoid-block (deferred decision), C26 Reconcile clause, C5/M16
+  Drought Camels opt-out, M25/M26 Freebooter event, C13/M23 Berenguer Ramon
+  discard-removes-Count-units + own-side eligibility.
+- Cross-cutting: eligibility gating for the restricted combat/Rodrigo/Yusuf
+  caps; event_persistence metadata corrected (reader was unused -> cosmetic);
+  affordability gating so the enumerator never offers an unaffordable cap.
+
+New tests: 32 across tests/test_aow_caps_*.py, test_aow_cap_fonsadera.py,
+test_aow_event_fixes*.py, test_aow_coverage.py. Full suite green (1174);
+ruff src clean (0). Scenario F stress sweeps still complete with 0 invariant
+violations (one seed now reaches an earlier, legitimate 5.2 campaign victory).

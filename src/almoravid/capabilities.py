@@ -46,6 +46,11 @@ MUSLIM_TAIFA_SIX = frozenset({
     "abd_allah", "abu_bakr", "al_mundir", "al_mustain", "al_mutamid",
     "al_mutawakkil",
 })
+# "Not Eudes" Christian this_lord caps (C3/C10 Adalides, C11/C12 Mesnada).
+CHRISTIAN_NOT_EUDES = frozenset({
+    "alfonso", "sancho", "pedro_ansurez", "garcia_ordonez",
+    "alvar_fanez", "rodrigo_campeador",
+})
 _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
@@ -53,6 +58,20 @@ _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "M24": MUSLIM_RAIDERS_SEVEN,      # Al-Garada (Muslim Cabalgadas) [Q-002]
     "M14": MUSLIM_TAIFA_SIX,          # Ribat Monks (Taifa Muslim only)
     "M18": MUSLIM_TAIFA_SIX,          # Ribat Monks (Taifa Muslim only)
+    # Combat caps restricted to "Taifa Muslim or Rodrigo al-Sayyid".
+    "M1": MUSLIM_RAIDERS_SEVEN, "M2": MUSLIM_RAIDERS_SEVEN,
+    "M3": MUSLIM_RAIDERS_SEVEN, "M4": MUSLIM_RAIDERS_SEVEN,
+    "M5": MUSLIM_RAIDERS_SEVEN, "M6": MUSLIM_RAIDERS_SEVEN,
+    "M7": MUSLIM_RAIDERS_SEVEN, "M13": MUSLIM_RAIDERS_SEVEN,
+    "M17": MUSLIM_RAIDERS_SEVEN,
+    "M8": frozenset({"yusuf", "sir"}),         # Dawud ibn Aisha
+    "M9": frozenset({"yusuf"}),                # Emir al-Muslimin
+    "M25": frozenset({"rodrigo_al_sayyid"}),   # El Cid
+    "M26": frozenset({"rodrigo_al_sayyid"}),   # Al-Faraj
+    "C25": frozenset({"rodrigo_campeador"}),   # El Cid
+    "C26": frozenset({"rodrigo_campeador"}),   # Al-Faraj
+    "C3": CHRISTIAN_NOT_EUDES, "C10": CHRISTIAN_NOT_EUDES,   # Adalides
+    "C11": CHRISTIAN_NOT_EUDES, "C12": CHRISTIAN_NOT_EUDES,  # Mesnada
 }
 
 

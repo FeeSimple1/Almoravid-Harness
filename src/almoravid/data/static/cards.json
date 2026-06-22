@@ -13,7 +13,7 @@
     "C2": {
       "side": "christian",
       "event_name": "Camp Attack",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Ballesteros",
       "capability_scope": "this_lord",
@@ -40,7 +40,7 @@
     "C5": {
       "side": "christian",
       "event_name": "Drought",
-      "event_persistence": "hold",
+      "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Arqueros",
       "capability_scope": "this_lord",
@@ -49,7 +49,7 @@
     "C6": {
       "side": "christian",
       "event_name": "Surprise",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Siege Towers",
       "capability_scope": "this_lord",
@@ -76,7 +76,7 @@
     "C9": {
       "side": "christian",
       "event_name": "Betrayal of Terms",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Slingers",
       "capability_scope": "this_lord",
@@ -157,7 +157,7 @@
     "C18": {
       "side": "christian",
       "event_name": "Runaway Slaves",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Milites",
       "capability_scope": "side_wide",
@@ -247,7 +247,7 @@
     "M2": {
       "side": "muslim",
       "event_name": "Camp Attack",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Aqqara",
       "capability_scope": "this_lord",
@@ -283,7 +283,7 @@
     "M6": {
       "side": "muslim",
       "event_name": "Feigned Retreat",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Harbah",
       "capability_scope": "this_lord",
@@ -391,7 +391,7 @@
     "M18": {
       "side": "muslim",
       "event_name": "Refugees",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Ribat Monks",
       "capability_scope": "this_lord",
@@ -400,7 +400,7 @@
     "M19": {
       "side": "muslim",
       "event_name": "African Fleet",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Guadalquivir",
       "capability_scope": "side_wide",

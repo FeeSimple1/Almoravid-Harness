@@ -20,6 +20,39 @@ scope decision for the owner (a feature build-out), not a quick fix.
 
 ---
 
+## RESOLUTION (2026-06-21 follow-up): every gap above is now implemented
+
+The dead-data capability cluster and the partial/wrong event cases below
+have all been implemented and tested. The 18 previously-unimplemented
+capability effects, the 4 partial capabilities, the partial/wrong events,
+the eligibility-gating gap, and the metadata-flag inconsistencies are
+CLOSED. Summary of what was added (each with regression tests):
+
+- Levy Jihad removal: **C20 Fueros**, **C21 Sisnando Davidez**.
+- Muster-units: **C13/M23 Count of Barcelona**, **C18 Milites**,
+  **M15 Saqalibah**, **M20 Al-Rum**, **C22 Bishoprics**.
+- Exchange: **C23 Fonsadera**.
+- Combat: **C24 Garcia Jimenez** (+2 Storm rounds), **M17 Arrada**
+  (+3 Missile Hits at -2 Armor in Storm/Sally).
+- March/Supply: **M19 Guadalquivir** (network March), **M12 Al-Yazirat
+  al-Hadra** (double Supply Source), **Adalides (C3/C10)** + **War Drums
+  (M22)** "Bypass without stopping".
+- Deck: **C25/M25 El Cid** + **M8 Dawud(b)** (play named Events from deck),
+  **C26/M26 Al-Faraj** (force enemy Held discard).
+- Events: **C9 Betrayal** OR-choice; **M13 Severed Heads** Ravaging trigger;
+  **C3/M3 Swollen River** Avoid-block; **C26 Freebooter** Reconcile clause;
+  **C5/M16 Drought** Camels opt-out; **M16 Camels** Mules-double;
+  **M25/M26 Freebooter** event; **C13/M23 Berenguer Ramon** discard removes
+  the Count's granted units + own-side eligibility.
+- Cross-cutting: eligibility gating for the restricted combat/Rodrigo/Yusuf
+  caps (`_CAPABILITY_ELIGIBLE_LORDS`); `event_persistence` metadata flags
+  corrected to match card text (the reader `_is_immediate` was unused, so
+  cosmetic-only); added coverage tests for previously-untested effects.
+
+The sections below are retained as the original audit record.
+
+---
+
 ## Fixed in this pass (5)
 
 Contained bugs in already-implemented features — verified by hand, fixed,
