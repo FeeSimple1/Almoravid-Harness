@@ -1006,6 +1006,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_bishoprics",
                                         "side": "christian",
                                         "target_lord_id": _clid})
+            # C23 Fonsadera: exchange a Ready non-Bishop Vassal for assets.
+            if (active == "christian" and _al is not None
+                    and _al.cylinder.kind == "locale"
+                    and _shc(state, "christian", "C23")):
+                from almoravid.effective import is_besieged as _isb_fon
+                if not _isb_fon(state, _alid):
+                    for _vi, _v in enumerate(_al.vassals):
+                        if _v.ready and not _v.id.startswith("bishop"):
+                            out.append({"type": "cap_fonsadera",
+                                        "side": "christian", "lord_id": _alid,
+                                        "vassal_index": _vi, "mode": "coin"})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

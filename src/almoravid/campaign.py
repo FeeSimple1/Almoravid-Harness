@@ -6393,6 +6393,52 @@ def _count_barcelona_user(state: GameState, side: Side) -> str | None:
     return None
 
 
+def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C23 Fonsadera: an Unbesieged Christian Lord may exchange a Ready
+    non-Bishop Vassal for 1 Coin OR 3 Transport, for no actions, any
+    number of times (Arts of War ref / 3.4.3 EXCHANGE VASSAL FOR ASSETS).
+    The exchanged Vassal is set aside (Unready) until the Lord re-Musters.
+    action: lord_id, vassal_index, mode ('coin'|'transport'),
+    transport_type ('mule'|'cart', default 'mule')."""
+    side = _require_side(action)
+    _require(side == "christian", "Fonsadera is Christian", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    from almoravid.capabilities import side_has_capability
+    from almoravid.effective import is_besieged
+    _require(side_has_capability(state, side, "C23"), "C23 not in play",
+             code="no_cap")
+    lid = action.get("lord_id") or state.meta.active_lord_id
+    lid = cast(str, lid)
+    _require(lid in state.lords and state.lords[lid].side == "christian",
+             "Christian lord_id required", code="bad_arg")
+    lord = state.lords[lid]
+    _require(lord.cylinder.kind == "locale" and not is_besieged(state, lid),
+             "Lord must be on the map and Unbesieged", code="ineligible")
+    vi = action.get("vassal_index")
+    _require(isinstance(vi, int) and 0 <= vi < len(lord.vassals),
+             "vassal_index required", code="bad_arg")
+    vi = cast(int, vi)
+    vassal = lord.vassals[vi]
+    _require(vassal.ready, "Vassal not Ready", code="not_ready")
+    _require(not vassal.id.startswith("bishop"),
+             "Bishops cannot be exchanged (Fonsadera)", code="bishop")
+    mode = action.get("mode", "coin")
+    if mode == "coin":
+        lord.assets["coin"] = lord.assets.get("coin", 0) + 1
+        gained = "1 coin"
+    else:
+        tt = action.get("transport_type", "mule")
+        _require(tt in ("mule", "cart"), "transport_type mule|cart",
+                 code="bad_arg")
+        lord.assets[tt] = lord.assets.get(tt, 0) + 3
+        gained = f"3 {tt}"
+    vassal.ready = False   # set aside until re-Muster
+    _record(state, action,
+            f"C23 Fonsadera: {lid} exchanges Vassal {vassal.name} for {gained}")
+    return {"lord": lid, "vassal": vassal.name, "gained": gained}
+
+
 def _h_cap_count_barcelona(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C13 / M23 Count of Barcelona capability: the eligible Lord pays 2
     Coin once to Muster 2 Knights + 2 Men-at-Arms until the card is
@@ -6602,6 +6648,7 @@ CAMPAIGN_HANDLERS = {
     "cap_al_rum": _h_cap_al_rum,
     "cap_milites": _h_cap_milites,
     "cap_bishoprics": _h_cap_bishoprics,
+    "cap_fonsadera": _h_cap_fonsadera,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,
