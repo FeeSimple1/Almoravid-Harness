@@ -1025,6 +1025,41 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _gd in _gqt(state, _alid):
                         out.append({"type": "cmd_guadalquivir",
                                     "side": "muslim", "target_locale_id": _gd})
+            # C25/M25 El Cid + M8 Dawud(b): play a named Event from deck.
+            from almoravid.campaign import (_ELCID_PLAYABLE, _DAWUD_PLAYABLE,
+                                            _card_available_in_deck)
+            from almoravid.capabilities import lord_has_capability as _lhc_deck
+            if _al is not None and _alid is not None:
+                _rod = ("rodrigo_campeador" if active == "christian"
+                        else "rodrigo_al_sayyid")
+                _ecard, _eallowed = _ELCID_PLAYABLE[active]
+                if (_alid == _rod and _lhc_deck(state, _alid, _ecard)
+                        and not state.meta.aow_cap_state.get("elcid_used")):
+                    for _cid in sorted(_eallowed):
+                        if _card_available_in_deck(state, active, _cid):
+                            out.append({"type": "cap_play_event_from_deck",
+                                        "side": active, "source": "elcid",
+                                        "card_id": _cid})
+                # Al-Faraj: Rodrigo at/adjacent to an Enemy Lord.
+                _afcard = "C26" if active == "christian" else "M26"
+                if _alid == _rod and _lhc_deck(state, _alid, _afcard):
+                    from almoravid.map import all_neighbors as _an_af
+                    if _al.cylinder.kind == "locale":
+                        _hl = _al.cylinder.locale_id
+                        _adj = {_hl} | set(_an_af(_hl))
+                        _en = "muslim" if active == "christian" else "christian"
+                        if any(o.side == _en and o.cylinder.kind == "locale"
+                               and o.cylinder.locale_id in _adj
+                               for o in state.lords.values()):
+                            out.append({"type": "cap_al_faraj", "side": active})
+                # M8 Dawud(b): Yusuf/Sir with M8 play a Battle Event from deck.
+                if (active == "muslim" and _lhc_deck(state, _alid, "M8")
+                        and not state.meta.aow_cap_state.get("dawud_used")):
+                    for _cid in sorted(_DAWUD_PLAYABLE):
+                        if _card_available_in_deck(state, "muslim", _cid):
+                            out.append({"type": "cap_play_event_from_deck",
+                                        "side": "muslim", "source": "dawud",
+                                        "card_id": _cid})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

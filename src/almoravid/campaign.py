@@ -611,6 +611,8 @@ def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
     for _l in state.lords.values():
         _l.moved_fought = False
         _l.bypassed_this_card = False  # per-card scope (4.3.5)
+    state.meta.aow_cap_state.pop("elcid_used", None)
+    state.meta.aow_cap_state.pop("dawud_used", None)
     # Pattern 3 per-card flag reset (only if Lord still exists in state
     # — disband doesn't remove Lord from state.lords, just changes
     # cylinder, so this is safe)
@@ -5051,6 +5053,125 @@ def _guadalquivir_targets(state: GameState, lord_id: str) -> list[str]:
     return sorted(d for d in net if d != here and d not in christian_at)
 
 
+_ELCID_PLAYABLE = {"christian": ("C25", {"C2", "C3", "C6", "C7", "C8"}),
+                   "muslim": ("M25", {"M2", "M3", "M6", "M7", "M19"})}
+_DAWUD_PLAYABLE = {"M2", "M6", "M7"}
+
+
+def _card_available_in_deck(state: GameState, side: Side, card_id: str) -> bool:
+    """A card is searchable in `side`'s Arts of War deck iff it belongs to
+    that side and is not currently Held, in play (capability / board edge /
+    hold bucket / pending), discarded, or removed (mirrors 3.1.1)."""
+    if not card_id.startswith("C" if side == "christian" else "M"):
+        return False
+    d = state.decks
+    if card_id in d.held.get(side, []) or card_id in d.discard:
+        return False
+    if card_id in d.removed_from_game:
+        return False
+    if card_id in d.this_levy_events.get(side, []):
+        return False
+    if card_id in d.this_campaign_events.get(side, []):
+        return False
+    if card_id in d.board_edge.get(side, []):
+        return False
+    if any(c.card_id == card_id for c in d.capabilities_in_play):
+        return False
+    if card_id in d.pending_draw.get(side, []):
+        return False
+    return True
+
+
+def _h_cap_play_event_from_deck(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C25/M25 El Cid + M8 Dawud ibn Aisha (b): the eligible Lord, on his
+    Command card (El Cid) or at Battle-Event time (Dawud), may search his
+    Arts of War deck for one named Event and play it immediately (Arts of
+    War ref). Once per Command card."""
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    source = action.get("source", "elcid")
+    lid = cast(str, state.meta.active_lord_id)
+    from almoravid.capabilities import lord_has_capability
+    if source == "dawud":
+        _require(side == "muslim", "Dawud is Muslim", code="wrong_side")
+        _require(lord_has_capability(state, lid, "M8"),
+                 "active Lord lacks Dawud (M8)", code="no_cap")
+        allowed = _DAWUD_PLAYABLE
+        flag = "dawud_used"
+    else:
+        rod = "rodrigo_campeador" if side == "christian" else "rodrigo_al_sayyid"
+        card, allowed = _ELCID_PLAYABLE[side]
+        _require(lid == rod and lord_has_capability(state, lid, card),
+                 "El Cid requires Rodrigo with the capability active",
+                 code="not_eligible")
+        flag = "elcid_used"
+    _require(not state.meta.aow_cap_state.get(flag),
+             "this deck-search capability was already used this card",
+             code="cap_used")
+    card_id = action.get("card_id")
+    _require(card_id in allowed, f"card must be one of {sorted(allowed)}",
+             code="bad_card")
+    card_id = cast(str, card_id)
+    _require(_card_available_in_deck(state, side, card_id),
+             f"{card_id} is not available in the deck (Held/in-play/"
+             f"discarded)", code="card_unavailable")
+    from almoravid.events import resolve_event
+    res = resolve_event(state, side, card_id)
+    state.meta.aow_cap_state[flag] = True
+    _record(state, action,
+            f"{side} {lid} plays {card_id} from deck "
+            f"({'Dawud M8' if source == 'dawud' else 'El Cid'})")
+    return {"played": card_id, "event_result": res}
+
+
+def _h_cap_al_faraj(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C26/M26 Al-Faraj: Rodrigo, using his entire Command card while at or
+    adjacent to an Enemy Lord, makes the enemy discard 1 random Held card
+    (Arts of War ref)."""
+    from almoravid.map import all_neighbors
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    rod = "rodrigo_campeador" if side == "christian" else "rodrigo_al_sayyid"
+    lid = cast(str, state.meta.active_lord_id)
+    from almoravid.capabilities import lord_has_capability
+    card = "C26" if side == "christian" else "M26"
+    _require(lid == rod and lord_has_capability(state, lid, card),
+             "Al-Faraj requires Rodrigo with the capability active",
+             code="not_eligible")
+    lord = state.lords[lid]
+    _require(lord.cylinder.kind == "locale", "Rodrigo not on map",
+             code="not_on_map")
+    here = cast(str, lord.cylinder.locale_id)
+    enemy = "muslim" if side == "christian" else "christian"
+    adj = {here} | set(all_neighbors(here))
+    near_enemy = any(o.side == enemy and o.cylinder.kind == "locale"
+                     and o.cylinder.locale_id in adj
+                     for o in state.lords.values())
+    _require(near_enemy, "no Enemy Lord at or adjacent to Rodrigo",
+             code="no_enemy_near")
+    # Collect the enemy's Held cards (Held bucket + hold buckets).
+    held = (list(state.decks.held.get(enemy, []))
+            + list(state.decks.this_levy_events.get(enemy, []))
+            + list(state.decks.this_campaign_events.get(enemy, [])))
+    state.meta.actions_remaining = 0   # uses the entire Command card
+    from almoravid.rng import roll_d6
+    if not held:
+        _record(state, action, f"{side} Al-Faraj: enemy has no Held cards")
+        return {"discarded": None}
+    pick = held[roll_d6(state) % len(held)]
+    for bucket in (state.decks.held.get(enemy, []),
+                   state.decks.this_levy_events.get(enemy, []),
+                   state.decks.this_campaign_events.get(enemy, [])):
+        if pick in bucket:
+            bucket.remove(pick)
+            break
+    state.decks.discard.append(pick)
+    _record(state, action, f"{side} Al-Faraj: enemy discards Held {pick}")
+    return {"discarded": pick}
+
+
 def _h_cmd_guadalquivir_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """M19 Guadalquivir capability: a Taifa Lord may March (normal cost,
     1 action) directly between any two network Locales (Ports + Cordoba/
@@ -6747,6 +6868,8 @@ CAMPAIGN_HANDLERS = {
     "cap_bishoprics": _h_cap_bishoprics,
     "cap_fonsadera": _h_cap_fonsadera,
     "cmd_guadalquivir": _h_cmd_guadalquivir_march,
+    "cap_play_event_from_deck": _h_cap_play_event_from_deck,
+    "cap_al_faraj": _h_cap_al_faraj,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,
