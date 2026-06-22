@@ -45,6 +45,14 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.extend(_march_response_moves(state))
         return moves
 
+    # C3/M3 Swollen River Avoid-block: the Approaching side chooses whether
+    # to play the Held card to cancel the Defender's Avoid (-> Battle).
+    if (state.pending is not None
+            and state.pending.kind == "swollen_river_block"):
+        w = state.pending.waiting_on
+        return [{"type": "respond_swollen_river_block", "side": w, "play": True},
+                {"type": "respond_swollen_river_block", "side": w, "play": False}]
+
     # C1 (4.3.5): after a Withdraw, the Active side must choose Besiege
     # or Bypass before any other action.
     if (state.pending is not None
@@ -1060,6 +1068,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_play_event_from_deck",
                                         "side": "muslim", "source": "dawud",
                                         "card_id": _cid})
+                # M13 Severed Heads (Ravaging mode): shift a Taifa Lord 2
+                # boxes OR +2 Jihad (Arts of War ref).
+                if (active == "muslim"
+                        and "M13" in state.decks.this_levy_events.get("muslim", [])):
+                    out.append({"type": "play_severed_heads",
+                                "side": "muslim", "mode": "jihad"})
+                    for _tl, _tlo in state.lords.items():
+                        if _tlo.is_taifa and _tlo.cylinder.kind == "calendar":
+                            out.append({"type": "play_severed_heads",
+                                        "side": "muslim", "mode": "shift",
+                                        "target_lord": _tl})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

@@ -1987,6 +1987,8 @@ def _group_laden(state: GameState, lord_ids: list[str],
     """C3/C4 (4.3.1/4.3.2 SHARED TRANSPORT): a March group's Laden status
     is computed from the COMBINED Provender, Loot, Carts and Mules of all
     Lords moving together (1.5.2). Same triggers as _is_laden."""
+    from almoravid.capabilities import side_has_capability as _shc_m16
+    m16 = _shc_m16(state, "muslim", "M16")
     prov = loot = cart = mule = 0
     for lid in lord_ids:
         lord = state.lords.get(lid)
@@ -1995,7 +1997,12 @@ def _group_laden(state: GameState, lord_ids: list[str],
         prov += lord.assets.get("prov", 0)
         loot += lord.assets.get("loot", 0)
         cart += lord.assets.get("cart", 0)
-        mule += lord.assets.get("mule", 0)
+        m = lord.assets.get("mule", 0)
+        mule += m
+        # M16 Camels: Yusuf/Sir Mules carry twice as much Provender, so
+        # count their Mules twice for Laden capacity (Arts of War ref M16).
+        if m16 and lid in ("yusuf", "sir"):
+            mule += m
     transport = cart + mule
     if loot >= 1:
         return True
@@ -2531,6 +2538,9 @@ def _h_cmd_supply(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # 4.6.1: the Active Lord must "have or Share (1.5.2)" enough Transport
     # — count co-located same-side Lords' Carts/Mules too.
     has_cart, has_mule = _shared_transport_at(state, here, side)
+    # M16 Camels: Yusuf/Sir Mules reach twice as far to Supply Sources.
+    if lord_id in ("yusuf", "sir") and _shc_m12(state, "muslim", "M16"):
+        has_mule *= 2
     if has_cart + has_mule < total_hops:
         raise IllegalAction(
             f"Supply needs {total_hops} Cart/Mule(s) for "
@@ -4250,6 +4260,22 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     from_locale = payload["from_locale_id"]
     active_side = payload["active_side"]
 
+    # C3/M3 Swollen River: the Approaching side may play it (Held) to block
+    # this Defender's Avoid Battle -> forced Stand/Battle, with no Asset
+    # discard for the cancelled Avoid (Arts of War ref C3/M3). Offer the
+    # decision to the Approaching side before the Avoid executes.
+    from almoravid.state import PendingDecision as _PD_sr
+    if not action.get("_resolved_block"):
+        _blk = "C3" if side == "muslim" else "M3"
+        if _blk in state.decks.this_levy_events.get(active_side, []):
+            state.pending = _PD_sr(
+                kind="swollen_river_block", waiting_on=active_side,
+                payload={"march_payload": dict(payload),
+                         "avoid_action": dict(action),
+                         "defender_side": side, "blocker_card": _blk})
+            return {"pending": "swollen_river_block",
+                    "waiting_on": active_side, "blocker_card": _blk}
+
     target = action.get("target_locale_id")
     target = cast(str, target)
     way_type = action.get("way_type", "road")
@@ -4671,6 +4697,31 @@ def _h_relief_concede(state: GameState,
                                 dfd=rs.result.defender, pl=pl)
 
 
+def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the C3/M3 Swollen River Avoid-block decision. `play=True`
+    cancels the Avoid (discard Swollen River, force the Defender to Stand
+    -> Battle); `play=False` lets the Avoid proceed."""
+    from almoravid.state import PendingDecision as _PD_b
+    side = _require_side(action)
+    pd = _require_pending(state, "swollen_river_block", side)
+    p = pd.payload
+    defender_side = p["defender_side"]
+    blocker_card = p["blocker_card"]
+    # Restore the Defender's march_arrival_response pending either way.
+    state.pending = _PD_b(kind="march_arrival_response",
+                          waiting_on=defender_side,
+                          payload=p["march_payload"])
+    if action.get("play"):
+        if blocker_card in state.decks.this_levy_events.get(side, []):
+            state.decks.this_levy_events[side].remove(blocker_card)
+        state.decks.discard.append(blocker_card)
+        return _h_respond_stand_battle(
+            state, {"type": "respond_stand_battle", "side": defender_side})
+    avoid = dict(p["avoid_action"])
+    avoid["_resolved_block"] = True
+    return _h_respond_avoid_battle(state, avoid)
+
+
 def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
     on both sides at the Approach Locale. Battle ends the active side's
@@ -4891,6 +4942,39 @@ def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, 
     _record(state, action, f"Christian plays C14 Pope Gregory on "
             f"{lord_id} ({mode})")
     return result
+
+
+def _h_play_severed_heads(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Play held M13 Severed Heads in its 'as Ravaging' mode (Arts of War
+    ref): shift one Taifa Lord's Service 2 boxes left, OR add 2 Jihad.
+    (The 'Christians Retreat/Sacked' trigger auto-resolves +4 Jihad in
+    apply_retreat_aftermath.) action: mode ('shift'|'jihad'), target_lord
+    (for shift)."""
+    from almoravid.events import _add_jihad
+    from almoravid.actions import _shift_service_left
+    side = _require_side(action)
+    _require(side == "muslim", "M13 is a Muslim event", code="wrong_side")
+    _require("M13" in state.decks.this_levy_events.get("muslim", []),
+             "M13 not held", code="card_not_held")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    mode = action.get("mode", "jihad")
+    if mode == "shift":
+        tgt = action.get("target_lord")
+        _require(tgt in state.lords and state.lords[tgt].is_taifa,
+                 "target_lord must be a Taifa Lord", code="bad_target")
+        tgt = cast(str, tgt)
+        _shift_service_left(state, tgt, 2)
+        result = {"mode": "shift", "target_lord": tgt, "boxes": 2}
+    else:
+        placement = _add_jihad(state, 2, action.get("payload") or {})
+        if placement is None:
+            return {"no_op": True, "reason": "no eligible Jihad locale"}
+        result = {"mode": "jihad", "jihad_added": 2, "placement": placement}
+    state.decks.this_levy_events["muslim"].remove("M13")
+    state.decks.discard.append("M13")
+    _record(state, action, f"Muslim plays M13 Severed Heads (Ravaging): {result}")
+    return {"card_id": "M13", "side": side, **result}
 
 
 def _h_play_al_qadir(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -6875,6 +6959,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_guadalquivir": _h_cmd_guadalquivir_march,
     "cap_play_event_from_deck": _h_cap_play_event_from_deck,
     "cap_al_faraj": _h_cap_al_faraj,
+    "play_severed_heads": _h_play_severed_heads,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,
@@ -6896,6 +6981,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_sally": _h_cmd_sally,
     "end_campaign": _h_end_campaign,
     "respond_avoid_battle": _h_respond_avoid_battle,
+    "respond_swollen_river_block": _h_respond_swollen_river_block,
     "respond_withdraw": _h_respond_withdraw,
     "respond_stand_battle": _h_respond_stand_battle,
     "respond_besiege": _h_respond_besiege,
