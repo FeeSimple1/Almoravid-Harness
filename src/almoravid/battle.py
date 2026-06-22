@@ -611,6 +611,7 @@ def _resolve_step(
     round_index: int = 0,
     melee_hits_override: int | None = None,
     c8_ctx: dict[str, Any] | None = None,
+    arrada_active: bool = False,
 ) -> StepResolution:
     # Phase 6f: per-pair Strike when both sides have multi-Lord arrays
     # AND context is Battle. Storm and single-Lord cases keep the legacy
@@ -735,10 +736,22 @@ def _resolve_step(
         # (only melee here so just attribute everything to melee).
         per_kind_hits = {"melee": rounded}
 
+    # M17 Arrada (Catapults): a Muslim Lord with Arrada at a Storm (or
+    # Sally) adds 3 Missile Hits to the Muslim Missiles step, resolved at
+    # -2 Enemy Armor (Arts of War ref M17; need not be the acting Lord).
+    arrada_n = 0
+    if (step_type == "missile" and actor.side == "muslim"
+            and (context == "storm" or arrada_active)):
+        from almoravid.capabilities import any_lord_with_capability as _alwc_m17
+        if set(_alwc_m17(state, "muslim", "M17")) & set(actor.lord_ids):
+            arrada_n = 3
+            per_kind_hits = dict(per_kind_hits)
+            per_kind_hits["arrada"] = per_kind_hits.get("arrada", 0) + 3
+    total_hits = rounded + arrada_n
     result = StepResolution(step=step_id, actor=actor_role,
-                            raw_hits=raw, rounded_hits=rounded)
+                            raw_hits=raw, rounded_hits=total_hits)
     _apply_step_cancellation_and_hits(
-        state, actor_role, target, per_kind_hits, rounded,
+        state, actor_role, target, per_kind_hits, total_hits,
         walls_range, siege_markers, context, unit_class, result)
     return result
 
@@ -769,7 +782,7 @@ def _apply_step_cancellation_and_hits(
             canceled = sum(1 for d in dice if wlo <= d <= whi)
             # Drain non-Crossbow first, then Crossbow.
             drain_order = ["javelins", "slingers", "bowmen", "missiles",
-                           "melee", "crossbows"]
+                           "arrada", "melee", "crossbows"]
             for k in drain_order:
                 if canceled <= 0:
                     break
@@ -781,7 +794,7 @@ def _apply_step_cancellation_and_hits(
             dice = [roll_d6(state) for _ in range(rounded)]
             canceled = sum(1 for d in dice if d <= siege_markers)
             drain_order = ["javelins", "slingers", "bowmen", "missiles",
-                           "melee", "crossbows"]
+                           "arrada", "melee", "crossbows"]
             for k in drain_order:
                 if canceled <= 0:
                     break
@@ -805,7 +818,7 @@ def _apply_step_cancellation_and_hits(
             continue
         striker_selects_target = (kind == "crossbows")
         protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
-        minus_armor = 1 if kind == "crossbows" else 0
+        minus_armor = 2 if kind == "arrada" else (1 if kind == "crossbows" else 0)
         for _ in range(count):
             if not target.has_unrouted():
                 break
@@ -1784,6 +1797,14 @@ def _storm_setup(
         walls_range = walls_range_override
     if max_rounds is None:
         max_rounds = 1
+    # C24 Garcia Jimenez: this Lord's Storm may go 2 extra Rounds. The
+    # Storm must be on this Lord's card, so gate on the active Lord being
+    # an Attacker holding C24 (Arts of War ref C24).
+    from almoravid.capabilities import lord_has_capability as _lhc_gj
+    _gj_lord = state.meta.active_lord_id
+    if (_gj_lord in attacker.lord_ids
+            and _lhc_gj(state, _gj_lord, "C24")):
+        max_rounds += 2
 
     siegeworks_count = 0
     if locale_id is not None:
@@ -2170,7 +2191,8 @@ def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
     step = _resolve_step(state, kw["step_id"], actor_role,
                          kw["step_type"], kw["unit_class"],
                          attacker_side, defender_side, context="battle",
-                         walls_range=kw.get("walls_range"))
+                         walls_range=kw.get("walls_range"),
+                         arrada_active=True)
     _relief_push_lane(rs, target, before)
     return step
 
