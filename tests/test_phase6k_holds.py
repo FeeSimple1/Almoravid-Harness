@@ -22,10 +22,9 @@ def test_c13_grants_units_when_count_with_christians() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     s.meta.count_of_barcelona_side = "christian"
     # Pick a Lord that exists in this scenario.
-    target_candidates = [lid for lid in ("sancho", "eudes",
-                                          "al_mustain", "al_mundir")
+    target_candidates = [lid for lid in ("sancho", "eudes")
                          if lid in s.lords]
-    assert target_candidates, "no Berenguer-eligible Lord in this scenario"
+    assert target_candidates, "no C13-eligible Christian Lord"
     target = target_candidates[0]
     s.lords[target].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords[target].in_stronghold = False
@@ -45,16 +44,24 @@ def test_c13_grants_units_when_count_with_christians() -> None:
 def test_c13_discards_no_effect_when_count_with_muslims() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     s.meta.count_of_barcelona_side = "muslim"
+    # Muslims first take the Count via M23 (records granted units).
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
+    s.lords["al_mustain"].assets = {"coin": 3}
+    s.meta.aow_cap_state["M23_units"] = {"lord": "al_mustain",
+                                         "knights": 2, "men_at_arms": 2}
+    k0 = s.lords["al_mustain"].forces.get("knights", 0)
     r = resolve_event(s, "christian", "C13")
-    assert r["discarded_no_effect"] is True
+    assert r["discarded"] is True
     assert "C13" in s.decks.discard
+    # Berenguer Ramon removes the Count's granted units from the Muslim Lord.
+    assert s.lords["al_mustain"].forces.get("knights", 0) == max(0, k0 - 2)
 
 
 def test_m23_mirrors_c13_when_count_with_christians() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     s.meta.count_of_barcelona_side = "christian"
     r = resolve_event(s, "muslim", "M23")
-    assert r["discarded_no_effect"] is True
+    assert r["discarded"] is True
 
 
 # ---------------------------------------------------------------------------

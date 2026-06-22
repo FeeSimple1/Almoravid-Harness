@@ -177,6 +177,21 @@ def _drought(state: GameState, side: Side, card_id: str,
     from almoravid.campaign import _feed_lord
     from almoravid.effective import has_gardens, is_friendly_locale
     target_side: Side = "muslim" if card_id == "C5" else "christian"
+    # M16 Camels: if the Muslims are the target and hold Camels, they may
+    # discard it to cancel Drought without effect (Arts of War ref C5/M16).
+    if target_side == "muslim":
+        from almoravid.capabilities import side_has_capability as _shc_dr
+        if _shc_dr(state, "muslim", "M16"):
+            state.decks.capabilities_in_play = [
+                c for c in state.decks.capabilities_in_play
+                if c.card_id != "M16"]
+            for _edge in state.decks.board_edge.values():
+                if "M16" in _edge:
+                    _edge.remove("M16")
+            state.decks.discard.append("M16")
+            state.decks.discard.append(card_id)
+            return {"card_id": card_id, "side": side, "target_side": target_side,
+                    "camels_negated": True, "fed_lords": []}
     candidates: list[str] = []
     for lord in state.lords.values():
         if lord.side != target_side:
@@ -439,6 +454,23 @@ def unresolved_event_cards() -> list[str]:
 # These cards persist through Battle resolution; Phase 5 Battle code
 # (battle.py) can consult state.decks.this_levy_events to apply effects.
 
+def _remove_count_units(state: GameState, card: str) -> dict[str, Any] | None:
+    """Remove the units a Count-of-Barcelona capability (C13/M23) granted,
+    recorded in meta.aow_cap_state[f'{card}_units'] (Pattern 8 discard)."""
+    rec = state.meta.aow_cap_state.pop(f"{card}_units", None)
+    state.meta.aow_cap_state.pop(f"{card}_used", None)
+    if not rec:
+        return None
+    lord = state.lords.get(rec.get("lord"))
+    if lord is None:
+        return None
+    for ut in ("knights", "men_at_arms"):
+        n = rec.get(ut, 0)
+        if n:
+            lord.forces[ut] = max(0, lord.forces.get(ut, 0) - n)
+    return rec
+
+
 @register("C13")  # Berenguer Ramon — Christian event
 def _c13_berenguer_ramon(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
@@ -453,12 +485,13 @@ def _c13_berenguer_ramon(state: GameState, side: Side, card_id: str,
     available.
     """
     if state.meta.count_of_barcelona_side == "muslim":
+        removed = _remove_count_units(state, "M23")
+        state.meta.count_of_barcelona_side = None
         state.decks.discard.append(card_id)
         return {"card_id": card_id, "side": side,
-                "discarded_no_effect": True,
+                "discarded": True, "removed_units": removed,
                 "reason": "Count of Barcelona with Muslims"}
-    eligible = [lid for lid in ("sancho", "eudes",
-                                 "al_mustain", "al_mundir")
+    eligible = [lid for lid in ("sancho", "eudes")
                 if lid in state.lords
                 and state.lords[lid].cylinder.kind == "locale"]
     target = payload.get("target_lord_id")
@@ -493,12 +526,13 @@ def _m23_berenguer_ramon(state: GameState, side: Side, card_id: str,
     by paying 1 Asset (coin).
     """
     if state.meta.count_of_barcelona_side == "christian":
+        removed = _remove_count_units(state, "C13")
+        state.meta.count_of_barcelona_side = None
         state.decks.discard.append(card_id)
         return {"card_id": card_id, "side": side,
-                "discarded_no_effect": True,
+                "discarded": True, "removed_units": removed,
                 "reason": "Count of Barcelona with Christians"}
-    eligible = [lid for lid in ("al_mustain", "al_mundir",
-                                 "sancho", "eudes")
+    eligible = [lid for lid in ("al_mustain", "al_mundir")
                 if lid in state.lords
                 and state.lords[lid].cylinder.kind == "locale"]
     target = (payload.get("target_lord_id")
@@ -610,6 +644,41 @@ def _c25_de_vivar(state: GameState, side: Side, card_id: str,
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
+@register("M25")  # Freebooter (Muslim) — Disband Rodrigo Campeador
+@register("M26")
+def _m25_m26_freebooter(state: GameState, side: Side, card_id: str,
+         payload: dict[str, Any]) -> dict[str, Any]:
+    """M25/M26 (Immediate) Freebooter: Disband Rodrigo Campeador as if at
+    Service Limit (3.3.2). If desired, expend 1 Taifas-box Conquered/1VP
+    marker to replace him on the Calendar with Rodrigo al-Sayyid (green)
+    in the same box (Arts of War ref M25 & M26)."""
+    from almoravid.state import Cylinder
+    target = "rodrigo_campeador"
+    lord = state.lords.get(target)
+    if lord is None or lord.cylinder.kind != "locale":
+        return _no_op_with_note(state, card_id, side,
+                                f"{target} not on map")
+    for field_name in lord.cleanup_on_removal_fields:
+        try:
+            setattr(lord, field_name, type(getattr(lord, field_name))())
+        except Exception:
+            pass
+    # 3.3.2: Disband to the Calendar two boxes ahead (per Tips).
+    box = min(16, state.calendar.current_box + 2)
+    lord.cylinder = Cylinder(kind="calendar", box=box)
+    state.decks.discard.append(card_id)
+    swapped = False
+    if payload.get("swap_to_al_sayyid") and state.taifas_box_vp >= 1:
+        state.taifas_box_vp -= 1.0
+        sayyid = state.lords.get("rodrigo_al_sayyid")
+        if sayyid is not None:
+            sayyid.cylinder = Cylinder(kind="calendar", box=box)
+            lord.cylinder = Cylinder(kind="removed")
+            swapped = True
+    return {"card_id": card_id, "side": side, "disbanded": target,
+            "calendar_box": box, "swapped_to_al_sayyid": swapped}
+
+
 @register("C26")  # Freebooter
 def _c26_freebooter(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
@@ -635,7 +704,15 @@ def _c26_freebooter(state: GameState, side: Side, card_id: str,
     _shift_service_left(state, target, boxes=20)  # off-left
     lord.cylinder = Cylinder(kind="removed")
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "disbanded": target}
+    # Optional: Reconcile with Rodrigo now for just 1 VP to the Taifas box
+    # (3.5.1; immediate, not during Call to Arms). payload['reconcile'].
+    reconciled = False
+    if payload.get("reconcile"):
+        from almoravid.actions import _reconcile_rodrigo_effect
+        _reconcile_rodrigo_effect(state, 1.0)
+        reconciled = True
+    return {"card_id": card_id, "side": side, "disbanded": target,
+            "reconciled": reconciled}
 
 
 @register("M13")  # Severed Heads

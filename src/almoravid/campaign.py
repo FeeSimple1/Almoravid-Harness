@@ -3113,7 +3113,11 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                        state.decks.this_levy_events.get("christian", []))
             spoils = {}
             if c9_held:
-                multiplier = 2
+                # C9 OR-choice (Arts of War ref): "single" = take Spoils as
+                # if Sack (x1, no Jihad); "double" (default) = twice the
+                # Spoils and the Muslims add 1 Jihad.
+                c9_mode = action.get("c9_mode", "double")
+                multiplier = 1 if c9_mode == "single" else 2
                 spoils = {k: v * multiplier for k, v in base_spoils.items()}
                 friendly_here = [
                     lord_obj.id for lord_obj in state.lords.values()
@@ -3124,8 +3128,9 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                     distribute_spoils_round_robin(state, friendly_here, spoils)
                 state.decks.this_levy_events["christian"].remove("C9")
                 state.decks.discard.append("C9")
-                from almoravid.events import _add_jihad
-                _add_jihad(state, 1, {})
+                if c9_mode != "single":
+                    from almoravid.events import _add_jihad
+                    _add_jihad(state, 1, {})
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": True, "conquest": conq_result,
                                 "spoils": spoils, "c9_betrayal_used": c9_held}

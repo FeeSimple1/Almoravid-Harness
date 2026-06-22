@@ -453,18 +453,18 @@
     },
     "M25": {
       "side": "muslim",
-      "event_name": null,
-      "event_persistence": null,
-      "no_event": true,
+      "event_name": "Freebooter",
+      "event_persistence": "immediate",
+      "no_event": false,
       "capability_name": "El Cid",
       "capability_scope": "this_lord",
       "no_capability": false
     },
     "M26": {
       "side": "muslim",
-      "event_name": null,
-      "event_persistence": null,
-      "no_event": true,
+      "event_name": "Freebooter",
+      "event_persistence": "immediate",
+      "no_event": false,
       "capability_name": "Al-Faraj",
       "capability_scope": "this_lord",
       "no_capability": false
