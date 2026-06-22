@@ -819,3 +819,24 @@ New tests: 32 across tests/test_aow_caps_*.py, test_aow_cap_fonsadera.py,
 test_aow_event_fixes*.py, test_aow_coverage.py. Full suite green (1174);
 ruff src clean (0). Scenario F stress sweeps still complete with 0 invariant
 violations (one seed now reaches an earlier, legitimate 5.2 campaign victory).
+
+## Follow-up 2026-06-21 — multi-Lord cap-leak fix + Advanced Vassal Service stress
+
+Closed the two residuals flagged in the post-build review:
+- **this_lord missile-cap leak (pooled multi-Lord path) — FIXED.** When a
+  multi-Lord side fought a single-Lord side, the per-pair resolver did not
+  run (it requires BOTH sides to have Arrays), so the pooled path unioned
+  capabilities across all Lords — a Crossbows/Bowmen/Javelins/Slingers cap
+  held by one Lord armed a co-located Lord's units. `build_strike_rows` now
+  builds capability-gated rows PER LORD from `side.array` (own caps +
+  per-Lord Javelin(4)/Slinger(3) budgets); base strikes stay pooled and
+  single-Lord sides are byte-for-byte unchanged. tests/test_multilord_cap_scope.py (4).
+- **Advanced Vassal Service (3.4.2) stress pass — CLEAN.** Extended
+  scripts/stress_invariants.py with a `meta_opts` hook + a Vassal-marker
+  range invariant, then swept all six scenarios x seeds x profiles with
+  `advanced_vassal_service=True`: 56 runs, 0 invariant violations, 0
+  rejected enumerated actions, 0 crashes (48 full completions). Regression
+  guard: tests/test_advanced_vassal_stress.py (3). (The earlier Unfed-penalty
+  cascade fix is covered separately in test_aow_coverage.py.)
+
+Full suite green (1182); ruff src clean.

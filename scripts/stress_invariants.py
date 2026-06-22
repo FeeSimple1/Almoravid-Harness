@@ -116,6 +116,16 @@ def check_invariants(state: GameState) -> list[str]:
             errs.append(f"calendar box out of range {lid}={lord.cylinder.box}")
         if kind == "locale" and lord.cylinder.locale_id not in state.locales:
             errs.append(f"unknown locale {lid}={lord.cylinder.locale_id}")
+    # Advanced Vassal Service (3.4.2): Vassal markers must be in range and
+    # not reference an off-map / removed Lord whose own marker is gone.
+    if state.meta.advanced_vassal_service:
+        for marker in state.calendar.service_markers:
+            vid = getattr(marker, "vassal_id", None)
+            if vid is None:
+                continue
+            if (marker.box is not None and not 0 <= marker.box <= 17):
+                errs.append(f"vassal marker box out of range "
+                            f"{marker.lord_id}/{vid}={marker.box}")
     # At most one (Lord, not Vassal) Service marker per Lord.
     marker_counts: Counter = Counter()
     for marker in state.calendar.service_markers:
@@ -150,15 +160,21 @@ def run_playthrough(
     profile: str = "survival",
     max_steps: int = 25_000,
     inject_interactive: bool = True,
+    meta_opts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Drive one invariant-checked playthrough. Returns a summary dict whose
-    `status` is 'completed', 'max_steps', or one of the failure statuses."""
+    `status` is 'completed', 'max_steps', or one of the failure statuses.
+    `meta_opts` sets GameState.meta fields after load (e.g.
+    advanced_vassal_service=True) so optional rules can be stress-tested."""
     weights = _PROFILES[profile]
     # Deterministic, reproducible RNG: a STABLE per-profile offset
     # (never hash(), which Python salts per process).
     profile_offset = {"survival": 0, "combat": 1, "siege": 2}.get(profile, 9)
     rng = random.Random(seed * 104_729 + profile_offset * 7_919 + 3)
     state = load_scenario(scenario, seed=seed)
+    if meta_opts:
+        for _k, _v in meta_opts.items():
+            setattr(state.meta, _k, _v)
     pending_census: Counter = Counter()
     action_census: Counter = Counter()
     recent: list[str] = []
