@@ -6364,11 +6364,244 @@ def _h_cap_sisnando(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return {"locale": target, "jihad_removed": 1}
 
 
+# ---------------------------------------------------------------------------
+# Arts of War "Muster units" capabilities (3.4.2 ARTS OF WAR). Modeled as
+# free (0-action) effects at the eligible Lord's Activation, gated via
+# meta.aow_cap_state. Units added are recorded so a later discard
+# (Berenguer Ramon, etc.) can remove the same number (Pattern 8).
+# ---------------------------------------------------------------------------
+
+_BARCELONA = {"christian": ("C13", ("sancho", "eudes")),
+              "muslim": ("M23", ("al_mustain", "al_mundir"))}
+
+
+def _count_barcelona_user(state: GameState, side: Side) -> str | None:
+    """The active Lord eligible to use Count of Barcelona for `side`, or
+    None. Requires: the card in play, the Count on this side, an eligible
+    active Lord on the map, and not yet used."""
+    from almoravid.capabilities import side_has_capability
+    card, eligible = _BARCELONA[side]
+    if not side_has_capability(state, side, card):
+        return None
+    if state.meta.count_of_barcelona_side != side:
+        return None
+    if state.meta.aow_cap_state.get(f"{card}_used"):
+        return None
+    lid = state.meta.active_lord_id
+    if lid in eligible and state.lords[lid].cylinder.kind == "locale":
+        return lid
+    return None
+
+
+def _h_cap_count_barcelona(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C13 / M23 Count of Barcelona capability: the eligible Lord pays 2
+    Coin once to Muster 2 Knights + 2 Men-at-Arms until the card is
+    discarded (Arts of War ref). Coin may come from the Lord's mat or
+    (Muslim, 1.3.3) the Taifas box; Sharing (1.5.2) from a co-located
+    friendly Lord also counts."""
+    side = _require_side(action)
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    lid = _count_barcelona_user(state, side)
+    _require(lid is not None, "no eligible Count-of-Barcelona user",
+             code="not_eligible")
+    lid = cast(str, lid)
+    card = _BARCELONA[side][0]
+    paid = _pay_coin_for_cap(state, lid, side, 2)
+    _require(paid, "need 2 Coin to use Count of Barcelona", code="no_coin")
+    lord = state.lords[lid]
+    for ut, n in (("knights", 2), ("men_at_arms", 2)):
+        lord.forces[ut] = lord.forces.get(ut, 0) + n
+    state.meta.aow_cap_state[f"{card}_used"] = True
+    state.meta.aow_cap_state[f"{card}_units"] = {"lord": lid,
+                                                 "knights": 2, "men_at_arms": 2}
+    _record(state, action,
+            f"{card} Count of Barcelona: {lid} pays 2 Coin -> +2 Knights "
+            f"+2 Men-at-Arms")
+    return {"lord": lid, "added": {"knights": 2, "men_at_arms": 2}}
+
+
+def _pay_coin_for_cap(state: GameState, lord_id: str, side: Side,
+                      amount: int) -> bool:
+    """Deduct `amount` Coin for a capability cost: the Lord's own Coin,
+    then co-located friendly Lords' Coin (Sharing, 1.5.2), then (Muslim
+    only, 1.3.3) the Taifas box. Returns False without mutating if the
+    total available is insufficient."""
+    lord = state.lords[lord_id]
+    here = lord.cylinder.locale_id
+    pool = [lord]
+    for olid, ol in state.lords.items():
+        if (olid != lord_id and ol.side == side
+                and ol.cylinder.kind == "locale"
+                and ol.cylinder.locale_id == here):
+            pool.append(ol)
+    avail = sum(l.assets.get("coin", 0) for l in pool)
+    box = state.taifas_box_coin if side == "muslim" else 0
+    if avail + box < amount:
+        return False
+    need = amount
+    for l in pool:
+        take = min(l.assets.get("coin", 0), need)
+        if take:
+            l.assets["coin"] = l.assets.get("coin", 0) - take
+            need -= take
+        if need == 0:
+            break
+    if need and side == "muslim":
+        state.taifas_box_coin -= need
+        need = 0
+    return need == 0
+
+
+def _h_cap_saqalibah(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """M15 Saqalibah: a Taifa Muslim Lord with the card Musters 2
+    Men-at-Arms once, free (Arts of War ref)."""
+    side = _require_side(action)
+    _require(side == "muslim", "Saqalibah is Muslim", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    from almoravid.capabilities import side_has_capability, lord_has_capability
+    lid = state.meta.active_lord_id
+    lid = cast(str, lid)
+    lord = state.lords[lid]
+    _require(lord.is_taifa and lord.cylinder.kind == "locale",
+             "Saqalibah user must be a Taifa Lord on the map",
+             code="not_eligible")
+    _require(side_has_capability(state, side, "M15")
+             or lord_has_capability(state, lid, "M15"),
+             "M15 not in play", code="no_cap")
+    _require(not state.meta.aow_cap_state.get("M15_used"),
+             "Saqalibah already used", code="cap_used")
+    lord.forces["men_at_arms"] = lord.forces.get("men_at_arms", 0) + 2
+    state.meta.aow_cap_state["M15_used"] = True
+    state.meta.aow_cap_state["M15_units"] = {"lord": lid, "men_at_arms": 2}
+    _record(state, action, f"M15 Saqalibah: {lid} Musters +2 Men-at-Arms")
+    return {"lord": lid, "added": {"men_at_arms": 2}}
+
+
+def _h_cap_al_rum(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """M20 Al-Rum: a Taifa Muslim Lord pays 1 Coin once to Muster 2
+    Knights (Arts of War ref; Taifas Coin + Sharing apply)."""
+    side = _require_side(action)
+    _require(side == "muslim", "Al-Rum is Muslim", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    from almoravid.capabilities import side_has_capability, lord_has_capability
+    lid = cast(str, state.meta.active_lord_id)
+    lord = state.lords[lid]
+    _require(lord.is_taifa and lord.cylinder.kind == "locale",
+             "Al-Rum user must be a Taifa Lord on the map", code="not_eligible")
+    _require(side_has_capability(state, side, "M20")
+             or lord_has_capability(state, lid, "M20"),
+             "M20 not in play", code="no_cap")
+    _require(not state.meta.aow_cap_state.get("M20_used"),
+             "Al-Rum already used", code="cap_used")
+    _require(_pay_coin_for_cap(state, lid, side, 1),
+             "need 1 Coin to use Al-Rum", code="no_coin")
+    lord.forces["knights"] = lord.forces.get("knights", 0) + 2
+    state.meta.aow_cap_state["M20_used"] = True
+    state.meta.aow_cap_state["M20_units"] = {"lord": lid, "knights": 2}
+    _record(state, action, f"M20 Al-Rum: {lid} pays 1 Coin -> +2 Knights")
+    return {"lord": lid, "added": {"knights": 2}}
+
+
+def _h_cap_milites(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C18 Milites: the card holds 2 Militia + 4 Light Horse; each
+    Christian Lord may, once, pay 1 Asset to Muster up to 3 of them
+    (Arts of War ref). `units` = {unit_type: count}, total <= 3 and
+    within the remaining card pool."""
+    side = _require_side(action)
+    _require(side == "christian", "Milites is Christian", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    from almoravid.capabilities import side_has_capability
+    _require(side_has_capability(state, side, "C18"), "C18 not in play",
+             code="no_cap")
+    lid = cast(str, state.meta.active_lord_id)
+    lord = state.lords[lid]
+    _require(lord.cylinder.kind == "locale", "Lord not on map",
+             code="not_on_map")
+    used = state.meta.aow_cap_state.setdefault("C18_lords", [])
+    _require(lid not in used, "this Lord already took Milites units",
+             code="cap_used")
+    pool = state.meta.aow_cap_state.setdefault(
+        "C18_pool", {"militia": 2, "light_horse": 4})
+    units = action.get("units") or {}
+    _require(isinstance(units, dict) and units,
+             "units required", code="bad_arg")
+    total = sum(units.values())
+    _require(1 <= total <= 3, "take 1-3 units", code="bad_count")
+    for ut, n in units.items():
+        _require(ut in pool and 0 <= n <= pool[ut],
+                 f"not enough {ut} on the Milites card", code="bad_count")
+    # Pay 1 Asset (any type the Lord has).
+    asset = next((a for a in ("coin", "loot", "prov", "cart", "mule")
+                  if lord.assets.get(a, 0) > 0), None)
+    _require(asset is not None, "need 1 Asset to Muster Milites units",
+             code="no_asset")
+    lord.assets[asset] -= 1
+    for ut, n in units.items():
+        if n:
+            lord.forces[ut] = lord.forces.get(ut, 0) + n
+            pool[ut] -= n
+    used.append(lid)
+    _record(state, action,
+            f"C18 Milites: {lid} pays 1 {asset} -> +{units}")
+    return {"lord": lid, "added": dict(units), "pool_left": dict(pool)}
+
+
+_BISHOPS = [
+    {"name": "Edenoro, Bishop of Orense", "forces": {"knights": 1, "militia": 1}},
+    {"name": "Pedro, Bishop of Leon", "forces": {"knights": 1, "men_at_arms": 1}},
+    {"name": "Vistuario, Bishop of Lugo", "forces": {"knights": 1, "militia": 1}},
+]
+
+
+def _h_cap_bishoprics(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """C22 Bishoprics: place an available Bishop as a Ready Vassal on a
+    Mustered Christian Lord other than Sancho (<=3 Bishops total, max one
+    per Lord; Arts of War ref + Lords reference)."""
+    side = _require_side(action)
+    _require(side == "christian", "Bishoprics is Christian", code="wrong_side")
+    _require_campaign_step(state, "activation")
+    _require_active(state, side)
+    from almoravid.capabilities import side_has_capability
+    _require(side_has_capability(state, side, "C22"), "C22 not in play",
+             code="no_cap")
+    target = action.get("target_lord_id")
+    _require(target in state.lords, "target_lord_id required", code="bad_arg")
+    target = cast(str, target)
+    tl = state.lords[target]
+    _require(tl.side == "christian" and target != "sancho",
+             "Bishop goes to a Christian Lord other than Sancho",
+             code="bad_target")
+    _require(tl.cylinder.kind == "locale", "target Lord not Mustered",
+             code="not_on_map")
+    placed = state.meta.aow_cap_state.setdefault("C22_bishops", [])
+    _require(len(placed) < 3, "all 3 Bishops placed", code="cap_used")
+    _require(target not in placed, f"{target} already has a Bishop",
+             code="cap_used")
+    bishop = _BISHOPS[len(placed)]
+    from almoravid.state import Vassal
+    tl.vassals.append(Vassal(id=f"bishop_{len(placed)+1}", name=bishop["name"],
+                             forces=dict(bishop["forces"]), service_cost=0,
+                             ready=True))
+    placed.append(target)
+    _record(state, action,
+            f"C22 Bishoprics: {bishop['name']} -> {target} (Ready Vassal)")
+    return {"lord": target, "bishop": bishop["name"]}
+
+
 CAMPAIGN_HANDLERS = {
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
     "cap_fueros": _h_cap_fueros,
     "cap_sisnando": _h_cap_sisnando,
+    "cap_count_barcelona": _h_cap_count_barcelona,
+    "cap_saqalibah": _h_cap_saqalibah,
+    "cap_al_rum": _h_cap_al_rum,
+    "cap_milites": _h_cap_milites,
+    "cap_bishoprics": _h_cap_bishoprics,
     "begin_campaign": _h_begin_campaign,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,

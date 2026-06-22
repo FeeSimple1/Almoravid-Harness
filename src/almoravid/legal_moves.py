@@ -960,6 +960,52 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _sl in _st(state):
                         out.append({"type": "cap_sisnando", "side": "christian",
                                     "target_locale": _sl})
+            # Count of Barcelona (C13/M23): eligible Lord pays 2 Coin once.
+            from almoravid.campaign import _count_barcelona_user as _cbu
+            if _cbu(state, active) is not None:
+                out.append({"type": "cap_count_barcelona", "side": active})
+            from almoravid.capabilities import side_has_capability as _shc
+            _alid = state.meta.active_lord_id
+            _al = state.lords.get(_alid) if _alid else None
+            # M15 Saqalibah / M20 Al-Rum: a Taifa Muslim Lord Musters units.
+            if (active == "muslim" and _al is not None and _al.is_taifa
+                    and _al.cylinder.kind == "locale"):
+                if (_shc(state, "muslim", "M15")
+                        and not state.meta.aow_cap_state.get("M15_used")):
+                    out.append({"type": "cap_saqalibah", "side": "muslim"})
+                if (_shc(state, "muslim", "M20")
+                        and not state.meta.aow_cap_state.get("M20_used")):
+                    out.append({"type": "cap_al_rum", "side": "muslim"})
+            # C18 Milites: active Christian Lord pays 1 Asset for <=3 units.
+            if (active == "christian" and _al is not None
+                    and _al.cylinder.kind == "locale"
+                    and _shc(state, "christian", "C18")
+                    and _alid not in state.meta.aow_cap_state.get("C18_lords", [])
+                    and any(_al.assets.get(a, 0) > 0
+                            for a in ("coin", "loot", "prov", "cart", "mule"))):
+                _pool = state.meta.aow_cap_state.get(
+                    "C18_pool", {"militia": 2, "light_horse": 4})
+                _pick: dict = {}
+                _need = 3
+                for _ut in ("light_horse", "militia"):
+                    _take = min(_pool.get(_ut, 0), _need)
+                    if _take:
+                        _pick[_ut] = _take
+                        _need -= _take
+                if _pick:
+                    out.append({"type": "cap_milites", "side": "christian",
+                                "units": _pick})
+            # C22 Bishoprics: place a Bishop on an eligible Christian Lord.
+            if (active == "christian" and _shc(state, "christian", "C22")):
+                _placed = state.meta.aow_cap_state.get("C22_bishops", [])
+                if len(_placed) < 3:
+                    for _clid, _cl in state.lords.items():
+                        if (_cl.side == "christian" and _clid != "sancho"
+                                and _cl.cylinder.kind == "locale"
+                                and _clid not in _placed):
+                            out.append({"type": "cap_bishoprics",
+                                        "side": "christian",
+                                        "target_lord_id": _clid})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id
