@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          pip install -e .
+          pip install pytest ruff
+      - name: Ruff (src only; tests carry pre-existing style exceptions)
+        run: ruff check src/almoravid/
+      - name: Tests (bulk)
+        run: >
+          pytest -q -p no:cacheprovider
+          --ignore=tests/test_enumerator_handler_roundtrip.py
+          --ignore=tests/test_sagrajas_minigame.py
+          --ignore=tests/test_deep_invariants.py
+      - name: Tests (heavy files)
+        run: >
+          pytest -q -p no:cacheprovider
+          tests/test_enumerator_handler_roundtrip.py
+          tests/test_sagrajas_minigame.py
+          tests/test_deep_invariants.py
+      - name: Stress sweep (invariant-checked self-play smoke)
+        run: |
+          python scripts/stress_invariants.py --scenario scenario_a_toledo_beset --profile all --seeds 2 --max-steps 400
+          python scripts/stress_invariants.py --scenario scenario_f_reconquista --profile all --seeds 2 --max-steps 400
