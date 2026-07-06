@@ -35,7 +35,7 @@ Bug-pattern preemption:
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
 from almoravid.rng import roll_d6
@@ -77,6 +77,10 @@ class StrikeRow:
     one_round_only: bool = False
     mark_used: bool = False
     card_ids: list[str] = field(default_factory=list)
+    # Lord-group index for capability-granted rows (-1 = base/Garrison
+    # row). Missile-overlap dedup (4.4.2 TOTAL HITS) only merges rows
+    # of the same group + unit_type.
+    group: int = -1
 
 
 ArrayPosition = Literal["front_center", "front_left", "front_right",
@@ -147,6 +151,14 @@ class BattleSide:
     # `m7_owned` marks that M7 was set up for this side (Muslim) so the
     # Round loop can gate its activation/discard to `m7_round`.
     oneround_round: int = 1
+    # Transient per-Round missile-capability scoping for the pooled
+    # Storm path (d4f4ec3 fixed the same this_lord leak on the pooled
+    # BATTLE path via side.array; Storm sides carry no array). When
+    # set, build_strike_rows scopes capability-gated rows to these
+    # (caps, forces) groups — one per Front Lord — instead of the
+    # pooled union. Recomputed by _storm_run_round each Round; never
+    # restored from snapshots.
+    cap_groups: list[Any] | None = None
     m7_round: int = 1
     m7_owned: bool = False
     # Phase 6e: per-Lord Array slots. None for single-Lord (legacy).
@@ -264,7 +276,7 @@ def _lookup_unit(forces_data: dict[str, Any], unit_type: str) -> dict[str, Any] 
 
 def _cap_strike_rows(forces_data: dict[str, Any], caps_set: set[str],
                      forces: dict[str, int],
-                     context: str) -> list[StrikeRow]:
+                     context: str, group: int = 0) -> list[StrikeRow]:
     """Capability-gated StrikeRows for ONE Lord's (or pooled) forces, with
     that group's own Javelin/Slinger budgets (Arts of War C7/M3/M6 = 4
     Unarmored per Lord; C9/M7 = 3 Militia per Lord). 4.5.2 halves
@@ -302,7 +314,7 @@ def _cap_strike_rows(forces_data: dict[str, Any], caps_set: set[str],
                 unit_type=unit_type, count=row_count, kind=cap_row["kind"],
                 rate=cap_rate,
                 one_round_only=cap_row.get("any_one_round", False),
-                card_ids=sorted(required & caps_set)))
+                card_ids=sorted(required & caps_set), group=group))
     return out
 
 
@@ -342,13 +354,17 @@ def build_strike_rows(
     # and the Javelin (4) / Slinger (3) budgets are per Lord. For a
     # multi-Lord side the per-Lord forces+caps come from `side.array`; for
     # a single-Lord side the pooled caps ARE that one Lord's caps.
-    if side.array is not None:
+    if side.cap_groups is not None:
+        groups = [(set(caps), dict(forces))
+                  for caps, forces in side.cap_groups]
+    elif side.array is not None:
         groups = [(set(lp.capabilities_in_play), lp.forces)
                   for lp in side.array]
     else:
         groups = [(set(side.capabilities_in_play), dict(side.forces))]
-    for caps_set, gforces in groups:
-        rows.extend(_cap_strike_rows(forces_data, caps_set, gforces, context))
+    for gi, (caps_set, gforces) in enumerate(groups):
+        rows.extend(_cap_strike_rows(forces_data, caps_set, gforces, context,
+                                     group=gi))
 
     # S3 (4.5.2 GARRISON FORCES DURING STORM): the Garrison adds its
     # Strikes to the Defending Lord's (rounded together by _step_hits).
@@ -387,6 +403,65 @@ def _unit_class(unit_type: UnitType) -> UnitClass:
     if unit_type in forces_data["horse"]:
         return "horse"
     return "foot"
+
+
+_MISSILE_KIND_PRIORITY = {"crossbows": 0, "slingers": 1, "javelins": 2,
+                          "bowmen": 3, "missiles": 4}
+
+
+def _rate_value(rate: str) -> float:
+    num, den = _RATE.get(rate, (0, 1))
+    return num / den
+
+
+def _dedupe_missile_overlap(rows: list[StrikeRow]) -> list[StrikeRow]:
+    """4.4.2 TOTAL HITS (B&S ref `capability_stacking`): a unit granted
+    Missiles at two rates fires at the highest applicable rate; the
+    rates do NOT add ("the ½ does not stack to 1½"). This bites when
+    one unit stack holds several missile sources — e.g. C2 Ballesteros
+    Crossbows + C7 Jabalinas Javelins on the declared Javelin Round
+    (the Background Book Játiva example relies on the non-stacking
+    reading: Álvar's Militia fire x½ once, not twice).
+
+    Allocation: the stack fires its best row first (highest rate; ties
+    break Crossbows > Slingers > Javelins > Bowmen); units beyond that
+    row's budget (e.g. Javelins' 4-per-Lord) fall back to the next row.
+    Per C2 Tips ("Militia using both Crossbows and Javelins get the
+    benefits of each (x1, target selection, and -1 to Armor)"), units
+    also covered by a Crossbows source keep Crossbow targeting/-1 Armor
+    whichever rate they fire at — modeled by re-kinding the fired row
+    to 'crossbows' (Q-005 documents the tie-break + the generalization
+    beyond the Javelin combo the Tip names).
+
+    Only capability-granted rows (group >= 0) of the SAME Lord group
+    are merged; base and Garrison rows (group -1) never dedupe.
+    """
+    keyed: dict[tuple[int, str], list[StrikeRow]] = {}
+    out: list[StrikeRow] = []
+    for r in rows:
+        if r.group >= 0 and r.kind != "melee":
+            keyed.setdefault((r.group, r.unit_type), []).append(r)
+        else:
+            out.append(r)
+    for group_rows in keyed.values():
+        if len(group_rows) == 1:
+            out.extend(group_rows)
+            continue
+        has_crossbows = any(r.kind == "crossbows" for r in group_rows)
+        remaining = max(r.count for r in group_rows)
+        group_rows.sort(key=lambda r: (-_rate_value(r.rate),
+                                       _MISSILE_KIND_PRIORITY.get(r.kind, 9)))
+        for r in group_rows:
+            take = min(r.count, remaining)
+            if take <= 0:
+                continue
+            remaining -= take
+            kind = "crossbows" if has_crossbows else r.kind
+            if take == r.count and kind == r.kind:
+                out.append(r)
+            else:
+                out.append(replace(r, count=take, kind=kind))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +534,35 @@ def _allocate_rounded_hits(total: float, by_kind: dict[str, float]) -> dict[str,
     return out
 
 
+def _striker_select_prio(state: GameState, target_side_name: Side,
+                         ptype: str,
+                         unit_rec: dict[str, Any]) -> tuple[int, int]:
+    """Candidate priority for a Crossbow (striker-selects-target) Hit.
+
+    DECISION-009: the FIRING side's standing policy
+    (meta.crossbow_target_policy) governs the auto-pick:
+      - "weakest_first" (default; historical behaviour): rout the
+        least-protected unit.
+      - "armored_first": target Armored units first, lowest Armor
+        top-end first (the Background Book Játiva play: Men-at-Arms
+        over Knights, before any Unarmored).
+    Returns (prio, secondary) sort keys.
+    """
+    striker_side: Side = ("muslim" if target_side_name == "christian"
+                          else "christian")
+    pol = state.meta.crossbow_target_policy.get(striker_side,
+                                                "weakest_first")
+    if pol == "armored_first":
+        prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                "none": 3}.get(ptype, 4)
+        sec = (unit_rec["protection"]["range"][1]
+               if ptype == "armored" else 0)
+        return (prio, sec)
+    prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
+            "none": 3}.get(ptype, 4)
+    return (prio, 0)
+
+
 def _resolve_protection_roll(
     state: GameState,
     target_side: BattleSide,
@@ -495,8 +599,8 @@ def _resolve_protection_roll(
         pools.append(("garrison", target_side.garrison_forces))
     pools.append(("forces", target_side.forces))
 
-    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, UnitType]]:
-        cs: list[tuple[int, UnitType]] = []
+    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, int, UnitType]]:
+        cs: list[tuple[int, int, UnitType]] = []
         for unit_type, count in pool.items():
             if count <= 0:
                 continue
@@ -510,25 +614,21 @@ def _resolve_protection_roll(
             ptype = unit_rec["protection"]["type"]
             # Bug L (Pattern 7 audit) — Crossbow Hits: the FIRING side
             # selects the target unit (rule 1.3.1 / forces.json
-            # firing_side_selects_target). The optimal choice is the
-            # unit most likely to fail Protection — i.e., Unarmored
-            # before Armored. Otherwise the TARGETED side picks, and
-            # its optimal choice is the opposite: Armored first.
+            # firing_side_selects_target). DECISION-009: the pick
+            # follows the firing side's crossbow_target_policy.
             if striker_selects:
-                # Crossbow: the FIRING side selects the target to
-                # maximize routs — least-protected first.
-                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
-                        "none": 3}.get(ptype, 4)
+                prio, sec = _striker_select_prio(
+                    state, target_side.side, ptype, unit_rec)
             elif absorb_policy == "armored_first":
                 # Owner policy: armored soak Hits first (maximize cancels).
-                prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
-                        "none": 3}.get(ptype, 4)
+                prio, sec = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                             "none": 3}.get(ptype, 4), 0
             else:
                 # Owner policy weakest_first (default): sacrifice the
                 # least-protected first to shield strong units (4.4.2).
-                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
-                        "none": 3}.get(ptype, 4)
-            cs.append((prio, unit_type))
+                prio, sec = {"auto_remove": 0, "unarmored": 1, "armored": 2,
+                             "none": 3}.get(ptype, 4), 0
+            cs.append((prio, sec, unit_type))
         cs.sort()
         return cs
 
@@ -537,7 +637,7 @@ def _resolve_protection_roll(
     for _pool_name, pool in pools:
         cands = _build_candidates(pool)
         if cands:
-            _, chosen = cands[0]
+            _, _, chosen = cands[0]
             chosen_pool = pool
             break
     if chosen is None:
@@ -671,6 +771,7 @@ def _resolve_step(
     # policy, consistent with the atomic resolver's Concede/Reposition.)
     if round_index != actor.oneround_round:
         rows = [r for r in rows if not r.one_round_only]
+    rows = _dedupe_missile_overlap(rows)
     raw, by_kind = _step_hits(rows, step_type, unit_class)
 
     # Per-card combat-event bonuses (Phase 6 / deferred-fix structural
@@ -1225,6 +1326,12 @@ def apply_battle_losses(
                 lord.cylinder = Cylinder(kind="removed")
                 _ssl(state, lid, boxes=20)
                 out[lid]["permanently_removed"] = True
+                # 1.4.3: removal of a Taifa Lord adjusts his Taifa;
+                # 1.3.1: his Seat markers leave the map.
+                from almoravid.campaign import combat_removal_politics
+                pol = combat_removal_politics(state, lid)
+                if pol:
+                    out[lid]["removal_politics"] = pol
                 if _gone_locale is not None:
                     _removed_locales.append(_gone_locale)
     # 4.5.4: clear Siege/Bypass markers at any Locale whose besieging side
@@ -1667,16 +1774,33 @@ def _storm_melee_hits(state: GameState, ss: dict[str, Any],
             and "C8" in state.decks.this_levy_events.get("christian", [])):
         c8_budget = 4
     total = 0
-    for f in front_forces_list:
+    # 4.5.2 GARRISON FORCES DURING STORM: "Garrisons add their Strikes
+    # to those of the Defending Lord (rounding up), if any" — per the
+    # Battle & Storm reference (garrison_in_storm) this is a SINGLE
+    # round-up of the combined Lord+Garrison total, not two separate
+    # ceils. The Background Book Játiva example pools the Garrison with
+    # Abu Bakr's units (3 Armored + 4 Unarmored = five dice, not six).
+    # The combined lane counts against that Lord's 6-Melee cap (4.5.2
+    # "Each Lord of each side ... no more than six Hits in Melee";
+    # cap-interaction reading logged as Q-004). The Garrison attaches
+    # to the FIRST Front Lord (Q-004 note).
+    garrison_raw = (_combined_melee_raw(state, {}, [], garrison=garrison)
+                    if garrison else 0.0)
+    for i, f in enumerate(front_forces_list):
         raw = _combined_melee_raw(state, f, caps)
         if c8_budget > 0:
             add = min(c8_budget, _c8_bonus_for_forces(f))
             raw += float(add)
             c8_budget -= add
+        if i == 0 and garrison_raw > 0:
+            raw += garrison_raw
+            garrison_raw = 0.0
         total += min(6, math.ceil(raw))
-    if garrison:
-        total += math.ceil(_combined_melee_raw(state, {}, [],
-                                               garrison=garrison))
+    if garrison_raw > 0:
+        # No Defending Lord in Front: the Garrison Strikes alone. It is
+        # not a Lord, so the per-Lord 6-Melee cap does not textually
+        # apply (near-moot: max Garrison raw Melee is 4.5, City).
+        total += math.ceil(garrison_raw)
     return total
 
 
@@ -1690,6 +1814,26 @@ def _storm_reserve_pick(reserve_ids: list[str],
             if lid in reserve_ids:
                 return reserve_ids.index(lid)
     return 0
+
+
+def _storm_cap_groups(state: GameState, ss: dict[str, Any], who: str,
+                      side_obj: BattleSide) -> list[Any] | None:
+    """Per-Front-Lord (caps, forces) groups for pooled-Storm missile
+    scoping. A this_lord missile capability (C2/C4/C7/C9 and Muslim
+    twins) arms only its holder's units — the Background Book Játiva
+    Round 2 fires 2 Crossbow (Álvar) + 2 Bowmen (Alfonso) Hits, not a
+    pooled union. Single-Lord Fronts return None (pooled == that one
+    Lord; preserves caller-injected capabilities_in_play)."""
+    front = ss[f"{who}_front"]
+    if len(front) <= 1:
+        return None
+    pooled = list(side_obj.capabilities_in_play)
+    groups: list[Any] = []
+    for lid in front:
+        lord = state.lords.get(lid)
+        caps = list(lord.capabilities) if lord is not None else pooled
+        groups.append((caps, dict(ss[f"{who}_lord_forces"][lid])))
+    return groups
 
 
 def _storm_run_round(state: GameState, attacker: BattleSide,
@@ -1727,6 +1871,8 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     sw = ss["siegeworks_count"]
     defender.forces = _storm_front_agg(ss, "d")
     attacker.forces = _storm_front_agg(ss, "a")
+    defender.cap_groups = _storm_cap_groups(state, ss, "d", defender)
+    attacker.cap_groups = _storm_cap_groups(state, ss, "a", attacker)
     # 1.a Defender Missile -> Attacker.
     before = dict(attacker.forces)
     rnd.steps.append(_resolve_step(
@@ -2980,6 +3126,12 @@ def apply_retreat_aftermath(
         lord.cylinder = Cylinder(kind="removed")
         _shift_service_left(state, lid, boxes=20)  # force off-left
         entry["fate"] = "removed"
+        # 1.4.3: removal of a Taifa Lord adjusts his Taifa; 1.3.1:
+        # his Seat markers leave the map.
+        from almoravid.campaign import combat_removal_politics
+        pol = combat_removal_politics(state, lid)
+        if pol:
+            entry["removal_politics"] = pol
         summary["losers"].append(entry)
 
     return summary
@@ -3189,6 +3341,7 @@ def _build_strike_rows_for_position(
                     kind=cap_row["kind"], rate=cap_rate,
                     one_round_only=cap_row.get("any_one_round", False),
                     card_ids=sorted(required & caps_in_play),
+                    group=0,
                 ))
     return rows
 
@@ -3213,8 +3366,8 @@ def _resolve_protection_roll_for_lp(
     """
     forces_data = load_forces()
 
-    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, UnitType]]:
-        cs: list[tuple[int, UnitType]] = []
+    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, int, UnitType]]:
+        cs: list[tuple[int, int, UnitType]] = []
         for unit_type, count in pool.items():
             if count <= 0:
                 continue
@@ -3227,22 +3380,23 @@ def _resolve_protection_roll_for_lp(
                 continue
             ptype = unit_rec["protection"]["type"]
             if striker_selects:
-                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
-                        "none": 3}.get(ptype, 4)
+                # DECISION-009: firing side's crossbow_target_policy.
+                prio, sec = _striker_select_prio(
+                    state, side.side, ptype, unit_rec)
             elif absorb_policy == "armored_first":
-                prio = {"armored": 0, "unarmored": 1, "auto_remove": 2,
-                        "none": 3}.get(ptype, 4)
+                prio, sec = {"armored": 0, "unarmored": 1, "auto_remove": 2,
+                             "none": 3}.get(ptype, 4), 0
             else:
-                prio = {"auto_remove": 0, "unarmored": 1, "armored": 2,
-                        "none": 3}.get(ptype, 4)
-            cs.append((prio, unit_type))
+                prio, sec = {"auto_remove": 0, "unarmored": 1, "armored": 2,
+                             "none": 3}.get(ptype, 4), 0
+            cs.append((prio, sec, unit_type))
         cs.sort()
         return cs
 
     cands = _build_candidates(target_lp.forces)
     if not cands:
         return (False, None)
-    _, chosen = cands[0]
+    _, _, chosen = cands[0]
     unit = None
     for cat in ("horse", "foot"):
         if chosen in forces_data[cat]:
@@ -3476,6 +3630,7 @@ def _resolve_step_per_pair(
         # chosen Round (4.4.1 "any 1 Round"; default Round 1).
         if round_index != actor.oneround_round:
             rows = [r for r in rows if not r.one_round_only]
+        rows = _dedupe_missile_overlap(rows)
         raw, by_kind = _step_hits(rows, step_type, unit_class)
 
         # Phase 6a Hills hook (per-Lord application: defender side's

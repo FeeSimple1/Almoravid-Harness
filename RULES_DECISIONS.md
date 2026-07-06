@@ -418,3 +418,33 @@ used, so existing behaviour and tests are unchanged.
 **Scope:** campaign.py (`_apply_grow_harvest_repairs`, `_h_end_campaign`).
 **Revisit:** if GROW is made a fully interactive per-side pending decision
 rather than an optional argument on end_campaign.
+
+## DECISION-009 — Crossbow Hit target selection is a player choice, exposed as a standing policy
+
+**Date:** 2026-07-05
+**Type:** [INTERPRETATION]
+**Trigger:** Encoding the Background Book Játiva Storm worked example
+(pp. 14-18). 4.4.2 PROTECTION / the C2 Ballesteros Tips make the FIRING
+side's selection of which Enemy unit takes each Crossbow Hit a genuine
+player choice. The engine auto-picked "least-protected first" (a greedy
+heuristic hardcoded in `_resolve_protection_roll`), which cannot reproduce
+GMT's printed play: in both Round-1 selections the Játiva example targets a
+Men-at-Arms (Armored, lowest Armor band) in preference to Serfs/Militia.
+
+**Decision:** mirror the DECISION-005 absorption-policy pattern. New
+per-side standing policy `meta.crossbow_target_policy`:
+- `weakest_first` (default — the historical greedy behaviour, so every
+  existing seed/test trace is unchanged): auto-remove > Unarmored > Armored.
+- `armored_first` (the Background Book's play): Armored first, lowest Armor
+  top-end first (Men-at-Arms/Sergeants 1-3 before Knights 1-4, alphabetical
+  within a band), then Unarmored, then auto-remove.
+Set via the `set_absorption_policy` action (new optional
+`crossbow_target_policy` key) or carried on any combat action that already
+conveys `absorption_policy` (`_apply_absorption_policy`).
+
+**Scope:** state.py (Meta.crossbow_target_policy), battle.py
+(`_striker_select_prio`, both `_build_candidates`), campaign.py
+(`_apply_absorption_policy`, `_h_set_absorption_policy`), schema regenerated.
+Tests: tests/test_crossbow_target_policy.py, tests/test_bgbook_jativa_storm.py.
+**Revisit:** if per-Hit interactive targeting is added for LLM play (the
+policy would become the non-interactive fallback, as with DECISION-005).

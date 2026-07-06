@@ -1883,6 +1883,53 @@ def adjust_taifa_status(state: GameState, taifa_id: str, new_status: str,
     return results
 
 
+def combat_removal_politics(state: GameState,
+                            lord_id: str) -> dict[str, Any] | None:
+    """1.4.3 / 3.3.1: map cleanup + Taifa politics after a Lord is
+    PERMANENTLY removed by combat (Battle-Losses zero-Forces, Retreat
+    fate "removed", Storm Sack). Rule 1.4.3 names "removal of a Lord"
+    among the events that adjust a Taifa's status; the 3.3 Important
+    note applies whenever an Independent Taifa's Lord Disbands
+    "permanently or to the Calendar": his Taifa flips to Parias with
+    Parias Coin and a Christian victory point (5.1). Combat removal is
+    a permanent Disband ("as if Beyond Service", 4.4.4/4.5.2).
+
+    Also strips the Lord's Seat markers — 1.3.1 SEAT MARKERS: "If the
+    Enemy Conquers the Stronghold or that Lord leaves the map, remove
+    the Seat marker (including Cathedrals)" — mirroring the 3.3
+    Disband path (Pattern 2 mirror-gap: the combat-removal sites
+    previously skipped both this and the status adjustment).
+
+    Call AFTER the Lord's cylinder is set to "removed"."""
+    lord = state.lords.get(lord_id)
+    if lord is None:
+        return None
+    for loc2 in state.locales.values():
+        if lord_id in loc2.seat_marker_lord_ids:
+            loc2.seat_marker_lord_ids.remove(lord_id)
+    if lord_id == "alfonso":
+        state.cathedral_seat_locales = []
+    if not (lord.is_taifa and lord.home_taifa):
+        return None
+    taifa = state.taifas.get(lord.home_taifa)
+    if taifa is None or taifa.status != "independent":
+        return None
+    # Mirror of the 3.3 Disband path (actions._h_disband, T5): adjust
+    # with the auto coin award suppressed, then award via the shared
+    # distributor; +1 Christian running score for the Parias marker
+    # (5.1); RECOGNITION OF NEUTRALITY pending if a side Besieges a
+    # now-Neutral Stronghold (1.4.3 / T4).
+    from almoravid.actions import _award_parias_coin
+    adj = adjust_taifa_status(state, lord.home_taifa, "parias",
+                              award_parias_coin=False)
+    amount = _parias_coin_amount(state, lord.home_taifa,
+                                 lord.service_rating)
+    coin = _award_parias_coin(state, amount, None)
+    state.score.christian += 1.0
+    _maybe_set_neutrality_pending(state, adj, state.meta.active_player)
+    return {"taifa_adjust": adj, "parias_coin": coin}
+
+
 def maybe_recompute_taifa_status(state: GameState, taifa_id: str) -> dict[str, Any]:
     """Re-evaluate a Taifa's status based on current map state per 1.4.1.
 
@@ -3814,6 +3861,14 @@ def _finish_storm(
             removed_lords.append(eid)
         # (b) Conquer the Stronghold as per Surrender (4.5.1).
         conq_result = _conquer_stronghold(state, here, side)
+        # (b2) 1.4.3: removal of a Taifa Lord adjusts his Taifa's
+        # status (after the Conquest so the Sacked Stronghold is
+        # already Christian and raises no bogus neutrality question).
+        removal_politics = {}
+        for eid in removed_lords:
+            pol = combat_removal_politics(state, eid)
+            if pol:
+                removal_politics[eid] = pol
         # (c) In addition, award Stronghold Spoils (table) to besiegers.
         sh_spoils = _ls()["strongholds"][loc.base_type].get("spoils", {})
         for k in ("coin", "loot", "prov"):
@@ -3822,7 +3877,8 @@ def _finish_storm(
         if besiegers_here and sack_spoils:
             distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
         sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
-                "recipients": besiegers_here}
+                "recipients": besiegers_here,
+                "removal_politics": removal_politics}
 
     # 4.5.2 -> 4.4.4 Losses: both sides roll for Routed units. The
     # Storm Attacker's Routed units always need a 1; the Defender
@@ -5967,12 +6023,19 @@ def _apply_absorption_policy(state: GameState, side: Side, action: dict[str, Any
     The Storm Attacker is still rule-forced to armored_first (4.5.2)
     inside battle resolution regardless."""
     pol = action.get("absorption_policy")
-    if pol is None:
-        return
-    _require(pol in _ABSORB_POLICIES,
-             f"absorption_policy must be one of {_ABSORB_POLICIES}",
-             code="bad_arg")
-    state.meta.absorption_policy[side] = pol
+    if pol is not None:
+        _require(pol in _ABSORB_POLICIES,
+                 f"absorption_policy must be one of {_ABSORB_POLICIES}",
+                 code="bad_arg")
+        state.meta.absorption_policy[side] = pol
+    # DECISION-009: same conveyance for the Crossbow target-selection
+    # policy (4.4.2 PROTECTION — the firing side selects the unit).
+    xpol = action.get("crossbow_target_policy")
+    if xpol is not None:
+        _require(xpol in _ABSORB_POLICIES,
+                 f"crossbow_target_policy must be one of {_ABSORB_POLICIES}",
+                 code="bad_arg")
+        state.meta.crossbow_target_policy[side] = xpol
 
 
 def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -5984,12 +6047,29 @@ def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[s
     its policy before the enemy's combat action resolves."""
     side = _require_side(action)
     pol = action.get("policy")
-    _require(pol in _ABSORB_POLICIES,
-             f"policy must be one of {_ABSORB_POLICIES}", code="bad_arg")
-    pol = cast(str, pol)
-    state.meta.absorption_policy[side] = pol
-    _record(state, action, f"{side} sets absorption policy = {pol}")
-    return {"side": side, "absorption_policy": pol}
+    xpol = action.get("crossbow_target_policy")
+    _require(pol is not None or xpol is not None,
+             "provide 'policy' and/or 'crossbow_target_policy'",
+             code="bad_arg")
+    out: dict[str, Any] = {"side": side}
+    if pol is not None:
+        _require(pol in _ABSORB_POLICIES,
+                 f"policy must be one of {_ABSORB_POLICIES}", code="bad_arg")
+        pol = cast(str, pol)
+        state.meta.absorption_policy[side] = pol
+        _record(state, action, f"{side} sets absorption policy = {pol}")
+        out["absorption_policy"] = pol
+    if xpol is not None:
+        # DECISION-009: standing Crossbow target-selection policy.
+        _require(xpol in _ABSORB_POLICIES,
+                 f"crossbow_target_policy must be one of {_ABSORB_POLICIES}",
+                 code="bad_arg")
+        xpol = cast(str, xpol)
+        state.meta.crossbow_target_policy[side] = xpol
+        _record(state, action,
+                f"{side} sets crossbow target policy = {xpol}")
+        out["crossbow_target_policy"] = xpol
+    return out
 
 
 _FLANK_CHOICES = ("larger", "left", "right")

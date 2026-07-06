@@ -840,3 +840,62 @@ Closed the two residuals flagged in the post-build review:
   cascade fix is covered separately in test_aow_coverage.py.)
 
 Full suite green (1182); ruff src clean.
+
+## 2026-07-05 — Fixes surfaced while encoding the Background Book Játiva Storm example
+
+Encoding the dice-bearing BB worked examples (handoff open item 1) as
+exact-outcome anchors exposed four divergences, each verified against the
+Rules of Play / B&S reference before fixing:
+
+- 4.5.2 GARRISON STRIKES rounding — FIXED. `_storm_melee_hits` ceiled the
+  Defending Lord's Melee and the Garrison's Melee SEPARATELY; the rule
+  ("Garrisons add their Strikes to those of the Defending Lord (rounding
+  up)") and B&S ref `garrison_in_storm` ("single round-up of the combined
+  total") pool before ONE ceil — the BB Játiva Round 1 rolls exactly five
+  Defender Melee dice (3 Armored + 4 Unarmored incl. Garrison), where the
+  old code produced six. The combined lane counts against the Lord's
+  6-Melee cap; that cap-interaction reading + the multi-Lord attachment
+  default (first Front Lord) are logged as Q-004. Garrison-alone (no Lord)
+  Strikes stay a separate uncapped ceil. Tests:
+  tests/test_storm_garrison_rounding.py (5).
+- 4.4.2 TOTAL HITS missile-capability stacking — FIXED. One unit stack
+  holding several missile sources (C2 Ballesteros Crossbows + C7 Jabalinas
+  Javelins, etc.) fired ALL matching capability rows additively (Militia
+  with both = 1.5 Hits/unit on the Javelin Round). B&S ref
+  `capability_stacking`: highest applicable rate, "the ½ does not stack to
+  1½"; C7 Tips: such units are x1 on the Javelin Round, x½ on other
+  Rounds. New `_dedupe_missile_overlap` (round-aware, per-Lord-group via
+  StrikeRow.group) allocates units best-rate-first with budget fallback;
+  Crossbow perks retained per C2 Tips "benefits of each". Tie-break +
+  perk-generalization defaults logged as Q-005. Two Sagrajas seed-hunted
+  regression params recalibrated (57/96 -> 75/98/168; their >6-Round
+  premise was calibrated on the stacked math). Tests:
+  tests/test_missile_overlap_dedup.py (6).
+- this_lord missile-cap leak on the pooled STORM path — FIXED. d4f4ec3
+  scoped capability rows per Lord on the pooled BATTLE path via
+  side.array, but Storm sides carry no array: with two besiegers in Front
+  (Round 2+), one Lord's C2/C4/C7/C9 armed the other's units. The BB
+  Játiva Round 2 print (2 Crossbow Hits from Álvar + 2 Bowmen Hits from
+  Alfonso, not a pooled 3+1) discriminates. New transient
+  BattleSide.cap_groups, set per Round by _storm_run_round from the
+  per-Lord force/cap state (single-Lord Fronts unchanged, preserving
+  caller-injected caps). Covered by tests/test_bgbook_jativa_storm.py.
+- 1.4.3 "removal of a Lord" Taifa adjustment — FIXED (Pattern 1
+  state-set-but-unreachable: maybe_recompute_taifa_status had ZERO
+  callers). Permanent combat removal of a Taifa Lord (Battle-Losses
+  zero-Forces, Retreat fate "removed", Storm Sack) never adjusted his
+  Taifa. Rule 1.4.3 lists "removal of a Lord" as an adjustment trigger;
+  3.3 Important flips an Independent Taifa to Parias with Parias Coin +
+  1 Christian VP on permanent Disband, and combat removal is "as if
+  Beyond Service" (4.4.4/4.5.2). New campaign.combat_removal_politics
+  (mirrors the audited 3.3 Disband path incl. Seat-marker strip per
+  1.3.1, suppressed-then-explicit Parias Coin, RECOGNITION OF NEUTRALITY
+  pending) called from all three combat-removal sites. Scenario-F Winter
+  Disband (6.3.1) intentionally untouched (its own audited handling).
+  One pre-fix pin updated (test_phase7f_battle_array: +6 Parias Coin for
+  al-Mutamid's removal). Tests: tests/test_combat_removal_politics.py (4).
+
+Also landed: DECISION-009 (Crossbow Hit target selection exposed as a
+per-side standing policy, `meta.crossbow_target_policy`, mirroring
+DECISION-005; default preserves the historical greedy pick). Tests:
+tests/test_crossbow_target_policy.py (3).

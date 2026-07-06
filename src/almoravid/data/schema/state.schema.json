@@ -940,6 +940,19 @@
           "title": "Absorption Policy",
           "type": "object"
         },
+        "crossbow_target_policy": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "christian",
+              "muslim"
+            ]
+          },
+          "title": "Crossbow Target Policy",
+          "type": "object"
+        },
         "array_flank_choice": {
           "additionalProperties": {
             "type": "string"

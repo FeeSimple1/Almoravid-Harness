@@ -182,3 +182,81 @@ owner-declared round-of-use is not modeled — see resolver-fix (a) TODO). So in
 the minigame Yusuf/Sir's African Horse do not gain the Javelin Missile bonus.
 All other Sagrajas setup is faithful. Wiring African-Horse Javelins + the
 owner round-choice is broader resolver work (the Javelins-marker subsystem).
+
+## Q-004 — Storm Defender 6-Melee cap: does it govern the combined Lord+Garrison total?
+
+**Status:** open (default implemented)
+**Filed:** 2026-07-05
+
+**Question:** 4.5.2 says "Each Lord of each side in Storm adds no more than
+six Hits in Melee. (Missiles are unlimited.)" and, under GARRISON FORCES
+DURING STORM, "Garrisons add their Strikes to those of the Defending Lord
+(rounding up), if any". When a Defending Lord's raw Melee plus the Garrison's
+raw Melee exceeds 6, does the per-Lord cap bind the COMBINED total (Garrison
+Strikes having been merged into the Lord's), or only the Lord's own units
+(Garrison Hits riding outside the cap)? Secondary: with MULTIPLE Defending
+Lords in Front, which Lord's lane does the Garrison pool with for the single
+round-up?
+
+**Why it matters:** a Defender with raw Melee >= 5.5 plus a Garrison (raw
+1.5 Castle / 2.5 Town / 3.5 Fortress / 4.5 City) crosses the cap boundary;
+the two readings differ by up to 5 Hits per Round at a City.
+
+**Consultation chain:**
+1. Battle & Storm Reference `garrison_in_storm`: "Garrison Hits are added to
+   Defending Lord's Hits BEFORE rounding (single round-up of the combined
+   total)." — settles the ROUNDING (single ceil) but not the cap interaction.
+2. Battle & Storm Reference `storm_modifiers`: "Each Lord max 6 Melee Hits
+   per Round (Missiles unlimited)" — per-Lord phrasing, silent on Garrison.
+3. Errata / Scenario Adjustments: nothing on 4.5.2 Garrison Strikes.
+4. Rules of Play 4.5.2: both clauses quoted above; the "add their Strikes to
+   those of the Defending Lord" wording reads most naturally as the Garrison
+   contribution BECOMING part of that Lord's Melee total, hence capped with it.
+5. Background Book Játiva example: pools Garrison + Abu Bakr for "a total of
+   five dice" — confirms pooled rounding; total is under 6 so the cap
+   interaction never surfaces.
+
+**Default implemented (pending adjudication):** the Garrison's raw Melee is
+added to the FIRST Front Defending Lord's raw before a single round-up, and
+the combined lane is subject to that Lord's 6-cap. With no Defending Lord in
+Front the Garrison Strikes alone, uncapped (near-moot: max Garrison raw is
+4.5 at a City, rounding to 5 — still under the cap).
+**Affected code:** battle._storm_melee_hits. Tests:
+tests/test_storm_garrison_rounding.py.
+
+## Q-005 — Missile-overlap dedup: tie-breaks and the reach of "benefits of each"
+
+**Status:** open (default implemented)
+**Filed:** 2026-07-05
+
+**Question:** 4.4.2 TOTAL HITS (via B&S ref `capability_stacking`) makes
+overlapping missile grants non-additive: a unit with x½ and x1 fires x1.
+C2 Tips adds: "Militia using both Crossbows and Javelins get the benefits of
+each (x1, target selection, and -1 to Armor)." Two residuals:
+1. **Equal-rate tie-break.** When two sources tie (Crossbows x½ vs Bowmen x½;
+   or in Storm, Crossbows x½ vs Javelins x½), which profile fires? No source
+   ranks them; the choice is outcome-relevant only through the Crossbow
+   perks (targeting, -1 Armor) and the Javelin one-Round expenditure.
+2. **Perk transfer beyond the named combo.** C2 Tips names Crossbows +
+   Javelins. Does "benefits of each" extend to, e.g., Slingers x1 (C9/M7)
+   fired by Militia that also hold Crossbows (M2+M7 is a legal Taifa pair)?
+
+**Consultation chain:**
+1. Arts of War Reference C2 Tips (quoted above) and C7 Tips ("Units with both
+   Javelins and Bowmen or Crossbows are Missiles x1 on the Battle Round of
+   Javelin use and Missiles x½ on other Rounds") — settle the Crossbow/Bowmen
+   + Javelin combos exactly.
+2. B&S Reference `capability_stacking` — settles non-additivity generally.
+3. Errata / Rules of Play 4.4.2 — silent on tie-breaks and on Slingers
+   combos.
+
+**Default implemented (pending adjudication):** highest rate fires; ties
+break Crossbows > Slingers > Javelins > Bowmen (the Crossbow profile is
+never worse, and preferring persistent rows conserves the one-Round Javelin
+declaration). Any unit stack that includes a Crossbows source keeps Crossbow
+targeting/-1 Armor at whatever rate it fires (generalizing C2 Tips' principle
+to all combos). Units beyond a budgeted row's cap (Javelins 4/Lord, Slingers
+3/Lord) fall back to the next-best row.
+**Affected code:** battle._dedupe_missile_overlap (+ group tagging in
+StrikeRow/_cap_strike_rows/_build_strike_rows_for_position). Tests:
+tests/test_missile_overlap_dedup.py.

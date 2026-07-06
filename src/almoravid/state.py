@@ -166,6 +166,17 @@ class Meta(StrictModel):
         default_factory=lambda: cast("dict[Side, str]",
                                      {"christian": "weakest_first",
                                       "muslim": "weakest_first"}))
+    # DECISION-009: Crossbow Hits — the FIRING side selects which Enemy
+    # unit takes each Hit (4.4.2 PROTECTION; forces.json
+    # firing_side_selects_target). Standing per-side policy for that
+    # choice: "weakest_first" (rout the least-protected — the historical
+    # greedy default) or "armored_first" (target Armored units, lowest
+    # Armor top-end first — the play GMT's Background Book Játiva
+    # example makes: Men-at-Arms over Serfs/Militia).
+    crossbow_target_policy: dict[Side, str] = Field(
+        default_factory=lambda: cast("dict[Side, str]",
+                                     {"christian": "weakest_first",
+                                      "muslim": "weakest_first"}))
     # Multi-Lord Array tactical choices (rule 4.4.2 Reposition / Flanking).
     # The rules make several Array placements the owner's choice; these
     # per-side standing policies expose them (consumed by _reposition_array

@@ -128,4 +128,10 @@ def test_removed_lord_transfers_all_assets() -> None:
     if entry["fate"] == "removed":
         # All Assets transferred to the winning Christian Lord(s).
         assert s.lords["al_mutamid"].assets == {}
-        assert s.lords["alfonso"].assets.get("coin", 0) == 5
+        # 5 Spoils Coin + 6 Parias Coin: al-Mutamid is a Taifa Lord, so
+        # his permanent removal flips Independent Sevilla to Parias
+        # (1.4.3 "removal of a Lord"; 3.3 Important), awarding Coin =
+        # his Service ("six if al-Mutamid") to the first Unbesieged
+        # Christian Lord (default distribution) — Alfonso here.
+        assert s.lords["alfonso"].assets.get("coin", 0) == 11
+        assert s.taifas["sevilla"].status == "parias"
