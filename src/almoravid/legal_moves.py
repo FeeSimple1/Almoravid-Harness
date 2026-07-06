@@ -647,6 +647,65 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 for tr in ("cart", "mule"):
                     out.append({"type": "levy_transport", "side": side,
                                 "lord_id": lid, "transport": tr})
+    # --- Muster-segment capabilities (3.4.2/3.4.3, "for no actions") ---
+    from almoravid.campaign import (
+        _coin_available_for_cap as _cav_m,
+    )
+    from almoravid.campaign import (
+        _count_barcelona_user as _cbu_m,
+    )
+    from almoravid.campaign import (
+        _muster_cap_lord_eligible as _mce,
+    )
+    from almoravid.capabilities import side_has_capability as _shc_m
+    # C13/M23 Count of Barcelona: the eligible Lord pays 2 Coin once.
+    _cb_lid = _cbu_m(state, side)
+    if (_cb_lid is not None and _mce(state, _cb_lid, side)
+            and _cav_m(state, _cb_lid, side) >= 2):
+        out.append({"type": "cap_count_barcelona", "side": side})
+    for lid, lord in state.lords.items():
+        if lord.side != side:
+            continue
+        # M15 Saqalibah / M20 Al-Rum: an eligible Taifa Lord Musters units.
+        if side == "muslim" and lord.is_taifa and _mce(state, lid, side):
+            if (_shc_m(state, "muslim", "M15")
+                    and not state.meta.aow_cap_state.get("M15_used")):
+                out.append({"type": "cap_saqalibah", "side": "muslim",
+                            "lord_id": lid})
+            if (_shc_m(state, "muslim", "M20")
+                    and not state.meta.aow_cap_state.get("M20_used")
+                    and _cav_m(state, lid, "muslim") >= 1):
+                out.append({"type": "cap_al_rum", "side": "muslim",
+                            "lord_id": lid})
+        # C18 Milites: an eligible Christian Lord pays 1 Asset for <=3 units.
+        if (side == "christian" and _mce(state, lid, side)
+                and _shc_m(state, "christian", "C18")
+                and lid not in state.meta.aow_cap_state.get("C18_lords", [])
+                and any(lord.assets.get(a, 0) > 0
+                        for a in ("coin", "loot", "prov", "cart", "mule"))):
+            _pool = state.meta.aow_cap_state.get(
+                "C18_pool", {"militia": 2, "light_horse": 4})
+            _pick: dict = {}
+            _need = 3
+            for _ut in ("light_horse", "militia"):
+                _take = min(_pool.get(_ut, 0), _need)
+                if _take:
+                    _pick[_ut] = _take
+                    _need -= _take
+            if _pick:
+                out.append({"type": "cap_milites", "side": "christian",
+                            "lord_id": lid, "units": _pick})
+        # C23 Fonsadera: exchange a Ready non-Bishop Vassal (Unbesieged
+        # Lord; Neutral/Enemy Locale and Bypass are fine per Tips).
+        if (side == "christian"
+                and _mce(state, lid, side, need_friendly=False)
+                and _shc_m(state, "christian", "C23")):
+            for _vi, _v in enumerate(lord.vassals):
+                if _v.ready and not _v.id.startswith("bishop"):
+                    out.append({"type": "cap_fonsadera",
+                                "side": "christian", "lord_id": lid,
+                                "vassal_index": _vi, "mode": "coin"})
+
     return out
 
 
@@ -968,43 +1027,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _sl in _st(state):
                         out.append({"type": "cap_sisnando", "side": "christian",
                                     "target_locale": _sl})
-            # Count of Barcelona (C13/M23): eligible Lord pays 2 Coin once.
-            from almoravid.campaign import _count_barcelona_user as _cbu
-            if _cbu(state, active) is not None:
-                out.append({"type": "cap_count_barcelona", "side": active})
+            # (C13/M23, M15, M20, C18, C23 moved to _muster_moves —
+            # they are Muster-segment Levy effects per 3.4.2/3.4.3.)
             from almoravid.capabilities import side_has_capability as _shc
             _alid = state.meta.active_lord_id
             _al = state.lords.get(_alid) if _alid else None
-            # M15 Saqalibah / M20 Al-Rum: a Taifa Muslim Lord Musters units.
-            if (active == "muslim" and _al is not None and _al.is_taifa
-                    and _al.cylinder.kind == "locale"):
-                if (_shc(state, "muslim", "M15")
-                        and not state.meta.aow_cap_state.get("M15_used")):
-                    out.append({"type": "cap_saqalibah", "side": "muslim"})
-                if (_shc(state, "muslim", "M20")
-                        and not state.meta.aow_cap_state.get("M20_used")):
-                    from almoravid.campaign import _coin_available_for_cap as _cav
-                    if _cav(state, _alid, "muslim") >= 1:
-                        out.append({"type": "cap_al_rum", "side": "muslim"})
-            # C18 Milites: active Christian Lord pays 1 Asset for <=3 units.
-            if (active == "christian" and _al is not None
-                    and _al.cylinder.kind == "locale"
-                    and _shc(state, "christian", "C18")
-                    and _alid not in state.meta.aow_cap_state.get("C18_lords", [])
-                    and any(_al.assets.get(a, 0) > 0
-                            for a in ("coin", "loot", "prov", "cart", "mule"))):
-                _pool = state.meta.aow_cap_state.get(
-                    "C18_pool", {"militia": 2, "light_horse": 4})
-                _pick: dict = {}
-                _need = 3
-                for _ut in ("light_horse", "militia"):
-                    _take = min(_pool.get(_ut, 0), _need)
-                    if _take:
-                        _pick[_ut] = _take
-                        _need -= _take
-                if _pick:
-                    out.append({"type": "cap_milites", "side": "christian",
-                                "units": _pick})
             # C22 Bishoprics: place a Bishop on an eligible Christian Lord.
             if (active == "christian" and _shc(state, "christian", "C22")):
                 _placed = state.meta.aow_cap_state.get("C22_bishops", [])
@@ -1016,17 +1043,6 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_bishoprics",
                                         "side": "christian",
                                         "target_lord_id": _clid})
-            # C23 Fonsadera: exchange a Ready non-Bishop Vassal for assets.
-            if (active == "christian" and _al is not None
-                    and _al.cylinder.kind == "locale"
-                    and _shc(state, "christian", "C23")):
-                from almoravid.effective import is_besieged as _isb_fon
-                if not _isb_fon(state, _alid):
-                    for _vi, _v in enumerate(_al.vassals):
-                        if _v.ready and not _v.id.startswith("bishop"):
-                            out.append({"type": "cap_fonsadera",
-                                        "side": "christian", "lord_id": _alid,
-                                        "vassal_index": _vi, "mode": "coin"})
             # M19 Guadalquivir (capability): a Taifa Lord may March across
             # the Port + Sevilla-City network for 1 action (Arts of War ref).
             if active == "muslim" and _al is not None and _al.is_taifa:

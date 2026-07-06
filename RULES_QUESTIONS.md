@@ -260,3 +260,35 @@ to all combos). Units beyond a budgeted row's cap (Javelins 4/Lord, Slingers
 **Affected code:** battle._dedupe_missile_overlap (+ group tagging in
 StrikeRow/_cap_strike_rows/_build_strike_rows_for_position). Tests:
 tests/test_missile_overlap_dedup.py.
+
+## Q-006 — Timing surface of C20 Fueros / C21 Sisnando ("Each Levy") and C22 Bishoprics ("at any time")
+
+**Status:** open (current placement documented)
+**Filed:** 2026-07-05
+
+**Question:** Three capabilities have broader printed timing than the engine
+currently offers. C20 Fueros and C21 Sisnando Davídez read "Each Levy,
+remove ... Jihad ..." — the engine offers them as free effects at Alfonso's
+(C20) / the active Lord's (C21) CAMPAIGN activation, once per turn. C22
+Bishoprics per rulebook 3.4.2 "may at any time add one available Bishop
+Vassal marker" — the engine offers it at Campaign activation only. Where
+should these effects be surfaced: at a fixed Levy step (which?), during
+Muster like the 3.4.2 Muster-units cluster (C18/M15/M20/C13/M23/C23, moved
+2026-07-05), at any enumeration point, or is the current activation-time
+surface an acceptable standing default?
+
+**Why it matters:** timing changes what the removal/placement can react to
+(e.g. Jihad placed during the same Levy's Call to Arms; a Bishop added
+mid-Campaign before a Battle). The per-Levy/once flags are unaffected.
+
+**Consultation chain:**
+1. Arts of War Reference C20/C21/C22 + Tips — give the cadence ("Each
+   Levy", "at any time") but not a step placement.
+2. Rules of Play 3.4.2 (Bishops "at any time"), 3.1/3.4 — no fixed step
+   for the Jihad-removal pair.
+3. Errata / Scenario Adjustments — silent.
+
+**Current default (pending adjudication):** all three remain free actions
+at the holder's Campaign activation (once per Levy/turn per their flags).
+**Affected code:** campaign._h_cap_fueros/_h_cap_sisnando/_h_cap_bishoprics,
+legal_moves activation block.

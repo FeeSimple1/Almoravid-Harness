@@ -17,11 +17,13 @@ def _setup():
     al.vassals = [Vassal(id="v1", name="Mesnaderos", forces={"knights": 1},
                          service_cost=2, ready=True)]
     al.assets = {}
-    s.meta.phase = "campaign"
-    s.meta.campaign_step = "activation"
+    # C23 operates during the MUSTER segment (card text "during
+    # Muster"; Tips "during any Muster segments ... for no actions").
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
     s.meta.active_player = "christian"
-    s.meta.active_lord_id = "alvar_fanez"
-    s.meta.actions_remaining = 2
+    s.meta.active_lord_id = None
+    s.meta.actions_remaining = 0
     return s, al
 
 

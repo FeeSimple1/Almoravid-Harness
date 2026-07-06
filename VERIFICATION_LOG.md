@@ -899,3 +899,44 @@ Also landed: DECISION-009 (Crossbow Hit target selection exposed as a
 per-side standing policy, `meta.crossbow_target_policy`, mirroring
 DECISION-005; default preserves the historical greedy pick). Tests:
 tests/test_crossbow_target_policy.py (3).
+
+## 2026-07-05 (cont.) — Background Book dice-bearing anchors + Muster-segment cap timing
+
+- Background Book EXACT-DICE anchors — ADDED. The three dice-bearing
+  worked examples are now encoded end-to-end against the engine's own
+  RNG consumption order (scripted die queue; the queue must be consumed
+  EXACTLY, so any change to a Hit count, cancellation count, or
+  Protection-roll count fails the anchor):
+  - Játiva Storm (pp.14-18): tests/test_bgbook_jativa_storm.py — full
+    2-Round trace incl. 3 Forage rolls, every printed Round-1 die
+    ("4"/"3", "2"; "5"/"3", "6"; "1,3,3,4,6", "3","5"; Walls-cancel-4),
+    Round-2 counts (2 Bowmen + 2 Crossbow, 3 Defender Melee, 12
+    capped Attacker Melee), End/Sack (Abu Bakr removed; Spoils 3 Coin
+    + 4 Prov; Conquest +1 VP), 4.4.4 Losses, and the 1.4.3 Valencia ->
+    Parias cascade. Run-length die-consumption signature asserted.
+  - Alfonso's Muster (p.10): tests/test_bgbook_muster_march_examples.py
+    — Froila Vassal, Milites at map edge + 3 units for one Provender
+    (an Asset, not an action), Pedro Ansúrez Fealty roll "5" fails,
+    Lordship 3 exhausted.
+  - Álvar March/Ravage/Feed (pp.12-14, dice-free): same file — 1-action
+    Unladen marches, two Avoids (Burriana, Baniskula), forced
+    Besiege-or-Bypass -> Bypass retains the 4th action, Ravage (+½ VP,
+    +1 Loot +1 Prov, Enforcing-Parias Service shift on the first
+    yellow Ravaged in Lérida), Feed 7 mouths = 2 Prov/Loot with the
+    Mule fed not discarded (Greed).
+- 3.4.2/3.4.3 Muster-segment capability timing — FIXED. C18 Milites,
+  M15 Saqalibah, M20 Al-Rûm, C13/M23 Count of Barcelona, and C23
+  Fonsadera were modeled as free effects at CAMPAIGN activation; their
+  Tips / card text place them "during any Muster segments ... for no
+  actions" (C23: "during Muster"). Handlers now gate on the Muster
+  segment (_require_muster_segment) with per-Lord addressing (lord_id)
+  and 3.4 "Important" eligibility (_muster_cap_lord_eligible: on-map,
+  Unbesieged, not newly-Mustered, Friendly Locale — waived to
+  Unbesieged-only for C23 per its Tips); enumeration moved from the
+  activation block into _muster_moves. _count_barcelona_user no longer
+  reads active_lord_id (scans the printed eligible pair). C22
+  Bishoprics stays at activation (rulebook 3.4.2: "at any time");
+  C20/C21 "Each Levy" + C22 placement logged as Q-006. cap_milites
+  gains an `asset` arg (which Asset to pay is the owner's choice; the
+  BB example pays Provender). Tests updated:
+  test_aow_caps_muster_units.py, test_aow_cap_fonsadera.py.

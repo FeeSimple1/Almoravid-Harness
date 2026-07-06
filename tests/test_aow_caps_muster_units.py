@@ -9,11 +9,13 @@ from almoravid.state import CardInPlay, Cylinder
 
 
 def _act(s, lord_id, side):
-    s.meta.phase = "campaign"
-    s.meta.campaign_step = "activation"
+    # Muster-units capabilities operate during the MUSTER segment
+    # (3.4.2 ARTS OF WAR, C18/M15/M20 Tips), not Campaign activation.
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
     s.meta.active_player = side
-    s.meta.active_lord_id = lord_id
-    s.meta.actions_remaining = 2
+    s.meta.active_lord_id = None
+    s.meta.actions_remaining = 0
 
 
 def _deploy(s, card, side):
@@ -58,7 +60,8 @@ def test_m15_saqalibah_musters_two_maa_free() -> None:
     m0 = al.forces.get("men_at_arms", 0)
     _act(s, "al_mundir", "muslim")
     assert any(m["type"] == "cap_saqalibah" for m in legal_moves(s))
-    apply_action(s, {"type": "cap_saqalibah", "side": "muslim"})
+    apply_action(s, {"type": "cap_saqalibah", "side": "muslim",
+                     "lord_id": "al_mundir"})
     assert al.forces.get("men_at_arms", 0) == m0 + 2
     assert not any(m["type"] == "cap_saqalibah" for m in legal_moves(s))
 
@@ -67,8 +70,10 @@ def test_m20_al_rum_pays_taifa_box_coin_for_two_knights() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _deploy(s, "M20", "muslim")
     al = s.lords["al_mundir"]
-    # Move to an isolated Locale so no co-located Sharing; only the box pays.
-    al.cylinder = Cylinder(kind="locale", locale_id="huesca")
+    # His own Seat (Muslim-Friendly, 3.4 "Important"); other Muslim
+    # Lords leave the map so no co-located Sharing; only the box pays.
+    al.cylinder = Cylinder(kind="locale", locale_id="lerida")
+    s.taifas["lerida"].status = "independent"   # his Taifa, Lord on map
     for L in s.lords.values():
         if L.side == "muslim" and L.id != "al_mundir":
             L.cylinder = Cylinder(kind="calendar", box=1)
@@ -76,7 +81,8 @@ def test_m20_al_rum_pays_taifa_box_coin_for_two_knights() -> None:
     s.taifas_box_coin = 2
     k0 = al.forces.get("knights", 0)
     _act(s, "al_mundir", "muslim")
-    apply_action(s, {"type": "cap_al_rum", "side": "muslim"})
+    apply_action(s, {"type": "cap_al_rum", "side": "muslim",
+                     "lord_id": "al_mundir"})
     assert al.forces.get("knights", 0) == k0 + 2
     assert s.taifas_box_coin == 1
 
@@ -90,12 +96,12 @@ def test_c18_milites_takes_up_to_three_units_for_one_asset() -> None:
     lh0 = al.forces.get("light_horse", 0)
     _act(s, "alvar_fanez", "christian")
     apply_action(s, {"type": "cap_milites", "side": "christian",
-                     "units": {"light_horse": 3}})
+                     "lord_id": "alvar_fanez", "units": {"light_horse": 3}})
     assert al.forces.get("light_horse", 0) == lh0 + 3
     assert al.assets.get("prov", 0) == 0
     # pool decremented; same Lord can't take again
-    assert not any(m["type"] == "cap_milites" and m.get("side") == "christian"
-                   and s.meta.active_lord_id == "alvar_fanez"
+    assert not any(m["type"] == "cap_milites"
+                   and m.get("lord_id") == "alvar_fanez"
                    for m in legal_moves(s))
 
 
@@ -105,7 +111,13 @@ def test_c22_bishoprics_adds_ready_bishop_vassal() -> None:
     al = s.lords["alvar_fanez"]
     al.cylinder = Cylinder(kind="locale", locale_id="leon")
     nv0 = len(al.vassals)
-    _act(s, "alvar_fanez", "christian")
+    # C22 stays available at activation (rulebook 3.4.2: Bishops may be
+    # added "at any time").
+    s.meta.phase = "campaign"
+    s.meta.campaign_step = "activation"
+    s.meta.active_player = "christian"
+    s.meta.active_lord_id = "alvar_fanez"
+    s.meta.actions_remaining = 2
     apply_action(s, {"type": "cap_bishoprics", "side": "christian",
                      "target_lord_id": "alvar_fanez"})
     assert len(al.vassals) == nv0 + 1

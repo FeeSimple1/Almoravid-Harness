@@ -6763,10 +6763,14 @@ _BARCELONA = {"christian": ("C13", ("sancho", "eudes")),
               "muslim": ("M23", ("al_mustain", "al_mundir"))}
 
 
-def _count_barcelona_user(state: GameState, side: Side) -> str | None:
-    """The active Lord eligible to use Count of Barcelona for `side`, or
-    None. Requires: the card in play, the Count on this side, an eligible
-    active Lord on the map, and not yet used."""
+def _count_barcelona_user(state: GameState, side: Side,
+                          lord_id: str | None = None) -> str | None:
+    """The Lord eligible to use Count of Barcelona for `side`, or None.
+    Requires: the card in play, the Count on this side, not yet used,
+    and an eligible printed Lord (C13: Sancho/Eudes; M23: al-Mustain/
+    al-Mundir) on the map with 2 Coin available. Callers may name the
+    Lord (`lord_id`, Muster-segment addressing); otherwise the first
+    eligible on-map Lord is returned."""
     from almoravid.capabilities import side_has_capability
     card, eligible = _BARCELONA[side]
     if not side_has_capability(state, side, card):
@@ -6775,11 +6779,50 @@ def _count_barcelona_user(state: GameState, side: Side) -> str | None:
         return None
     if state.meta.aow_cap_state.get(f"{card}_used"):
         return None
-    lid = state.meta.active_lord_id
-    if (lid in eligible and state.lords[lid].cylinder.kind == "locale"
-            and _coin_available_for_cap(state, lid, side) >= 2):
-        return lid
+    candidates = ([lord_id] if lord_id is not None else list(eligible))
+    for lid in candidates:
+        if (lid in eligible and lid in state.lords
+                and state.lords[lid].cylinder.kind == "locale"
+                and _coin_available_for_cap(state, lid, side) >= 2):
+            return lid
     return None
+
+
+def _require_muster_segment(state: GameState, side: Side) -> None:
+    """3.4.2/3.4.3 ARTS OF WAR: the Muster-units / Vassal-exchange
+    capabilities operate "during any Muster segments ... for no
+    actions" (C18/M15/M20 Tips, C23 card text, rulebook 3.4.2-3.4.3)
+    — NOT during Campaign activation."""
+    _require(state.meta.phase == "levy"
+             and state.meta.levy_step == "muster",
+             "Muster-segment capability: only during Muster (3.4.2)",
+             code="wrong_step")
+    _require_active(state, side)
+
+
+def _muster_cap_lord_eligible(state: GameState, lord_id: str, side: Side,
+                              *, need_friendly: bool = True) -> bool:
+    """3.4 "Important" eligibility for Muster-segment Levy effects: on
+    the map, Unbesieged, not newly Mustered this Levy; at a Friendly
+    Locale unless the card waives it (C23 Fonsadera "may be Bypassed
+    or at a Neutral or Enemy Locale")."""
+    from almoravid.effective import is_besieged, is_friendly_locale
+    lord = state.lords.get(lord_id)
+    if lord is None or lord.side != side:
+        return False
+    if lord.cylinder.kind != "locale" or lord.just_arrived_this_levy:
+        return False
+    try:
+        if is_besieged(state, lord_id):
+            return False
+        if need_friendly:
+            here = lord.cylinder.locale_id
+            assert here is not None
+            if not is_friendly_locale(state, here, side):
+                return False
+    except Exception:
+        return False
+    return True
 
 
 def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -6791,8 +6834,7 @@ def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     transport_type ('mule'|'cart', default 'mule')."""
     side = _require_side(action)
     _require(side == "christian", "Fonsadera is Christian", code="wrong_side")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
+    _require_muster_segment(state, side)
     from almoravid.capabilities import side_has_capability
     from almoravid.effective import is_besieged
     _require(side_has_capability(state, side, "C23"), "C23 not in play",
@@ -6835,12 +6877,15 @@ def _h_cap_count_barcelona(state: GameState, action: dict[str, Any]) -> dict[str
     (Muslim, 1.3.3) the Taifas box; Sharing (1.5.2) from a co-located
     friendly Lord also counts."""
     side = _require_side(action)
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
-    lid = _count_barcelona_user(state, side)
+    _require_muster_segment(state, side)
+    lid = _count_barcelona_user(state, side,
+                                lord_id=action.get("lord_id"))
     _require(lid is not None, "no eligible Count-of-Barcelona user",
              code="not_eligible")
     lid = cast(str, lid)
+    _require(_muster_cap_lord_eligible(state, lid, side),
+             f"{lid} not eligible to Muster this segment (3.4)",
+             code="not_eligible")
     card = _BARCELONA[side][0]
     paid = _pay_coin_for_cap(state, lid, side, 2)
     _require(paid, "need 2 Coin to use Count of Barcelona", code="no_coin")
@@ -6908,14 +6953,18 @@ def _h_cap_saqalibah(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     Men-at-Arms once, free (Arts of War ref)."""
     side = _require_side(action)
     _require(side == "muslim", "Saqalibah is Muslim", code="wrong_side")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
+    _require_muster_segment(state, side)
     from almoravid.capabilities import lord_has_capability, side_has_capability
-    lid = state.meta.active_lord_id
+    lid = action.get("lord_id") or state.meta.active_lord_id
+    _require(isinstance(lid, str) and lid in state.lords,
+             "lord_id required", code="bad_arg")
     lid = cast(str, lid)
     lord = state.lords[lid]
     _require(lord.is_taifa and lord.cylinder.kind == "locale",
              "Saqalibah user must be a Taifa Lord on the map",
+             code="not_eligible")
+    _require(_muster_cap_lord_eligible(state, lid, side),
+             f"{lid} not eligible to Muster this segment (3.4)",
              code="not_eligible")
     _require(side_has_capability(state, side, "M15")
              or lord_has_capability(state, lid, "M15"),
@@ -6934,13 +6983,18 @@ def _h_cap_al_rum(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     Knights (Arts of War ref; Taifas Coin + Sharing apply)."""
     side = _require_side(action)
     _require(side == "muslim", "Al-Rum is Muslim", code="wrong_side")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
+    _require_muster_segment(state, side)
     from almoravid.capabilities import lord_has_capability, side_has_capability
-    lid = cast(str, state.meta.active_lord_id)
+    lid = action.get("lord_id") or state.meta.active_lord_id
+    _require(isinstance(lid, str) and lid in state.lords,
+             "lord_id required", code="bad_arg")
+    lid = cast(str, lid)
     lord = state.lords[lid]
     _require(lord.is_taifa and lord.cylinder.kind == "locale",
              "Al-Rum user must be a Taifa Lord on the map", code="not_eligible")
+    _require(_muster_cap_lord_eligible(state, lid, side),
+             f"{lid} not eligible to Muster this segment (3.4)",
+             code="not_eligible")
     _require(side_has_capability(state, side, "M20")
              or lord_has_capability(state, lid, "M20"),
              "M20 not in play", code="no_cap")
@@ -6962,15 +7016,20 @@ def _h_cap_milites(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     within the remaining card pool."""
     side = _require_side(action)
     _require(side == "christian", "Milites is Christian", code="wrong_side")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
+    _require_muster_segment(state, side)
     from almoravid.capabilities import side_has_capability
     _require(side_has_capability(state, side, "C18"), "C18 not in play",
              code="no_cap")
-    lid = cast(str, state.meta.active_lord_id)
+    lid = action.get("lord_id") or state.meta.active_lord_id
+    _require(isinstance(lid, str) and lid in state.lords,
+             "lord_id required", code="bad_arg")
+    lid = cast(str, lid)
     lord = state.lords[lid]
-    _require(lord.cylinder.kind == "locale", "Lord not on map",
-             code="not_on_map")
+    _require(lord.side == "christian", "Christian Lord required",
+             code="wrong_side")
+    _require(_muster_cap_lord_eligible(state, lid, side),
+             f"{lid} not eligible to Muster this segment (3.4)",
+             code="not_eligible")
     used = state.meta.aow_cap_state.setdefault("C18_lords", [])
     _require(lid not in used, "this Lord already took Milites units",
              code="cap_used")
@@ -6984,9 +7043,17 @@ def _h_cap_milites(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     for ut, n in units.items():
         _require(ut in pool and 0 <= n <= pool[ut],
                  f"not enough {ut} on the Milites card", code="bad_count")
-    # Pay 1 Asset (any type the Lord has).
-    asset = next((a for a in ("coin", "loot", "prov", "cart", "mule")
-                  if lord.assets.get(a, 0) > 0), None)
+    # Pay 1 Asset — WHICH asset is the owner's choice (card text "pay
+    # 1 Asset"; the Background Book p.10 example pays a Provender).
+    # `asset` arg selects it; omitted -> first available (auto-pick).
+    asset = action.get("asset")
+    if asset is None:
+        asset = next((a for a in ("coin", "loot", "prov", "cart", "mule")
+                      if lord.assets.get(a, 0) > 0), None)
+    else:
+        _require(asset in ("coin", "loot", "prov", "cart", "mule")
+                 and lord.assets.get(asset, 0) > 0,
+                 f"no {asset} to pay for Milites", code="no_asset")
     _require(asset is not None, "need 1 Asset to Muster Milites units",
              code="no_asset")
     lord.assets[asset] -= 1
