@@ -292,3 +292,40 @@ mid-Campaign before a Battle). The per-Levy/once flags are unaffected.
 at the holder's Campaign activation (once per Levy/turn per their flags).
 **Affected code:** campaign._h_cap_fueros/_h_cap_sisnando/_h_cap_bishoprics,
 legal_moves activation block.
+
+## Q-007 — 6.3.1 Winter Disband: does "do not adjust Taifa status" cover the Beyond-Service removals?
+
+**Status:** open (default implemented)
+**Filed:** 2026-07-05
+
+**Question:** 6.3.1 first has players "remove any Beyond Service (3.3.1;
+EXCEPTION: Rodrigo)"; NEXT, "all remaining Mustered Lords except those at
+Sieges Disband as if at Service limit (3.3.2) but modified as follows",
+with the modifier bullets including "Disbanding Taifa Lords put all Coin
+from their mats into the Taifas box; do not adjust Taifa status or award
+Parias Coin (1.4.1-.3)". Does that do-not-adjust bullet govern ONLY the
+Disband-to-mat batch ("each such Lord"), or the entire Winter Disband
+including the Beyond-Service permanent removals?
+
+**Why it matters:** a Taifa Lord permanently removed in Winter never
+returns at Spring Muster; if his Independent Taifa's status is never
+adjusted, the map holds an Independent Taifa with no Lord — contradicting
+1.4.1's own status conditions — and the Christians never receive the 3.3
+Parias Coin/VP.
+
+**Consultation chain:**
+1. Rules of Play 6.3.1 — bullet structure quoted above; the Rodrigo bullet
+   ("even if Beyond Service") shows a bullet CAN reach the Beyond-Service
+   step, so scope is genuinely ambiguous.
+2. Rules of Play 3.3 Important — an Independent Taifa's Lord Disbanding
+   "permanently or to the Calendar" adjusts to Parias with Coin + VP.
+3. Rules of Play 1.4.3 — "removal of a Lord" listed among adjustment
+   triggers; 1.4.1 — Independent REQUIRES the Taifa Lord on the map.
+4. Errata / Scenario Adjustments / Background Book — silent.
+
+**Default implemented (pending adjudication):** the Beyond-Service Winter
+removal DOES adjust (via campaign.combat_removal_politics: Parias flip,
+Parias Coin, +1 VP, Seat strip); the Disband-to-mat batch does NOT adjust
+(explicit bullet — statuses re-derive at Spring Muster, 6.3.3).
+**Affected code:** campaign.winter_disband. Tests:
+tests/test_winter_removal_politics.py.

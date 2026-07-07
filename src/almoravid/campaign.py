@@ -1168,6 +1168,46 @@ def winter_disband(state: GameState) -> dict[str, Any]:
             if lord_id in loc2.seat_marker_lord_ids:
                 loc2.seat_marker_lord_ids.remove(lord_id)
 
+    # 6.3.1 ORDERING: Beyond-Service permanent removals happen FIRST
+    # ("First, players ... must remove any Beyond Service"), and only
+    # THEN the remaining Mustered Lords Disband to mats. The removal's
+    # 3.3/1.4.3 cascade (Q-007: Parias Coin to Unbesieged Christian
+    # Lords) must run while those Lords are still on the map.
+    for lid, lord in list(state.lords.items()):
+        if lord.cylinder.kind != "locale":
+            continue
+        assert lord.cylinder.locale_id is not None
+        loc = state.locales[lord.cylinder.locale_id]
+        if loc.siege_yellow > 0 or loc.siege_green > 0:
+            continue   # kept for Winter Siege; classified below
+        if lid in ("rodrigo_campeador", "rodrigo_al_sayyid"):
+            continue   # EXCEPTION: to box 9 even if Beyond Service
+        if not (lid in svc and svc[lid] < cur_box):
+            continue
+        # Permanently removed from the game (3.3.1): Forces/Assets to
+        # pools (cleared), This-Lord Capabilities to their deck,
+        # cylinder/mat/Seat markers out of the game.
+        state.decks.discard.extend(lord.capabilities)
+        _strip_seats(lid)
+        lord.cylinder = Cylinder(kind="removed")
+        lord.forces = {}
+        lord.assets = {}
+        lord.capabilities = []
+        lord.in_stronghold = False
+        lord.moved_fought = False
+        lord.routed_units = {}
+        # Q-007: 6.3.1's "do not adjust Taifa status" bullet scopes to
+        # the Disband-TO-MAT batch ("each such Lord"); this step is an
+        # UNMODIFIED 3.3.1 permanent removal, and 3.3 Important + 1.4.3
+        # ("removal of a Lord") flip an Independent Taifa to Parias —
+        # a permanently removed Lord never returns at Spring Muster,
+        # and an Independent Taifa with no Lord on the map contradicts
+        # 1.4.1's conditions. Default pending adjudication (Q-007).
+        pol = combat_removal_politics(state, lid)
+        if pol:
+            results.setdefault("removal_politics", {})[lid] = pol
+        results["beyond_service_removed"].append(lid)
+
     for lid, lord in state.lords.items():
         if lord.cylinder.kind != "locale":
             continue
@@ -1179,9 +1219,8 @@ def winter_disband(state: GameState) -> dict[str, Any]:
             results["lords_at_sieges_kept"].append(lid)
             continue
         is_rodrigo = lid in ("rodrigo_campeador", "rodrigo_al_sayyid")
-        # 3.3.1 Beyond Service: a Service marker LEFT of the marker box
-        # (lower-numbered) is permanently removed FIRST — EXCEPTION:
-        # Rodrigo (placed at box 9 even if Beyond Service, 6.3.1).
+        # (Beyond-Service removals already handled in the first pass;
+        # Rodrigo is exempt and Disbands to box 9 below.)
         beyond_service = (lid in svc and svc[lid] < cur_box)
         if is_rodrigo:
             lord.cylinder = Cylinder(kind="calendar", box=9)
@@ -1193,21 +1232,8 @@ def winter_disband(state: GameState) -> dict[str, Any]:
             lord.moved_fought = False
             lord.routed_units = {}
             continue
-        if beyond_service:
-            # Permanently removed from the game (3.3.1): Forces/Assets to
-            # pools (cleared), This-Lord Capabilities to their deck,
-            # cylinder/mat/Seat markers out of the game.
-            state.decks.discard.extend(lord.capabilities)
-            _strip_seats(lid)
-            lord.cylinder = Cylinder(kind="removed")
-            lord.forces = {}
-            lord.assets = {}
-            lord.capabilities = []
-            lord.in_stronghold = False
-            lord.moved_fought = False
-            lord.routed_units = {}
-            results["beyond_service_removed"].append(lid)
-            continue
+        assert not beyond_service or is_rodrigo, \
+            "Beyond-Service Lords are removed in the first 6.3.1 pass"
         # Otherwise Disband as if at Service limit (3.3.2) but to the mat
         # (6.3.1 modification), to auto-Muster at Spring Muster (6.3.3).
         # Disbanding Taifa Lords put all Coin from their mats into the
@@ -4092,6 +4118,12 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         atk_caps.extend(state.lords[sid].capabilities)
     atk = BattleSide(side=side, role="attacker", lord_ids=sallying_ids,
                      forces=atk_forces, capabilities_in_play=atk_caps)
+    if len(sallying_ids) > 1:
+        # this_lord missile caps arm only their holder's units (mirror
+        # of the Storm/pooled-Battle cap-scope fixes, 4.4.2/d4f4ec3).
+        atk.cap_groups = [(list(state.lords[sid].capabilities),
+                           dict(state.lords[sid].forces))
+                          for sid in sallying_ids]
     # Sallying Lords exit the Stronghold for the duration of the Sally.
     for sid in sallying_ids:
         state.lords[sid].in_stronghold = False
@@ -4110,6 +4142,10 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         forces=dfd_forces,
         capabilities_in_play=dfd_caps,
     )
+    if len(besiegers) > 1:
+        dfd.cap_groups = [(list(state.lords[bid].capabilities),
+                           dict(state.lords[bid].forces))
+                          for bid in besiegers]
     pl: dict[str, Any] = {
         "engagement_label": "sally",
         "finish": "sally",

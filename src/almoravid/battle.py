@@ -358,10 +358,24 @@ def build_strike_rows(
         groups = [(set(caps), dict(forces))
                   for caps, forces in side.cap_groups]
     elif side.array is not None:
-        groups = [(set(lp.capabilities_in_play), lp.forces)
+        groups = [(set(lp.capabilities_in_play), dict(lp.forces))
                   for lp in side.array]
     else:
         groups = [(set(side.capabilities_in_play), dict(side.forces))]
+    if len(groups) > 1 or side.cap_groups is not None:
+        # Clamp per-Lord group counts to the LIVE pooled view: in the
+        # pooled resolution paths, Hits drain side.forces (not the
+        # per-Lord snapshots), so group forces can go stale after
+        # losses and would overstate capability Missile counts. Walk
+        # groups in order, allowing each unit_type only what remains
+        # pooled (aggregate-correct; per-Lord attribution follows the
+        # engine's existing distribute-at-commit semantics).
+        remaining = dict(side.forces)
+        for _caps, gforces in groups:
+            for ut in list(gforces.keys()):
+                take = min(gforces[ut], max(0, remaining.get(ut, 0)))
+                gforces[ut] = take
+                remaining[ut] = remaining.get(ut, 0) - take
     for gi, (caps_set, gforces) in enumerate(groups):
         rows.extend(_cap_strike_rows(forces_data, caps_set, gforces, context,
                                      group=gi))
@@ -2352,9 +2366,28 @@ def _relief_push_lane(rs: _ReliefState, side_obj: BattleSide,
                 lost -= take
 
 
+def _relief_cap_groups(state: GameState, rs: _ReliefState,
+                       side_obj: BattleSide) -> list[Any] | None:
+    """Per-Lord (caps, forces) scoping for a Relief lane (this_lord
+    missile caps arm only their holder's units — mirror of the Storm
+    cap_groups fix). Lane forces come from the live rs.lf tracker."""
+    if len(side_obj.lord_ids) <= 1:
+        return None
+    nm = _relief_name_of(rs, side_obj)
+    groups: list[Any] = []
+    for lid in side_obj.lord_ids:
+        lord = state.lords.get(lid)
+        caps = (list(lord.capabilities) if lord is not None
+                else list(side_obj.capabilities_in_play))
+        groups.append((caps, dict(rs.lf[nm].get(lid, {}))))
+    return groups
+
+
 def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
                       attacker_side: BattleSide, defender_side: BattleSide,
                       **kw: Any) -> StepResolution:
+    attacker_side.cap_groups = _relief_cap_groups(state, rs, attacker_side)
+    defender_side.cap_groups = _relief_cap_groups(state, rs, defender_side)
     target = defender_side if actor_role == "attacker" else attacker_side
     before = dict(target.forces)
     step = _resolve_step(state, kw["step_id"], actor_role,

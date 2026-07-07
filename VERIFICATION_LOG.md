@@ -940,3 +940,34 @@ tests/test_crossbow_target_policy.py (3).
   gains an `asset` arg (which Asset to pay is the owner's choice; the
   BB example pays Provender). Tests updated:
   test_aow_caps_muster_units.py, test_aow_cap_fonsadera.py.
+
+## 2026-07-05 (cont. 2) — Sally/Relief cap scoping + Winter Beyond-Service politics
+
+- this_lord missile-cap leak on the SALLY and RELIEF paths — FIXED. Both
+  built pooled multi-Lord BattleSides with unioned capabilities (the same
+  class as d4f4ec3/Storm): a Crossbows/Bowmen/Javelins cap held by one
+  Lord armed co-located Lords' units. _h_cmd_sally now sets per-Lord
+  cap_groups on both sides; the Relief lanes rebuild cap_groups from the
+  live rs.lf per-Lord tracker each lane step. build_strike_rows
+  additionally CLAMPS multi-group counts to the live pooled survivor
+  view, closing the pre-existing staleness on every pooled path that
+  carries per-Lord snapshots (array or cap_groups): capability Missile
+  rows can no longer exceed actual survivors after mid-combat losses
+  (aggregate-correct; per-Lord attribution follows the engine's existing
+  distribute-at-commit semantics). Tests:
+  tests/test_sally_relief_cap_scope.py (4).
+- 6.3.1 Winter Disband: Beyond-Service removals — FIXED + Q-007. Two
+  issues: (a) ORDERING — the rules remove Beyond-Service Lords FIRST and
+  only then Disband the remaining Mustered Lords to mats; the engine's
+  single dict-order loop could clear a Christian Lord's mat before a
+  removed Taifa Lord's cascade could award him Parias Coin. winter_disband
+  is now two passes. (b) POLITICS — the Beyond-Service step is an
+  unmodified 3.3.1 permanent removal: per 3.3 Important + 1.4.3 ("removal
+  of a Lord"), an Independent Taifa Lord's removal flips his Taifa to
+  Parias with Coin + VP (a permanently removed Lord never returns at
+  Spring Muster; an Independent Taifa with no Lord contradicts 1.4.1).
+  6.3.1's "do not adjust Taifa status" bullet is read as scoping the
+  Disband-TO-MAT batch only ("each such Lord") — statuses stay frozen
+  there and re-derive at Spring Muster. The bullet-scope ambiguity is
+  logged as Q-007 with this default. Tests:
+  tests/test_winter_removal_politics.py (2).
