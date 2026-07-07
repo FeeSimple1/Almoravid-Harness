@@ -971,3 +971,9 @@ tests/test_crossbow_target_policy.py (3).
   there and re-derive at Spring Muster. The bullet-scope ambiguity is
   logged as Q-007 with this default. Tests:
   tests/test_winter_removal_politics.py (2).
+- AOW coverage backfill (capability half) — ADDED. M22 War Drums extra
+  Provender (Yusuf yes / plain Taifa Lord no), C1 Battering Ram
+  counts-as-2-Lords Siegeworks + failed-Surrender-die reroll, M13 Siege
+  Towers Muslim-side gating (and wrong-side non-gating). The remaining
+  open items are the event-half branches listed in AOW_AUDIT.md. Tests:
+  tests/test_aow_coverage_backfill.py (5).

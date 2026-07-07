@@ -182,9 +182,17 @@ get a proper fix + test (none are silent combat-math errors):
 
 ## Untested-but-believed-correct (add coverage)
 
-Event halves: M3, M4, M5 (Muslim path), M8 remove-Conquered branch, M9 +4
-Kingdom branch, M10 Fatwa, M20 +1/+2 branches, M24 placement path, C16
-Muster-from-Calendar mode, C23 service mode. Capability effects: C2 target
-selection, C4/C5 Arqueros & C7 Jabalinas firing in combat, C6 Siege Towers
-Round-2 trigger, M1 Battering Ram reroll/counts-as-2, M13 Siege Towers
-Walls−1, M22 War Drums +1 Prov.
+UPDATE 2026-07-05: the capability-effect half of this list is now covered —
+C2 target selection (tests/test_crossbow_target_policy.py), C4/C5 + C7
+firing in combat and C6 Round-2 trigger (tests/test_bgbook_jativa_storm.py,
+tests/test_missile_overlap_dedup.py), C1/M1 Battering Ram reroll +
+counts-as-2, M13 Siege Towers gating, M22 War Drums extra Prov
+(tests/test_aow_coverage_backfill.py). STILL OPEN (event halves): M3, M4,
+M5 (Muslim path), M8 remove-Conquered branch, M9 +4 Kingdom branch, M10
+Fatwa, M20 +1/+2 branches, M24 placement path, C16 Muster-from-Calendar
+mode, C23 service mode.
+
+Also note: the "Pooled multi-Lord missile caps may over-apply" item under
+Cross-cutting is CLOSED for every path — Battle (d4f4ec3), Storm
+(cap_groups), Sally + Relief lanes and the pooled-staleness clamp
+(2026-07-05, tests/test_sally_relief_cap_scope.py).
