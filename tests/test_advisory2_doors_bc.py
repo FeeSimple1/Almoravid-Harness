@@ -14,6 +14,7 @@ an enemy-occupied Seat (co-location with no battle).
 from __future__ import annotations
 
 from almoravid.actions import apply_action
+from almoravid.capabilities import effective_command
 from almoravid.events import resolve_event
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
@@ -44,7 +45,8 @@ def test_doorB_backstop_clears_orphan_after_sail_M19() -> None:
     s.meta.campaign_step = "activation"
     s.meta.active_player = "muslim"
     s.meta.active_lord_id = "al_mutamid"
-    s.meta.actions_remaining = 2
+    # M19 consumes the entire fresh card (Arts of War Reference M19).
+    s.meta.actions_remaining = effective_command(s, "al_mutamid")
     apply_action(s, {"type": "cmd_march_port_to_port", "side": "muslim",
                      "target_locale_id": "valencia"})
     assert s.lords["al_mutamid"].cylinder.locale_id == "valencia"

@@ -28,13 +28,14 @@ def _other(side: Side) -> Side:
 
 def _combat_revealed_locales(state: GameState) -> set[str]:
     """Locales whose Lords are currently in Battle/Storm (mats face-up,
-    1.5.2). The engine resolves combat atomically, so the only
-    persistent pre-combat state is a pending Approach Battle / Relief
-    Sally / Sortie (march_arrival_response) at a locale."""
+    1.5.2), including the pauses between interactive combat rounds."""
     pd = state.pending
     out: set[str] = set()
-    if pd is not None and pd.kind == "march_arrival_response":
-        loc = pd.payload.get("locale_id")
+    if pd is not None and pd.kind in {
+        "march_arrival_response", "battle_concede", "storm_concede",
+        "relief_concede",
+    }:
+        loc = pd.payload.get("locale_id", pd.payload.get("here"))
         if isinstance(loc, str):
             out.add(loc)
     return out
@@ -43,19 +44,16 @@ def _combat_revealed_locales(state: GameState) -> set[str]:
 def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     """Return `state` as a dict from `viewer_side`'s perspective.
 
-    With Hidden Mats off (default), this is the full state dump. With it
-    on, the opponent's on-map Lords have their strength fields hidden
+    With Hidden Mats on, the opponent's on-map Lords have their strength fields hidden
     (replaced by None) and a `hidden_mat: True` flag added, except for
-    Lords in Battle/Storm. The opponent's pending-draw hand stays hidden
-    too (you never see the enemy's drawn-but-unplayed Arts of War cards,
-    1.9 "Players may not inspect each other's decks")."""
+    Lords in Battle/Storm. Private cards and unused Plans are hidden
+    regardless of the Hidden Mats option (1.9, 3.1.3, 4.1). The engine's
+    full state remains available through GameState.model_dump()."""
     dump = state.model_dump()
-    if not state.meta.hidden_mats:
-        return dump
     opp = _other(viewer_side)
     revealed = _combat_revealed_locales(state)
     for _lid, lord in dump["lords"].items():
-        if lord.get("side") != opp:
+        if not state.meta.hidden_mats or lord.get("side") != opp:
             continue
         cyl = lord.get("cylinder", {})
         on_map = cyl.get("kind") == "locale"
@@ -67,7 +65,26 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
             if f in lord:
                 lord[f] = None
         lord["hidden_mat"] = True
-    # The opponent's just-drawn (pending) Arts of War cards are private.
-    if "decks" in dump and "pending_draw" in dump["decks"]:
-        dump["decks"]["pending_draw"][opp] = None
+    # The opponent's unused Command cards are private even with open Mats.
+    # Keep revealed entries visible, and preserve the public stack size.
+    decks = dump["decks"]
+    plan = decks["plan"].get(opp, [])
+    revealed_count = getattr(state.meta, f"plan_index_{opp}")
+    decks["plan"][opp] = [entry if i < revealed_count else None
+                           for i, entry in enumerate(plan)]
+    decks["pending_draw"][opp] = None
+    decks["held"][opp] = None
+    # Neither player may inspect the order of undrawn Arts of War cards.
+    decks["draw"] = None
+    # The action log must not provide a second route to the hidden cards.
+    for entry in dump["history"]:
+        if entry["actor"] != opp:
+            continue
+        event_card = entry["args"].get("card_id")
+        private_event = (entry["action"] == "aow_implement_event"
+                         and (event_card is None
+                              or event_card in state.decks.held.get(opp, [])))
+        if entry["action"] in {"plan_add_card", "aow_draw"} or private_event:
+            entry["args"] = {}
+            entry["summary"] = f"{opp}: {entry['action']} (private cards)"
     return dump

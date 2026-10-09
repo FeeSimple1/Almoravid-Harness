@@ -47,3 +47,14 @@ def test_check_invariants_flags_a_corrupted_state() -> None:
     assert stress.check_invariants(s) == []         # healthy at start
     next(iter(s.lords.values())).assets["coin"] = -5
     assert any("negative asset" in v for v in stress.check_invariants(s))
+
+
+@pytest.mark.parametrize("box,valid", [(0, True), (17, True), (-1, False), (18, False)])
+def test_calendar_cylinder_boundary_boxes(box: int, valid: bool) -> None:
+    """Rules 2.2.3 explicitly include the 0 and 17+ Calendar boxes."""
+    from almoravid.scenarios import load_scenario
+    from almoravid.state import Cylinder
+    state = load_scenario("scenario_f_reconquista", seed=1)
+    state.lords["al_mutawakkil"].cylinder = Cylinder(kind="calendar", box=box)
+    errors = stress.check_invariants(state)
+    assert (not any("calendar box out of range" in e for e in errors)) is valid

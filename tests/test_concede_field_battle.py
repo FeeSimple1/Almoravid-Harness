@@ -490,7 +490,7 @@ def _relief_sync(s, *, acr=None, dcr=None):
 def _relief_stepped(s, *, concede_round=None, conceder=None):
     rs = _battle._relief_setup(s, ["alfonso"], ["alvar_fanez"], ["al_mutamid"],
                           besieger_side="muslim", locale_id="sevilla",
-                          max_rounds=6)
+                          max_rounds=None)
     snap = _json.loads(_json.dumps(_battle._relief_to_snapshot(rs)))
     rnd_i = 1
     while True:
@@ -499,7 +499,7 @@ def _relief_stepped(s, *, concede_round=None, conceder=None):
         dfdc = (conceder == "defender" and rnd_i == concede_round)
         _battle._relief_declare_concede(rs, atk_concedes=atkc, dfd_concedes=dfdc)
         rs.result.rounds.append(_battle._relief_run_round(s, rs, rnd_i))
-        if atkc or dfdc or _battle._relief_over(s, rs) or rnd_i >= rs.max_rounds:
+        if atkc or dfdc or _battle._relief_over(s, rs):
             _battle._relief_finalize(s, rs)
             return rs.result.winner, len(rs.result.rounds)
         snap = _json.loads(_json.dumps(_battle._relief_to_snapshot(rs)))

@@ -52,6 +52,9 @@ CHRISTIAN_NOT_EUDES = frozenset({
     "alvar_fanez", "rodrigo_campeador",
 })
 _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
+    "C13": frozenset({"sancho", "eudes"}),
+    "M23": frozenset({"al_mustain", "al_mundir"}),
+    "C16": frozenset({"alfonso"}),
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
     "C24": CHRISTIAN_CAPTAINS_FOUR,   # Garcia Jimenez

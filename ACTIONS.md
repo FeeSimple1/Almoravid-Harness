@@ -74,6 +74,36 @@ Draw `n` cards from the top of the deck into `decks.pending_draw[side]`.
 {"type": "aow_draw", "side": "christian", "n": 3}
 ```
 
+### Held Events (3.1.3)
+
+On later Levies, `aow_implement_event` resolves the next card in
+`pending_draw`. Immediate Events execute then; Hold Events go to
+`decks.held[side]` without executing. Starting scenario Holds use the
+same collection. Unplayed Holds survive Levy/Campaign boundaries and
+unrelated Battles; legacy saves' event buckets remain supported.
+
+`play_event` plays a held C18, C20, M8, M9, M10, M12, M15, M18, M20,
+or M21 during that side's turn in Levy/Campaign with no pending decision.
+Existing specific `play_*` actions and reactive combat/movement hooks
+continue to handle the other Hold cards. Playing consumes the card once.
+
+```
+{"type": "play_event", "side": "muslim", "card_id": "M12",
+ "payload": {"lord_ids": ["al_mutamid", "al_mutawakkil"]}}
+```
+
+M12 accepts up to two `lord_ids` for Calendar/Service shifts, or
+`{"mode":"lordship","lord_id":"al_mutamid"}` during the Muslim
+Muster segment for temporary +2 Lordship. C18/M18 are playable only
+in their side's Muster segment; `payload.transport` chooses `cart`
+or `mule` (default), and `transport_by_lord` overrides that choice
+for individual Lords. M21 accepts `payload.lord_id` to Muster a Taifa
+Lord instead of its Jihad effect. Other direct Events accept their
+resolver's optional targets (`locale_id`, `jihad_targets`, or `mode`).
+
+`legal_moves` includes executable examples for held Events, including
+the Marriage card held at the start of Scenario A.
+
 ## 3.2 Pay
 
 Phase 2c: only `pass_step` is currently legal in this step. Payment

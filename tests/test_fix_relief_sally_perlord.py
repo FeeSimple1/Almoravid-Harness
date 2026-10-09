@@ -31,10 +31,14 @@ def test_sallyer_lane_losses_attributed_per_lord() -> None:
         max_rounds=1)
     # A's Knights are untouched (Serfs absorbed the besieger's Hits).
     assert s.lords[a].forces.get("knights", 0) == 3
-    # B (Serfs) bore any Losses; sum is consistent with starting count.
+    # B (Serfs) bore the Hit and was removed, never Routed (4.4.2).
     surv = s.lords[b].forces.get("serfs", 0)
     routed = s.lords[b].routed_units.get("serfs", 0)
-    assert surv + routed == 4
+    removed = sum(step.losses.get("serfs", 0)
+                  for rnd in result.rounds for step in rnd.steps
+                  if step.actor == "defender")
+    assert surv + removed == 4
+    assert routed == 0
     # A took no Routs.
     assert not s.lords[a].routed_units
 

@@ -94,8 +94,8 @@ def test_serfs_auto_remove_on_hit() -> None:
     )
     result = resolve_battle(s, atk, dfd)
     # Defender's Serfs should have been removed without Protection rolls.
-    # Either all routed or some remain.
-    assert dfd.routed_units.get("serfs", 0) > 0
+    assert dfd.forces.get("serfs", 0) == 0
+    assert dfd.routed_units.get("serfs", 0) == 0
 
 
 def test_strike_rows_for_alfonso() -> None:

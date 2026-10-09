@@ -605,6 +605,13 @@
           "title": "Vassals",
           "type": "array"
         },
+        "removed_vassal_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Removed Vassal Ids",
+          "type": "array"
+        },
         "in_stronghold": {
           "default": false,
           "title": "In Stronghold",
@@ -623,6 +630,11 @@
         "lordship_used": {
           "default": 0,
           "title": "Lordship Used",
+          "type": "integer"
+        },
+        "lordship_bonus_this_levy": {
+          "default": 0,
+          "title": "Lordship Bonus This Levy",
           "type": "integer"
         },
         "first_march_used_this_card": {
@@ -1033,7 +1045,7 @@
               "type": "null"
             }
           ],
-          "default": "christian",
+          "default": null,
           "title": "Count Of Barcelona Side"
         },
         "aow_cap_state": {

@@ -193,8 +193,8 @@ def test_evade_does_not_apply_to_missile_hits() -> None:
     )
 
 
-def test_bug_j_this_levy_events_cleared_on_aftermath() -> None:
-    """Bug J (Pattern 13): hold events discard at Battle/Storm aftermath
+def test_bug_j_only_used_events_discard_on_aftermath() -> None:
+    """Bug J (Pattern 13): used events discard at Battle/Storm aftermath
     per rule 4.4.5 'Discard all Hold Events used in this Battle/Storm'."""
     from almoravid.battle import BattleResult, BattleSide, apply_aftermath
     from almoravid.scenarios import load_scenario
@@ -207,9 +207,11 @@ def test_bug_j_this_levy_events_cleared_on_aftermath() -> None:
     r = BattleResult(engagement="battle", attacker=atk, defender=dfd,
                      winner="christian")
     apply_aftermath(s, r)
-    assert s.decks.this_levy_events == {}
-    assert "C1" in s.decks.discard
-    assert "C3" in s.decks.discard
+    # Hills is not playable by the Attacker; Swollen River was not used
+    # in this Battle. Neither card may be discarded merely for being held.
+    assert s.decks.this_levy_events["christian"] == ["C1", "C3"]
+    assert "C1" not in s.decks.discard
+    assert "C3" not in s.decks.discard
     assert "M7" in s.decks.discard
 
 

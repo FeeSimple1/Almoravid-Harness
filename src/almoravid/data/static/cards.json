@@ -115,7 +115,7 @@
       "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Count of Barcelona",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "C14": {
@@ -142,7 +142,7 @@
       "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Cathedrals",
-      "capability_scope": "this_lord",
+      "capability_scope": "side_wide",
       "no_capability": false
     },
     "C17": {
@@ -220,7 +220,7 @@
     "C25": {
       "side": "christian",
       "event_name": "De Vivar",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "El Cid",
       "capability_scope": "this_lord",
@@ -274,7 +274,7 @@
     "M5": {
       "side": "muslim",
       "event_name": "Drought",
-      "event_persistence": "hold",
+      "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Alrama",
       "capability_scope": "this_lord",
@@ -301,7 +301,7 @@
     "M8": {
       "side": "muslim",
       "event_name": "Ahmad Ibn Rumayla",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Dawud ibn Aisha",
       "capability_scope": "this_lord",
@@ -319,7 +319,7 @@
     "M10": {
       "side": "muslim",
       "event_name": "Fatwa",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Andalusians",
       "capability_scope": "side_wide",
@@ -337,7 +337,7 @@
     "M12": {
       "side": "muslim",
       "event_name": "Taifa Marriage",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Al-Yazirat al-Hadra",
       "capability_scope": "side_wide",
@@ -364,7 +364,7 @@
     "M15": {
       "side": "muslim",
       "event_name": "Parias Revolt",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Saqalibah",
       "capability_scope": "side_wide",
@@ -418,7 +418,7 @@
     "M21": {
       "side": "muslim",
       "event_name": "Al-Sumaisir",
-      "event_persistence": "immediate",
+      "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Hasham",
       "capability_scope": "this_lord",
@@ -439,7 +439,7 @@
       "event_persistence": "immediate",
       "no_event": false,
       "capability_name": "Count of Barcelona",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "M24": {
