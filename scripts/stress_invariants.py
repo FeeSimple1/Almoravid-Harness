@@ -111,8 +111,10 @@ def check_invariants(state: GameState) -> list[str]:
         kind = lord.cylinder.kind
         if kind not in _VALID_CYLINDER_KINDS:
             errs.append(f"bad cylinder kind {lid}={kind}")
+        # Rules of Play 2.2.3: cylinders, like Service markers, may
+        # occupy both the 0 and 17+ boxes and still count on Calendar.
         if (kind == "calendar" and lord.cylinder.box is not None
-                and not 1 <= lord.cylinder.box <= 17):
+                and not 0 <= lord.cylinder.box <= 17):
             errs.append(f"calendar box out of range {lid}={lord.cylinder.box}")
         if kind == "locale" and lord.cylinder.locale_id not in state.locales:
             errs.append(f"unknown locale {lid}={lord.cylinder.locale_id}")

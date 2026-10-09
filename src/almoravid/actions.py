@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from almoravid.effective import effective_lordship
 from almoravid.rng import roll_d6, shuffle
 from almoravid.state import (
     AssetType,
@@ -380,6 +381,10 @@ def _rebuild_aow_deck(state: GameState, side: Side) -> int:
     excluded.update(state.decks.removed_from_game)
     state.decks.draw = [cid for cid, c in cards.items()
                         if c["side"] == side and cid not in excluded]
+    # 3.1.1 collects unused cards into this side's deck. A recycled
+    # card leaves the discard pile; the other side's discards stay put.
+    recycled = set(state.decks.draw)
+    state.decks.discard = [cid for cid in state.decks.discard if cid not in recycled]
     return len(excluded)
 
 
@@ -438,6 +443,10 @@ def _h_aow_deploy_capability(state: GameState, action: dict[str, Any]) -> dict[s
     card_id = cast(str, card_id)
     rec = load_cards()["cards"].get(card_id, {})
     scope = rec.get("capability_scope")
+    # 3.1.2: this pending card is now deployed or discarded, never
+    # simultaneously in a previous draw/discard source (including old saves).
+    state.decks.draw = [cid for cid in state.decks.draw if cid != card_id]
+    state.decks.discard = [cid for cid in state.decks.discard if cid != card_id]
     deployed = None
     if rec.get("no_capability") or scope is None:
         state.decks.discard.append(card_id)        # no Capability half
@@ -485,7 +494,7 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
     (upper half) in the order drawn. Immediate Events apply at once;
     "This Levy" and "Hold" Events are bucketed by their resolver. Cards
     must be implemented in draw order (FIFO)."""
-    from almoravid.events import resolve_event
+    from almoravid.events import hold_drawn_event, resolve_event
     side = _require_side(action)
     _require_levy_step(state, "arts_of_war")
     _require_active(state, side)
@@ -500,7 +509,12 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
     _require(card_id == pend[0],
              f"Events must be implemented in the order drawn (next: "
              f"{pend[0]})", code="out_of_order")
-    res = resolve_event(state, side, card_id, action.get("payload"))
+    # AUDIT-04: Hold means keep hidden for later use, even if its
+    # resolver can execute an immediate effect (Rules of Play 3.1.3).
+    if load_cards()["cards"][card_id].get("event_persistence") == "hold":
+        res = hold_drawn_event(state, side, card_id)
+    else:
+        res = resolve_event(state, side, card_id, action.get("payload"))
     # Remove from pending; the resolver routed the card (hold bucket,
     # this-levy bucket, or immediate apply+discard).
     state.decks.pending_draw[side] = pend[1:]
@@ -543,6 +557,55 @@ def _free_seats_for(state: GameState, lord_id: str) -> list[str]:
         if not enemy_present:
             out.append(seat)
     return out
+
+
+def _initialize_mustered_lord(state: GameState, lord_id: str,
+                              seat: str) -> dict[str, Any]:
+    """Prepare a Lord's mat and Service marker for a validated Muster.
+
+    Rules of Play 3.4.1: all Muster paths, including Arts of War and
+    Call to Arms, place the printed Forces, Assets, available Ready
+    Vassals, and the Lord's Service marker. Vassal Forces remain in the
+    pool until separately Mustered (3.4.2).
+    """
+    from almoravid.state import Cylinder, ServiceMarker, Vassal
+
+    lord = state.lords[lord_id]
+    static = load_lords()["lords"][lord_id]
+    lord.cylinder = Cylinder(kind="locale", locale_id=seat)
+    lord.forces = dict(static["forces"])
+    lord.assets = dict(static["assets"])
+    lord.vassals = [
+        Vassal(id=f"{lord_id}_v{i + 1}", name=v["name"],
+               forces=dict(v["forces"]), service_cost=v["service_cost"])
+        for i, v in enumerate(static["vassals"])
+        if f"{lord_id}_v{i + 1}" not in lord.removed_vassal_ids
+    ]
+    lord.in_stronghold = False
+    lord.routed_units = {}
+    lord.lordship_used = 0
+    # Pattern 3: an Arts-of-War Muster before the Muster segment does
+    # not prevent participation in that later segment (3.4 Important).
+    lord.just_arrived_this_levy = (state.meta.phase == "levy"
+                                   and state.meta.levy_step == "muster")
+    state.calendar.service_markers = [
+        marker for marker in state.calendar.service_markers
+        if marker.lord_id != lord_id
+    ]
+    for lane in (state.calendar.off_left_service,
+                 state.calendar.off_right_service,
+                 state.calendar.off_left, state.calendar.off_right):
+        if lord_id in lane:
+            lane.remove(lord_id)
+    svc_box = min(17, state.calendar.current_box + lord.service_rating)
+    state.calendar.service_markers.append(
+        ServiceMarker(lord_id=lord_id, box=svc_box))
+    taifa_adjust = None
+    if lord.is_taifa and lord.home_taifa:
+        from almoravid.campaign import adjust_taifa_status
+        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "independent")
+    return {"mustered_at": seat, "service_box": svc_box,
+            "taifa_adjust": taifa_adjust}
 
 
 def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -597,9 +660,9 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"{levying_lord_id} was newly Mustered this segment and cannot "
              f"use Lordship now (3.4.1)", code="levier_just_arrived")
     _require_levy_actor_eligible(state, levier, levying_lord_id)
-    _require(levier.lordship_used < levier.lordship_rating,
+    _require(levier.lordship_used < effective_lordship(state, levying_lord_id),
              f"{levying_lord_id} has no Lordship left "
-             f"({levier.lordship_used}/{levier.lordship_rating})",
+             f"({levier.lordship_used}/{effective_lordship(state, levying_lord_id)})",
              code="lordship_exhausted")
     _require(lord.cylinder.kind == "calendar",
              f"{lord_id} is not on the Calendar (cylinder.kind={lord.cylinder.kind})",
@@ -613,6 +676,8 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="not_ready")
     free = _free_seats_for(state, lord_id)
     _require(free, f"{lord_id} has no free Seat to Muster at", code="no_free_seat")
+    seat = action.get("seat", free[0])
+    _require(seat in free, f"{seat} is not a free Seat for {lord_id}", code="bad_seat")
     # 3.4.1: spend the Levying Lord's Lordship point for this attempt
     # (whether or not the roll succeeds; a failed roll may be retried by
     # spending more Lordship).
@@ -627,32 +692,9 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         return {"success": False, "roll": roll, "fealty": lord.fealty,
                 "levying_lord_id": levying_lord_id}
 
-    # Success: place at chosen Seat (or default to first free Seat),
-    # set starting forces / assets from static data, advance Service.
-    seat = action.get("seat", free[0])
-    _require(seat in free, f"{seat} is not a free Seat for {lord_id}", code="bad_seat")
-    from almoravid.state import Cylinder
-    lord.cylinder = Cylinder(kind="locale", locale_id=seat)
-    static = load_lords()["lords"][lord_id]
-    lord.forces = dict(static["forces"])
-    lord.assets = dict(static["assets"])
-    # 3.4.1: place the Lord's own Service marker service_rating boxes
-    # RIGHT (ahead) of the current Levy marker; cap at the 17+ box.
-    from almoravid.state import ServiceMarker
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers
-        if not (s.lord_id == lord_id and s.vassal_id is None)
-    ]
-    svc_box = min(17, state.calendar.current_box + lord.service_rating)
-    state.calendar.service_markers.append(
-        ServiceMarker(lord_id=lord_id, box=svc_box))
-    lord.just_arrived_this_levy = True
-    # 3.4.1 TAIFA POLITICS: Mustering a Taifa Lord adjusts his Taifa to
-    # Independent (1.4.3).
-    taifa_adjust = None
-    if lord.is_taifa and lord.home_taifa:
-        from almoravid.campaign import adjust_taifa_status
-        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "independent")
+    muster = _initialize_mustered_lord(state, lord_id, seat)
+    svc_box = muster["service_box"]
+    taifa_adjust = muster["taifa_adjust"]
     _record(state, action,
             f"{lord_id} Mustered at {seat}: rolled {roll} <= Fealty "
             f"{lord.fealty}; Service marker -> box {svc_box}")
@@ -733,7 +775,6 @@ def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any
     place the Service marker service_rating boxes ahead (cap 17), set
     just_arrived. Taifa Lords adjust their Taifa to Independent (3.4.1).
     """
-    from almoravid.state import Cylinder, ServiceMarker
     lord = state.lords[lord_id]
     # 3.4.1: place the cylinder at a Seat "neither Enemy nor has any Enemy
     # Lords present". CtA auto-Muster must obey the usual Muster rule
@@ -743,24 +784,7 @@ def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any
     _require(not _cta_seat_has_enemy_lord(state, seat, lord.side),
              f"{seat} has an Enemy Lord present — cannot Muster there "
              f"(3.4.1)", code="enemy_lord_present")
-    lord.cylinder = Cylinder(kind="locale", locale_id=seat)
-    static = load_lords()["lords"][lord_id]
-    lord.forces = dict(static["forces"])
-    lord.assets = dict(static["assets"])
-    state.calendar.service_markers = [
-        s for s in state.calendar.service_markers
-        if not (s.lord_id == lord_id and s.vassal_id is None)
-    ]
-    svc_box = min(17, state.calendar.current_box + lord.service_rating)
-    state.calendar.service_markers.append(
-        ServiceMarker(lord_id=lord_id, box=svc_box))
-    lord.just_arrived_this_levy = True
-    taifa_adjust = None
-    if lord.is_taifa and lord.home_taifa:
-        from almoravid.campaign import adjust_taifa_status
-        taifa_adjust = adjust_taifa_status(state, lord.home_taifa, "independent")
-    return {"mustered_at": seat, "service_box": svc_box,
-            "taifa_adjust": taifa_adjust}
+    return _initialize_mustered_lord(state, lord_id, seat)
 
 
 def _cta_move_seat_marker(state: GameState, lord_id: str, seat: str) -> None:
@@ -791,7 +815,7 @@ def _cta_collect_payment(state: GameState, side: Side,
              "payments list required (explicit Coin sources, 3.5)",
              code="bad_arg")
     total = 0
-    plan: list[tuple[str, str | None, int]] = []  # (kind, lord, amount)
+    payer_amounts: dict[str, int] = {}
     taifa_amt = 0
     for entry in payments:
         _require(isinstance(entry, dict), "payment entry must be a dict",
@@ -804,7 +828,6 @@ def _cta_collect_payment(state: GameState, side: Side,
             _require(amt >= 1, "taifa_box coin must be >= 1", code="bad_arg")
             taifa_amt += amt
             total += amt
-            plan.append(("taifa", None, amt))
         else:
             plid = entry.get("lord_id")
             _require(plid in state.lords, "payment lord_id required (str)",
@@ -819,28 +842,27 @@ def _cta_collect_payment(state: GameState, side: Side,
             _require(not is_besieged(state, plid),
                      f"{plid} is Besieged — cannot contribute Coin (3.5)",
                      code="besieged")
-            have = payer.assets.get("coin", 0)
-            _require(have >= amt,
-                     f"{plid} has {have} Coin, payment claims {amt}",
-                     code="no_coin")
             total += amt
-            plan.append(("lord", plid, amt))
+            payer_amounts[plid] = payer_amounts.get(plid, 0) + amt
     _require(total == required,
              f"payments total {total} Coin, need exactly {required} (3.5)",
              code="bad_payment_total")
     _require(taifa_amt <= state.taifas_box_coin,
              f"Taifas box has {state.taifas_box_coin} Coin, "
              f"payment claims {taifa_amt}", code="no_coin")
+    # 3.5 payment: repeated entries still draw from one actual balance.
+    for plid, amt in payer_amounts.items():
+        have = state.lords[plid].assets.get("coin", 0)
+        _require(have >= amt,
+                 f"{plid} has {have} Coin, payment claims {amt}",
+                 code="no_coin")
     # All validated — apply.
-    for kind, plid, amt in plan:
-        if kind == "taifa":
-            state.taifas_box_coin -= amt
-        else:
-            assert plid is not None
-            payer = state.lords[plid]
-            payer.assets["coin"] = payer.assets.get("coin", 0) - amt
-            if payer.assets["coin"] == 0:
-                payer.assets.pop("coin", None)
+    state.taifas_box_coin -= taifa_amt
+    for plid, amt in payer_amounts.items():
+        payer = state.lords[plid]
+        payer.assets["coin"] = payer.assets.get("coin", 0) - amt
+        if payer.assets["coin"] == 0:
+            payer.assets.pop("coin", None)
 
 
 # ----- 3.5.1 Christian options ---------------------------------------------
@@ -1092,6 +1114,16 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
                  f"{lid} is not Ready on the Calendar (3.5.2)",
                  code="not_ready")
     from almoravid.events import _jihad_eligible_locales
+    # Validate the entire 3.5.2 choice before moving either cylinder or
+    # awarding VP: callers may correct a rejected action and retry it.
+    eligible = _jihad_eligible_locales(state)
+    jihad_locale = action.get("jihad_locale")
+    placed = None
+    if eligible or jihad_locale is not None:
+        _require(jihad_locale in eligible,
+                 f"jihad_locale must be a Jihad-eligible Locale "
+                 f"{eligible} (3.5.2/1.4.4)", code="bad_jihad_target")
+        jihad_locale = cast(str, jihad_locale)
     from almoravid.state import Cylinder
     box = min(16, state.calendar.current_box + 1)
     yusuf.cylinder = Cylinder(kind="calendar", box=box)
@@ -1099,14 +1131,7 @@ def _h_cta_uphold_dynasties(state: GameState, action: dict[str, Any]) -> dict[st
     state.taifas_box_vp += 1.0
     state.score.muslim += 1.0
     # One Jihad marker, if able.
-    eligible = _jihad_eligible_locales(state)
-    jihad_locale = action.get("jihad_locale")
-    placed = None
     if eligible:
-        _require(jihad_locale in eligible,
-                 f"jihad_locale must be a Jihad-eligible Locale "
-                 f"{eligible} (3.5.2/1.4.4)", code="bad_jihad_target")
-        jihad_locale = cast(str, jihad_locale)
         state.locales[jihad_locale].add_jihad(1)
         placed = jihad_locale
     _record(state, action,
@@ -1341,6 +1366,8 @@ def _disband_vassals_for_side(state: GameState,
                 if removed:
                     vassal.pennant_down = False
                     vassal.ready = False   # permanently gone (no re-Muster)
+                    if vassal.id not in lord.removed_vassal_ids:
+                        lord.removed_vassal_ids.append(vassal.id)
                 else:
                     vassal.pennant_down = True   # Unready until flip-up
                     vassal.ready = False
@@ -1616,8 +1643,14 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     sm = next((m for m in state.calendar.service_markers
                if m.lord_id == lord_id and m.vassal_id is None), None)
     # 1.6 no-Forces auto-Disband (3.3.2) bypasses the at-limit gate.
-    bypass_limit = bool(action.get("bypass_limit_check"))
-    if sm is None:
+    force_at_limit = bool(action.get("force_at_service_limit"))
+    bypass_limit = bool(action.get("bypass_limit_check")) or force_at_limit
+    if force_at_limit:
+        # C26/M25/M26 mandate Disband as at Service limit (3.3.2),
+        # regardless of the current Service marker; internal callers
+        # retain their original phase for the Errata calendar placement.
+        beyond = False
+    elif sm is None:
         beyond = True  # off the Calendar (off-left)
     else:
         if not bypass_limit:
@@ -1680,6 +1713,16 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # side's board-edge stock; 3.3.2 discards them (cards at his mat).
     caps = list(lord.capabilities)
     if caps:
+        for cap in caps:
+            if cap in ("C13", "M23"):
+                from almoravid.events import _remove_count_units
+                _remove_count_units(state, cap)
+                if state.meta.count_of_barcelona_side == side:
+                    state.meta.count_of_barcelona_side = None
+        state.decks.capabilities_in_play = [
+            cap for cap in state.decks.capabilities_in_play
+            if not (cap.owner_lord_id == lord_id and cap.card_id in caps)
+        ]
         if beyond:
             state.decks.board_edge.setdefault(side, []).extend(caps)
         else:
@@ -1702,6 +1745,7 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.moved_fought = False
     lord.just_arrived_this_levy = False
     lord.lordship_used = 0
+    lord.lordship_bonus_this_levy = 0
     lord.first_march_used_this_card = False
     lord.raiders_used_this_card = False
     lord.routed_units = {}
@@ -1771,6 +1815,11 @@ def _require_levy_actor_eligible(state: GameState, lord: Lord,
     from almoravid.effective import is_besieged, is_friendly_locale
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not on the map (3.4)", code="not_on_map")
+    # Pattern 3: newly Mustered Lords cannot use Lordship in this same
+    # Muster segment (Rules of Play 3.4 Important / 3.4.1).
+    _require(not lord.just_arrived_this_levy,
+             f"{lord_id} was newly Mustered this segment and cannot "
+             f"use Lordship now (3.4.1)", code="levier_just_arrived")
     here = lord.cylinder.locale_id
     assert here is not None
     _require(is_friendly_locale(state, here, lord.side),
@@ -1801,9 +1850,9 @@ def _h_levy_transport(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(lord.side == side, f"{lord_id} not on {side}'s side",
              code="wrong_side")
     _require_levy_actor_eligible(state, lord, lord_id)
-    _require(lord.lordship_used < lord.lordship_rating,
+    _require(lord.lordship_used < effective_lordship(state, lord_id),
              f"{lord_id} has already spent {lord.lordship_used}/"
-             f"{lord.lordship_rating} Lordship", code="lordship_exhausted")
+             f"{effective_lordship(state, lord_id)} Lordship", code="lordship_exhausted")
     transport = action.get("transport")
     _require(transport in ("cart", "mule"),
              "transport must be 'cart' or 'mule' (3.4.3)", code="bad_arg")
@@ -1853,9 +1902,9 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not mustered", code="not_on_map")
     _require_levy_actor_eligible(state, lord, lord_id)
-    _require(lord.lordship_used < lord.lordship_rating,
+    _require(lord.lordship_used < effective_lordship(state, lord_id),
              f"{lord_id} has already spent {lord.lordship_used}/"
-             f"{lord.lordship_rating} Lordship",
+             f"{effective_lordship(state, lord_id)} Lordship",
              code="lordship_exhausted")
     _require(0 <= vassal_index < len(lord.vassals),
              f"vassal_index {vassal_index} out of range",
@@ -1902,11 +1951,10 @@ def _unused_capability_cards(state: GameState, side: Side) -> list[str]:
     Events, and cards pending implementation this Levy. Cards in the
     draw pile the player has never seen, and discarded cards, both
     count as unused (the deck is a face-up "menu" for Capability Levy).
-    Per the rules there is no permanent card-removal mechanic active in
-    this engine, so nothing else is excluded.
+    Permanently removed cards never return (C18 Milites card text).
     """
     cards = load_cards()["cards"]
-    excluded: set[str] = set()
+    excluded: set[str] = set(state.decks.removed_from_game)
     for bucket in (state.decks.this_levy_events,
                    state.decks.this_campaign_events, state.decks.held):
         excluded.update(bucket.get(side, []))
@@ -1985,7 +2033,7 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not mustered", code="not_on_map")
     _require_levy_actor_eligible(state, lord, lord_id)
-    _require(lord.lordship_used < lord.lordship_rating,
+    _require(lord.lordship_used < effective_lordship(state, lord_id),
              "lordship exhausted", code="lordship_exhausted")
     # 3.4.4: select from ANY of the side's currently UNUSED Capability
     # cards (full deck minus in-play/held/pending), not just board edge.
@@ -1997,13 +2045,17 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     _require(rec and not rec["no_capability"],
              f"{card_id} has no Capability half", code="no_capability_half")
     scope = rec["capability_scope"]
+    # C16 Cathedrals card text: only Alfonso may Levy this Capability,
+    # even though the card is kept at the board edge (not on his mat).
+    _require(card_id != "C16" or lord_id == "alfonso",
+             "Only Alfonso may Levy Cathedrals (C16)", code="lord_not_eligible")
     if scope == "this_lord":
         _check_this_lord_cap_limits(lord, card_id)
     # Deploy: this_lord caps tuck under the Lord's mat; side_wide caps go
     # to the board edge. Both register in capabilities_in_play and leave
     # the unused pool. Drop from the materialised draw list if present.
-    if card_id in state.decks.draw:
-        state.decks.draw.remove(card_id)
+    state.decks.draw = [cid for cid in state.decks.draw if cid != card_id]
+    state.decks.discard = [cid for cid in state.decks.discard if cid != card_id]
     if scope == "this_lord":
         lord.capabilities.append(card_id)
     else:
@@ -2051,6 +2103,8 @@ def _ensure_campaign_handlers() -> None:
         return
     from almoravid.campaign import CAMPAIGN_HANDLERS
     _HANDLERS.update(CAMPAIGN_HANDLERS)
+    from almoravid.events import play_held_event
+    _HANDLERS["play_event"] = play_held_event
 
 
 def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:

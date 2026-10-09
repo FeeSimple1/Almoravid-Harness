@@ -68,8 +68,8 @@ def test_array_groups_also_clamped() -> None:
     assert raw == 0.5            # clamped to the 1 pooled survivor
 
 
-def test_sally_multi_lord_sides_get_cap_groups() -> None:
-    """cmd_sally wires per-Lord cap scoping for BOTH pooled sides."""
+def test_sally_multi_lord_sides_scope_missiles_per_lord(monkeypatch) -> None:
+    """cmd_sally preserves missile ownership in BOTH Battle Arrays."""
     from almoravid.actions import apply_action
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     # Two Besieged Muslim Lords inside Zaragoza (al_mustain holds M2),
@@ -83,6 +83,8 @@ def test_sally_multi_lord_sides_get_cap_groups() -> None:
     s.lords["al_mutamid"].capabilities = []
     s.lords["alvar_fanez"].capabilities = ["C2"]
     s.lords["alfonso"].capabilities = []
+    for lid in ("al_mustain", "al_mutamid", "alvar_fanez", "alfonso"):
+        s.lords[lid].forces = {"men_at_arms": 2}
     s.locales["zaragoza"].siege_yellow = 2
     s.meta.phase = "campaign"
     s.meta.campaign_step = "activation"
@@ -95,16 +97,11 @@ def test_sally_multi_lord_sides_get_cap_groups() -> None:
     orig = B.resolve_sally
 
     def spy(state, atk, dfd, **kw):
-        captured["atk"] = atk.cap_groups
-        captured["dfd"] = dfd.cap_groups
+        captured["atk"] = _missile_raw(build_strike_rows(state, atk))
+        captured["dfd"] = _missile_raw(build_strike_rows(state, dfd))
         return orig(state, atk, dfd, **kw)
 
-    B.resolve_sally = spy
-    try:
-        apply_action(s, {"type": "cmd_sally", "side": "muslim"})
-    finally:
-        B.resolve_sally = orig
-    assert captured["atk"] is not None and len(captured["atk"]) == 2
-    assert captured["dfd"] is not None and len(captured["dfd"]) == 2
-    atk_caps = {tuple(c) for c, _f in captured["atk"]}
-    assert ("M2",) in atk_caps and () in atk_caps
+    monkeypatch.setattr(B, "resolve_sally", spy)
+    apply_action(s, {"type": "cmd_sally", "side": "muslim"})
+    assert captured["atk"] == (1.0, {"crossbows": 1.0})
+    assert captured["dfd"] == (1.0, {"crossbows": 1.0})

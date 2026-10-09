@@ -217,10 +217,9 @@ class Meta(StrictModel):
     # and applies +2 Siege markers (already placed by the cmd_march
     # auto-trigger).
     surprise_storm_pending_locale_id: str | None = None
-    # Phase 6k: Count of Barcelona faction — toggled by C13/M23
-    # Berenguer Ramon events. Default is the Christian side (Sancho
-    # or Eudes can buy the C13 capability units).
-    count_of_barcelona_side: Side | None = "christian"
+    # C13/M23: allegiance of the Count's currently Mustered contingent.
+    # No side owns it until a paid capability/Event Muster; discard clears it.
+    count_of_barcelona_side: Side | None = None
 
     # Generic Arts-of-War capability gating state (Pattern: once-ever and
     # once-per-turn flags keyed by capability). Once flags store True;
@@ -371,6 +370,9 @@ class Lord(StrictModel):
     assets: dict[AssetType, int] = Field(default_factory=dict)
     capabilities: list[str] = Field(default_factory=list)  # this_lord-scope card_ids
     vassals: list[Vassal] = Field(default_factory=list)
+    # 3.4.2 advanced rule: permanently removed Vassal markers remain
+    # unavailable even after this Lord Disbands and re-Musters.
+    removed_vassal_ids: list[str] = Field(default_factory=list)
 
     # Stronghold occupancy (Pattern 5): NOT derived from base_type; tracked
     # explicitly so overlay-aware effective_stronghold() helpers in Phase 1
@@ -381,6 +383,8 @@ class Lord(StrictModel):
     moved_fought: bool = False
     just_arrived_this_levy: bool = False
     lordship_used: int = 0
+    # C14/C15/M12 grant extra actions in this Muster, never printed ratings.
+    lordship_bonus_this_levy: int = 0
     first_march_used_this_card: bool = False
     raiders_used_this_card: bool = False
     # 4.3.5 Bypass: set when this Lord places a Bypass marker DURING the
@@ -411,6 +415,7 @@ class Lord(StrictModel):
         "moved_fought",
         "just_arrived_this_levy",
         "lordship_used",
+        "lordship_bonus_this_levy",
         "first_march_used_this_card",
         "raiders_used_this_card",
         "bypassed_this_card",

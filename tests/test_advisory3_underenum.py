@@ -113,7 +113,8 @@ def test_c14_pope_gregory_offered_when_held_with_correct_modes() -> None:
     modes = {(m["lord_id"], m["mode"]) for m in moves}
     assert ("sancho", "muster_from_calendar") in modes
     assert ("sancho", "service_shift_right") in modes
-    assert ("sancho", "lordship_plus_2") in modes
+    # A Lord on the Calendar cannot participate in this Muster (3.4).
+    assert ("sancho", "lordship_plus_2") not in modes
     # Only Sancho/Eudes are valid C14 targets.
     assert all(m["lord_id"] in ("sancho", "eudes") for m in moves)
     # Every offered C14 play is accepted by the handler (no over-enum).

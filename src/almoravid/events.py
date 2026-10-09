@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math as _math
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from almoravid.state import GameState, Lord, Side
 from almoravid.static_data import load_cards
@@ -80,6 +80,128 @@ def _move_to_hold_bucket(state: GameState, card_id: str, side: Side, bucket: str
     else:
         raise ValueError(f"Unknown hold bucket: {bucket}")
     return {"card_id": card_id, "side": side, "held": bucket}
+
+
+def held_event_ids(state: GameState, side: Side) -> list[str]:
+    """Unspent Events, including legacy saves' event buckets (3.1.3).
+
+    New draws use ``held``. The other buckets remain readable for saved
+    games and for combat effects already placed in play by a resolver.
+    """
+    return list(dict.fromkeys(
+        state.decks.held.get(side, [])
+        + state.decks.this_levy_events.get(side, [])
+        + state.decks.this_campaign_events.get(side, [])))
+
+
+def has_held_event(state: GameState, side: Side, card_id: str) -> bool:
+    return card_id in held_event_ids(state, side)
+
+
+def consume_held_event(state: GameState, side: Side, card_id: str) -> None:
+    """Remove a played Event from every compatible holding location.
+
+    The effect's caller owns the discard/in-play destination. Removing
+    duplicates also repairs old saves without letting a card play twice.
+    """
+    for bucket in (state.decks.held, state.decks.this_levy_events,
+                   state.decks.this_campaign_events):
+        cards = bucket.get(side, [])
+        cards[:] = [card for card in cards if card != card_id]
+
+
+def hold_drawn_event(state: GameState, side: Side, card_id: str) -> dict[str, Any]:
+    """3.1.3: a drawn Hold is kept hidden; drawing never plays its effect."""
+    consume_held_event(state, side, card_id)
+    state.decks.held.setdefault(side, []).append(card_id)
+    return {"card_id": card_id, "side": side, "held": "held"}
+
+
+# Holds with unrestricted timing or a Muster window. Reactive Holds use
+# their existing Battle/March/Surrender/Call-to-Arms consumer actions.
+_DIRECT_HOLDS = {"C18", "C20", "M8", "M9", "M10", "M12", "M15",
+                 "M18", "M20", "M21"}
+
+
+def play_held_event(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Play an owned, previously drawn Hold at its printed time (3.1.3)."""
+    from almoravid.actions import (
+        _record,
+        _require,
+        _require_active,
+        _require_levy_step,
+        _require_side,
+    )
+    side = _require_side(action)
+    card_id = action.get("card_id")
+    _require(card_id in _DIRECT_HOLDS,
+             "this Event uses its specific response/play action", code="bad_card")
+    _require(load_cards()["cards"][card_id]["side"] == side,
+             "Event belongs to the other side", code="wrong_side")
+    _require(has_held_event(state, side, card_id),
+             f"{card_id} is not held", code="card_not_held")
+    _require(state.meta.phase in ("levy", "campaign"),
+             "Events can be played during Levy or Campaign", code="bad_phase")
+    _require(state.pending is None, "resolve the pending decision first",
+             code="pending_decision")
+    _require_active(state, side)
+    payload = dict(action.get("payload") or {})
+    if card_id in ("C18", "M18"):
+        _require_levy_step(state, "muster")
+    if card_id == "M12" and payload.get("mode") == "lordship":
+        _require_levy_step(state, "muster")
+        from almoravid.campaign import _muster_cap_lord_eligible
+        lid = payload.get("lord_id")
+        _require(lid in state.lords and state.lords[lid].is_taifa
+                 and _muster_cap_lord_eligible(state, lid, side),
+                 "Lordship requires an eligible Taifa Lord in Muster",
+                 code="not_eligible")
+    # Leave the held card untouched if resolver validation rejects play.
+    result = resolve_event(state, side, card_id, payload)
+    consume_held_event(state, side, card_id)
+    _record(state, action, f"{side} plays held Event {card_id} (3.1.3)")
+    return result
+
+
+def held_event_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
+    """Expose direct Holds, including scenario setup cards (3.1.3)."""
+    from itertools import combinations
+
+    from almoravid.campaign import _muster_cap_lord_eligible
+    if state.meta.phase not in ("levy", "campaign") or state.pending is not None:
+        return []
+    moves: list[dict[str, Any]] = []
+    muster = state.meta.phase == "levy" and state.meta.levy_step == "muster"
+    for card_id in held_event_ids(state, side):
+        if card_id not in _DIRECT_HOLDS:
+            continue
+        move = {"type": "play_event", "side": side, "card_id": card_id}
+        if card_id in ("C18", "M18"):
+            if muster:
+                for transport in ("cart", "mule"):
+                    moves.append({**move, "payload": {"transport": transport}})
+        elif card_id == "M12":
+            targets = [lid for lid, lord in state.lords.items()
+                       if lord.is_taifa and lord.side == side
+                       and lord.cylinder.kind in ("locale", "calendar")]
+            for count in (1, 2):
+                for selected in combinations(targets, count):
+                    moves.append({**move, "payload": {"lord_ids": list(selected)}})
+            if muster:
+                for lid in targets:
+                    if _muster_cap_lord_eligible(state, lid, side):
+                        moves.append({**move, "payload": {"mode": "lordship",
+                                                         "lord_id": lid}})
+        else:
+            moves.append(move)
+            if card_id == "M21":
+                from almoravid.actions import _free_seats_for
+                for lid, lord in state.lords.items():
+                    if (lord.side == side and lord.is_taifa
+                            and lord.cylinder.kind == "calendar"
+                            and _free_seats_for(state, lid)):
+                        moves.append({**move, "payload": {"lord_id": lid}})
+    return moves
 
 
 # ---------------------------------------------------------------------------
@@ -299,11 +421,13 @@ def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
         if lid is None:
             return _no_op_with_note(state, card_id, side,
                                     "no Taifa Lord for Lordship")
-        state.lords[lid].lordship_rating += 2
+        from almoravid.campaign import _grant_event_lordship
+        _grant_event_lordship(state, lid, "muslim")
         state.decks.discard.append(card_id)
         return {"card_id": card_id, "side": side,
                 "lordship_plus_2": lid,
-                "lordship_rating_now": state.lords[lid].lordship_rating}
+                "lordship_rating_now": state.lords[lid].lordship_rating
+                + state.lords[lid].lordship_bonus_this_levy}
     chosen = payload.get("lord_ids") or sorted(taifa_lord_ids)[:2]
     if not chosen:
         return _no_op_with_note(state, card_id, side,
@@ -459,6 +583,9 @@ def _remove_count_units(state: GameState, card: str) -> dict[str, Any] | None:
     recorded in meta.aow_cap_state[f'{card}_units'] (Pattern 8 discard)."""
     rec = state.meta.aow_cap_state.pop(f"{card}_units", None)
     state.meta.aow_cap_state.pop(f"{card}_used", None)
+    side = "christian" if card == "C13" else "muslim"
+    if rec and state.meta.count_of_barcelona_side == side:
+        state.meta.count_of_barcelona_side = None
     if not rec:
         return None
     lord = state.lords.get(rec.get("lord"))
@@ -468,92 +595,99 @@ def _remove_count_units(state: GameState, card: str) -> dict[str, Any] | None:
         n = rec.get(ut, 0)
         if n:
             lord.forces[ut] = max(0, lord.forces.get(ut, 0) - n)
-    return rec
+    return cast(dict[str, Any], rec)
 
 
-@register("C13")  # Berenguer Ramon — Christian event
-def _c13_berenguer_ramon(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C13 (Immediate): If Count of Barcelona with Muslims, discard.
-    Otherwise a named Christian Lord may pay 1 Asset and Levy this
-    card and its units (2 Knights + 2 Men-at-Arms per Capability text).
+def _discard_count_capability(state: GameState, card: str) -> dict[str, Any] | None:
+    """C13/M23: discard the opposing Count card and its recorded contingent."""
+    removed = _remove_count_units(state, card)
+    for lord in state.lords.values():
+        if card in lord.capabilities:
+            lord.capabilities.remove(card)
+    for edge in state.decks.board_edge.values():
+        if card in edge:
+            edge.remove(card)
+    state.decks.capabilities_in_play = [
+        c for c in state.decks.capabilities_in_play if c.card_id != card]
+    if card not in state.decks.discard:
+        state.decks.discard.append(card)
+    state.meta.count_of_barcelona_side = None
+    return removed
 
-    Phase 6k: if Count of Barcelona is with Muslim side, discard
-    no-effect. Otherwise the target Lord gains +2 Knights + +2 MaA
-    once (payload['target_lord_id']; default = first eligible
-    Sancho/Eudes/al-Mustain/al-Mundir). Pay 1 Asset (coin) when
-    available.
+
+def _berenguer_ramon(state: GameState, side: Side, card_id: str,
+                      payload: dict[str, Any]) -> dict[str, Any]:
+    """C13/M23 printed Event + Tips: optional immediate Levy for one Asset.
+
+    This is a paid This-Lord Capability, with exactly the same tracked
+    contingent as its Muster action. Sharing (1.5.2) and Taifas Coin
+    (1.3.3) apply; target/payment choices may be supplied in the payload.
     """
-    if state.meta.count_of_barcelona_side == "muslim":
-        removed = _remove_count_units(state, "M23")
-        state.meta.count_of_barcelona_side = None
+    from almoravid.actions import _check_this_lord_cap_limits, _require
+    from almoravid.campaign import _muster_cap_lord_eligible
+    from almoravid.state import CardInPlay
+    enemy = "muslim" if side == "christian" else "christian"
+    other_card = "M23" if side == "christian" else "C13"
+    if state.meta.count_of_barcelona_side == enemy:
+        removed = _discard_count_capability(state, other_card)
         state.decks.discard.append(card_id)
-        return {"card_id": card_id, "side": side,
-                "discarded": True, "removed_units": removed,
-                "reason": "Count of Barcelona with Muslims"}
-    eligible = [lid for lid in ("sancho", "eudes")
-                if lid in state.lords
-                and state.lords[lid].cylinder.kind == "locale"]
-    target = payload.get("target_lord_id")
-    if target and target not in eligible:
-        target = None
-    if target is None:
-        target = eligible[0] if eligible else None
-    if target is None:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Lord on map")
+        return {"card_id": card_id, "side": side, "discarded": True,
+                "removed_units": removed, "reason": f"Count of Barcelona with {enemy}"}
+    target = payload.get("target_lord_id") or payload.get("lord_id")
+    if not target or payload.get("decline"):
+        return _no_op_with_note(state, card_id, side, "optional Count Levy declined")
+    eligible = ("sancho", "eudes") if side == "christian" else ("al_mustain", "al_mundir")
+    _require(target in eligible and _muster_cap_lord_eligible(state, target, side),
+             "Count requires an eligible Lord at a Friendly Locale free of Siege",
+             code="not_eligible")
     lord = state.lords[target]
-    # Pay 1 Coin if available.
-    paid = False
-    if lord.assets.get("coin", 0) > 0:
-        lord.assets["coin"] -= 1
-        if lord.assets["coin"] == 0:
-            lord.assets.pop("coin", None)
-        paid = True
-    lord.forces["knights"] = lord.forces.get("knights", 0) + 2
-    lord.forces["men_at_arms"] = lord.forces.get("men_at_arms", 0) + 2
-    state.decks.discard.append(card_id)
+    _check_this_lord_cap_limits(lord, card_id)
+    asset = payload.get("asset", "coin")
+    _require(asset in ("coin", "loot", "prov", "mule", "cart", "taifa_coin"),
+             "choose one Asset to pay for Count", code="bad_arg")
+    payer_id = payload.get("payer_lord_id", target)
+    if asset == "taifa_coin":
+        _require(side == "muslim", "only Muslims spend Taifas Coin", code="wrong_side")
+        if state.taifas_box_coin < 1:
+            return _no_op_with_note(state, card_id, side, "no Asset to pay for Count")
+    else:
+        payer = state.lords.get(payer_id)
+        _require(payer is not None and payer.side == side
+                 and payer.cylinder.kind == "locale"
+                 and payer.cylinder.locale_id == lord.cylinder.locale_id,
+                 "Asset payer must share the target's Locale", code="bad_payer")
+        assert payer is not None
+        if payer.assets.get(asset, 0) < 1:
+            return _no_op_with_note(state, card_id, side, "no Asset to pay for Count")
+    # Validation precedes all changes, including payment and card placement.
+    if asset == "taifa_coin":
+        state.taifas_box_coin -= 1
+    else:
+        assert payer is not None
+        payer.assets[asset] -= 1
+        if payer.assets[asset] == 0:
+            payer.assets.pop(asset)
+    lord.capabilities.append(card_id)
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id=card_id, scope="this_lord", owner_side=side, owner_lord_id=target))
+    state.decks.draw = [c for c in state.decks.draw if c != card_id]
+    state.decks.discard = [c for c in state.decks.discard if c != card_id]
+    for unit in ("knights", "men_at_arms"):
+        lord.forces[unit] = lord.forces.get(unit, 0) + 2
+    state.meta.count_of_barcelona_side = side
+    state.meta.aow_cap_state[f"{card_id}_used"] = True
+    state.meta.aow_cap_state[f"{card_id}_units"] = {
+        "lord": target, "knights": 2, "men_at_arms": 2}
     return {"card_id": card_id, "side": side, "target": target,
-            "knights_added": 2, "men_at_arms_added": 2,
-            "asset_paid": paid}
+            "knights_added": 2, "men_at_arms_added": 2, "asset_paid": True,
+            "capability_levied": True, "asset": asset, "payer_lord_id": payer_id}
 
 
-@register("M23")  # Berenguer Ramon — Muslim event (mirror)
-def _m23_berenguer_ramon(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """M23: mirror of C13 — if Count of Barcelona with Christians,
-    discard no-effect. Otherwise a Muslim Lord gets 2 Knights + 2 MaA
-    by paying 1 Asset (coin).
-    """
-    if state.meta.count_of_barcelona_side == "christian":
-        removed = _remove_count_units(state, "C13")
-        state.meta.count_of_barcelona_side = None
-        state.decks.discard.append(card_id)
-        return {"card_id": card_id, "side": side,
-                "discarded": True, "removed_units": removed,
-                "reason": "Count of Barcelona with Christians"}
-    eligible = [lid for lid in ("al_mustain", "al_mundir")
-                if lid in state.lords
-                and state.lords[lid].cylinder.kind == "locale"]
-    target = (payload.get("target_lord_id")
-              if payload.get("target_lord_id") in eligible
-              else (eligible[0] if eligible else None))
-    if target is None:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Lord on map")
-    lord = state.lords[target]
-    paid = False
-    if lord.assets.get("coin", 0) > 0:
-        lord.assets["coin"] -= 1
-        if lord.assets["coin"] == 0:
-            lord.assets.pop("coin", None)
-        paid = True
-    lord.forces["knights"] = lord.forces.get("knights", 0) + 2
-    lord.forces["men_at_arms"] = lord.forces.get("men_at_arms", 0) + 2
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "target": target,
-            "knights_added": 2, "men_at_arms_added": 2,
-            "asset_paid": paid}
+@register("C13")
+@register("M23")
+def _count_event(state: GameState, side: Side, card_id: str,
+                 payload: dict[str, Any]) -> dict[str, Any]:
+    return _berenguer_ramon(state, side, card_id, payload)
 
 
 # --- Immediate events with side-wide state effects ---
@@ -644,76 +778,64 @@ def _c25_de_vivar(state: GameState, side: Side, card_id: str,
     return _move_to_hold_bucket(state, card_id, side, "this_levy_events")
 
 
-@register("M25")  # Freebooter (Muslim) — Disband Rodrigo Campeador
+@register("M25")
 @register("M26")
 def _m25_m26_freebooter(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """M25/M26 (Immediate) Freebooter: Disband Rodrigo Campeador as if at
-    Service Limit (3.3.2). If desired, expend 1 Taifas-box Conquered/1VP
-    marker to replace him on the Calendar with Rodrigo al-Sayyid (green)
-    in the same box (Arts of War ref M25 & M26)."""
+                        payload: dict[str, Any]) -> dict[str, Any]:
+    """M25/M26: Disband yellow Rodrigo at Limit, then optional conversion.
+
+    The card's Tips allow conversion from ANY Calendar position, however
+    reached. Full 3.3.2 cleanup is shared with ordinary Disband.
+    """
+    from almoravid.actions import _h_disband_lord
     from almoravid.state import Cylinder
     target = "rodrigo_campeador"
     lord = state.lords.get(target)
-    if lord is None or lord.cylinder.kind != "locale":
-        return _no_op_with_note(state, card_id, side,
-                                f"{target} not on map")
-    for field_name in lord.cleanup_on_removal_fields:
-        try:
-            setattr(lord, field_name, type(getattr(lord, field_name))())
-        except Exception:
-            pass
-    # 3.3.2: Disband to the Calendar two boxes ahead (per Tips).
-    box = min(16, state.calendar.current_box + 2)
-    lord.cylinder = Cylinder(kind="calendar", box=box)
-    state.decks.discard.append(card_id)
+    if lord is None:
+        return _no_op_with_note(state, card_id, side, "Rodrigo not in scenario")
+    disbanded = lord.cylinder.kind == "locale"
+    if disbanded:
+        _h_disband_lord(state, {"type": "disband_lord", "side": "christian",
+                               "lord_id": target, "auto_service_disband": True,
+                               "force_at_service_limit": True})
     swapped = False
-    if payload.get("swap_to_al_sayyid") and state.taifas_box_vp >= 1:
+    box = lord.cylinder.box if lord.cylinder.kind == "calendar" else None
+    sayyid = state.lords.get("rodrigo_al_sayyid")
+    if (payload.get("swap_to_al_sayyid") and box is not None
+            and state.taifas_box_vp >= 1 and sayyid is not None):
         state.taifas_box_vp -= 1.0
-        sayyid = state.lords.get("rodrigo_al_sayyid")
-        if sayyid is not None:
-            sayyid.cylinder = Cylinder(kind="calendar", box=box)
-            lord.cylinder = Cylinder(kind="removed")
-            swapped = True
-    return {"card_id": card_id, "side": side, "disbanded": target,
+        state.score.muslim -= 1.0
+        sayyid.cylinder = Cylinder(kind="calendar", box=box)
+        lord.cylinder = Cylinder(kind="set_aside")
+        if target in state.calendar.off_right:
+            state.calendar.off_right.remove(target)
+            if sayyid.id not in state.calendar.off_right:
+                state.calendar.off_right.append(sayyid.id)
+        swapped = True
+    state.decks.discard.append(card_id)
+    return {"card_id": card_id, "side": side,
+            "disbanded": target if disbanded else None,
             "calendar_box": box, "swapped_to_al_sayyid": swapped}
 
 
-@register("C26")  # Freebooter
+@register("C26")
 def _c26_freebooter(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C26 (Immediate): Disband Rodrigo al-Sayyid as if at Service
-    Limit (3.3.2). Optional Reconcile-for-1VP clause via payload
-    ['reconcile'] (implemented below).
-
-    Disband clears Rodrigo's forces/assets and sends
-    his cylinder back to off-left-service.
-    """
+                    payload: dict[str, Any]) -> dict[str, Any]:
+    """C26: mandatory 3.3.2 Disband, optional immediate 1-VP Reconcile."""
+    from almoravid.actions import _h_disband_lord, _reconcile_rodrigo_effect
     target = "rodrigo_al_sayyid"
     lord = state.lords.get(target)
     if lord is None or lord.cylinder.kind != "locale":
-        return _no_op_with_note(state, card_id, side,
-                                f"{target} not on map")
-    from almoravid.actions import _shift_service_left
-    from almoravid.state import Cylinder
-    for field_name in lord.cleanup_on_removal_fields:
-        try:
-            setattr(lord, field_name,
-                    type(getattr(lord, field_name))())
-        except Exception:
-            pass
-    _shift_service_left(state, target, boxes=20)  # off-left
-    lord.cylinder = Cylinder(kind="removed")
-    state.decks.discard.append(card_id)
-    # Optional: Reconcile with Rodrigo now for just 1 VP to the Taifas box
-    # (3.5.1; immediate, not during Call to Arms). payload['reconcile'].
-    reconciled = False
-    if payload.get("reconcile"):
-        from almoravid.actions import _reconcile_rodrigo_effect
+        return _no_op_with_note(state, card_id, side, f"{target} not on map")
+    result = _h_disband_lord(state, {"type": "disband_lord", "side": "muslim",
+                                    "lord_id": target, "auto_service_disband": True,
+                                    "force_at_service_limit": True})
+    reconciled = bool(payload.get("reconcile"))
+    if reconciled:
         _reconcile_rodrigo_effect(state, 1.0)
-        reconciled = True
+    state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side, "disbanded": target,
-            "reconciled": reconciled}
+            "calendar_box": result["calendar_box"], "reconciled": reconciled}
 
 
 @register("M13")  # Severed Heads
@@ -1075,6 +1197,12 @@ def _m18_refugees(state: GameState, side: Side, card_id: str,
     from almoravid.effective import is_besieged
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
+    from almoravid.actions import _require
+    transport_choices = payload.get("transport_by_lord", {})
+    default_transport = payload.get("transport", "mule")
+    _require(default_transport in ("cart", "mule")
+             and all(t in ("cart", "mule") for t in transport_choices.values()),
+             "Transport must be cart or mule", code="bad_transport")
     restored: list[dict[str, Any]] = []
     for lid, lord in state.lords.items():
         if not lord.is_taifa or lord.side != "muslim":
@@ -1099,8 +1227,9 @@ def _m18_refugees(state: GameState, side: Side, card_id: str,
                 lord.forces[ut] = have + add
                 added[ut] = add
         # Add 1 Transport (Mule).
-        lord.assets["mule"] = lord.assets.get("mule", 0) + 1
-        added["mule"] = 1
+        transport = transport_choices.get(lid, default_transport)
+        lord.assets[transport] = lord.assets.get(transport, 0) + 1
+        added[transport] = 1
         restored.append({"lord_id": lid, "added": added})
     if not restored:
         return _no_op_with_note(state, card_id, side,
@@ -1134,18 +1263,13 @@ def _m22_massacre(state: GameState, side: Side, card_id: str,
         if (lord is not None and lord.is_taifa and lord.side == "muslim"
                 and lord.cylinder.kind == "calendar"):
             from almoravid.actions import _free_seats_for
-            from almoravid.state import Cylinder
-            from almoravid.static_data import load_lords as _ll
-            rec = _ll()["lords"].get(lid, {})
             # 3.4.1: auto-Muster places only at a free Seat (neither Enemy
             # nor with an Enemy Lord present); no free Seat -> fall through
             # to the Jihad branch (the Muster cannot happen). [Door C]
             free = _free_seats_for(state, lid)
             if free:
-                lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
-                lord.forces = dict(rec.get("forces", {}))
-                lord.assets = dict(rec.get("assets", {}))
-                lord.just_arrived_this_levy = True
+                from almoravid.actions import _initialize_mustered_lord
+                _initialize_mustered_lord(state, lord.id, free[0])
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
                         "mustered": lid, "seat": free[0], "bonus": True}
@@ -1279,19 +1403,14 @@ def _m21_al_sumaisir(state: GameState, side: Side, card_id: str,
         # Muster branch — for now, simply set cylinder to Lord's first
         # Seat and copy starting forces/assets (mirrors muster_lord but
         # bypasses Fealty and steps).
-        from almoravid.static_data import load_lords as _ll
         lord = state.lords[target_lord_id]
         if lord.is_taifa and lord.side == "muslim" and lord.cylinder.kind == "calendar":
             from almoravid.actions import _free_seats_for
-            rec = _ll()["lords"].get(target_lord_id, {})
             # 3.4.1 free Seat only; no free Seat -> fall through to Jihad. [Door C]
             free = _free_seats_for(state, target_lord_id)
             if free:
-                from almoravid.state import Cylinder
-                lord.cylinder = Cylinder(kind="locale", locale_id=free[0])
-                lord.forces = dict(rec.get("forces", {}))
-                lord.assets = dict(rec.get("assets", {}))
-                lord.just_arrived_this_levy = True
+                from almoravid.actions import _initialize_mustered_lord
+                _initialize_mustered_lord(state, lord.id, free[0])
                 state.decks.discard.append(card_id)
                 return {"card_id": card_id, "side": side,
                         "mustered": target_lord_id, "seat": free[0]}
@@ -1318,61 +1437,63 @@ def _m21_al_sumaisir(state: GameState, side: Side, card_id: str,
 # ---------------------------------------------------------------------------
 
 
-@register("C16")  # Bernard de Sedirac
-def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C16: Shift a Lord's Service 1 box right OR Muster a Lord from
-    Calendar now. (Cathedrals capability levy is a separate Capability
-    half handled at Muster.)
+@register("C16")
 
-    payload['mode']: 'service_right' (default) or 'muster'.
-    payload['lord_id']: target Christian Lord (defaults greedy).
+def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
+                            payload: dict[str, Any]) -> dict[str, Any]:
+    """C16: immediate Service/Muster choice, then compulsory Cathedrals.
+
+    The printed Tips require the card under the Christian board edge
+    regardless of which Christian Lord receives the Event benefit.
     """
+    from almoravid.actions import _free_seats_for, _initialize_mustered_lord, _require
+    from almoravid.state import CardInPlay
+    result: dict[str, Any] = {"card_id": card_id, "side": side}
     mode = payload.get("mode", "service_right")
+    _require(mode in ("service_right", "muster"), "unknown Bernard mode", code="bad_arg")
     if mode == "muster":
-        lid = payload.get("lord_id")
-        cands = [lord for lord in state.lords.values()
-                 if lord.side == "christian" and lord.cylinder.kind == "calendar"]
-        target = state.lords.get(lid) if lid else None
-        if (target is None or target.side != "christian"
-                or target.cylinder.kind != "calendar"):
-            target = cands[0] if cands else None
+        eligible = [lord.id for lord in state.lords.values()
+                    if lord.side == "christian" and lord.cylinder.kind == "calendar"
+                    and _free_seats_for(state, lord.id)]
+        lid = payload.get("lord_id") or (eligible[0] if eligible else None)
+        if lid not in eligible:
+            result.update(no_op=True, note="no Christian Lord with a free Seat to Muster")
+        else:
+            free = _free_seats_for(state, lid)
+            seat = payload.get("seat", free[0])
+            _require(seat in free, "choose a free Seat", code="bad_seat")
+            if lid == "rodrigo_campeador":
+                from almoravid.actions import _cta_collect_payment
+                _cta_collect_payment(state, side, payload.get("payments", []),
+                                     2, allow_taifa_box=False)
+            muster = _initialize_mustered_lord(state, lid, seat)
+            result.update(mustered=lid, seat=seat, **muster)
+    else:
+        candidates = [sm for sm in state.calendar.service_markers
+                      if sm.vassal_id is None and sm.lord_id in state.lords
+                      and state.lords[sm.lord_id].side == "christian"
+                      and state.lords[sm.lord_id].cylinder.kind == "locale"]
+        target = next((sm for sm in candidates if sm.lord_id == payload.get("lord_id")), None)
+        if target is None and not payload.get("lord_id") and candidates:
+            target = min(candidates, key=lambda sm: sm.box)
         if target is None:
-            return _no_op_with_note(state, card_id, side,
-                                    "no Christian Lord on Calendar to Muster")
-        from almoravid.actions import _free_seats_for
-        from almoravid.state import Cylinder
-        from almoravid.static_data import load_lords as _ll
-        rec = _ll()["lords"].get(target.id, {})
-        # 3.4.1: Muster only at a free Seat (neither Enemy nor Enemy-occupied). [Door C]
-        free = _free_seats_for(state, target.id)
-        if not free:
-            return _no_op_with_note(state, card_id, side,
-                                    f"{target.id} has no free Seat (3.4.1)")
-        target.cylinder = Cylinder(kind="locale", locale_id=free[0])
-        target.forces = dict(rec.get("forces", {}))
-        target.assets = dict(rec.get("assets", {}))
-        target.just_arrived_this_levy = True
-        state.decks.discard.append(card_id)
-        return {"card_id": card_id, "side": side,
-                "mustered": target.id, "seat": free[0]}
-    # service_right branch
-    candidates = [
-        sm for sm in state.calendar.service_markers
-        if state.lords.get(sm.lord_id)
-        and state.lords[sm.lord_id].side == "christian"
-    ]
-    if not candidates:
-        return _no_op_with_note(state, card_id, side,
-                                "no Christian Lord on Calendar")
-    lid = payload.get("lord_id")
-    target_sm = (next((sm for sm in candidates if sm.lord_id == lid), None)
-                 or min(candidates, key=lambda sm: sm.box))
-    target_sm.box = min(16, target_sm.box + 1)
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side,
-            "shifted_right": target_sm.lord_id,
-            "new_service_box": target_sm.box}
+            result.update(no_op=True, note="no Christian Lord Service marker to shift")
+        else:
+            target.box = min(17, target.box + 1)
+            if target.box == 17 and target.lord_id not in state.calendar.off_right_service:
+                state.calendar.off_right_service.append(target.lord_id)
+            result.update(shifted_right=target.lord_id, new_service_box=target.box)
+    # This compulsory Levy costs no action and does not consume a mat slot.
+    state.decks.discard = [c for c in state.decks.discard if c != card_id]
+    state.decks.draw = [c for c in state.decks.draw if c != card_id]
+    state.decks.capabilities_in_play = [c for c in state.decks.capabilities_in_play
+                                       if c.card_id != card_id]
+    if card_id not in state.decks.board_edge.setdefault("christian", []):
+        state.decks.board_edge["christian"].append(card_id)
+    state.decks.capabilities_in_play.append(CardInPlay(
+        card_id=card_id, scope="side_wide", owner_side="christian"))
+    result["capability_levied"] = "C16"
+    return result
 
 
 @register("C17")  # Genoa & Pisa
@@ -1418,6 +1539,12 @@ def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
     from almoravid.effective import is_besieged
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
+    from almoravid.actions import _require
+    transport_choices = payload.get("transport_by_lord", {})
+    default_transport = payload.get("transport", "mule")
+    _require(default_transport in ("cart", "mule")
+             and all(t in ("cart", "mule") for t in transport_choices.values()),
+             "Transport must be cart or mule", code="bad_transport")
     restored: list[dict[str, Any]] = []
     for lid, lord in state.lords.items():
         if lord.side != "christian":
@@ -1441,8 +1568,9 @@ def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
                 add = want - have
                 lord.forces[ut] = have + add
                 added[ut] = add
-        lord.assets["mule"] = lord.assets.get("mule", 0) + 1
-        added["mule"] = 1
+        transport = transport_choices.get(lid, default_transport)
+        lord.assets[transport] = lord.assets.get(transport, 0) + 1
+        added[transport] = 1
         restored.append({"lord_id": lid, "added": added})
     if not restored:
         return _no_op_with_note(state, card_id, side,

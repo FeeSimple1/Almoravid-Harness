@@ -150,11 +150,16 @@ def test_m12_lordship_plus_2_branch() -> None:
     taifa_lord = next((lid for lid, l in s.lords.items()
                        if l.is_taifa and l.side == "muslim"), None)
     assert taifa_lord is not None, "no Taifa Lord"
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
+    s.meta.active_player = "muslim"
+    s.lords[taifa_lord].cylinder = Cylinder(kind="locale", locale_id="sevilla")
     rating_before = s.lords[taifa_lord].lordship_rating
     r = resolve_event(s, "muslim", "M12",
                       payload={"mode": "lordship", "lord_id": taifa_lord})
     assert r["lordship_plus_2"] == taifa_lord
-    assert s.lords[taifa_lord].lordship_rating == rating_before + 2
+    assert s.lords[taifa_lord].lordship_rating == rating_before
+    assert s.lords[taifa_lord].lordship_bonus_this_levy == 2
 
 
 # ---------------------------------------------------------------------------

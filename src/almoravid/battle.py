@@ -227,6 +227,26 @@ class BattleResult:
 # ---------------------------------------------------------------------------
 
 
+def _activate_combat_holds(state: GameState, side: BattleSide,
+                           *, storm: bool = False) -> None:
+    """Move applicable drawn Holds into the existing combat-effect buckets.
+
+    Drawn cards remain hidden in ``held`` until their printed window
+    (3.1.3, 4.4.1 Events). Preserve unrelated Holds through aftermath.
+    """
+    from almoravid.events import consume_held_event
+    cards = {"C8"} if storm else {"C2", "M2", "C7", "C8", "M6", "M7"}
+    if not storm and side.role == "defender":
+        cards.add("C1" if side.side == "christian" else "M1")
+    for card_id in list(state.decks.held.get(side.side, [])):
+        if card_id not in cards:
+            continue
+        consume_held_event(state, side.side, card_id)
+        bucket = (state.decks.this_campaign_events if card_id in ("C2", "M2")
+                  else state.decks.this_levy_events)
+        bucket.setdefault(side.side, []).append(card_id)
+
+
 def init_m7_cap(state: GameState, side: BattleSide) -> None:
     """Phase 6g: set up M7 Spear Wall markers on the Muslim side.
 
@@ -240,6 +260,7 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
     back to side.m7_boosts_remaining = cap of top-2 Lords' MaA+AF.
     No-op when M7 is not held or side is not Muslim.
     """
+    _activate_combat_holds(state, side)
     if side.side != "muslim":
         return
     if "M7" not in state.decks.this_levy_events.get("muslim", []):
@@ -664,16 +685,11 @@ def _resolve_protection_roll(
             break
     assert unit is not None
     ptype = unit["protection"]["type"]
-    # Serfs auto-rout
+    # Rules of Play 4.4.2: Serfs are removed, never Routed or recovered.
     if ptype == "auto_remove":
         chosen_pool[chosen] -= 1
         if chosen_pool[chosen] <= 0:
             chosen_pool.pop(chosen, None)
-        # Bug M: Routed Garrison units 'return to pool' (per SoP
-        # storm_procedure.garrison_during_storm.routed_garrison).
-        # We track them in routed_units for the engagement; they
-        # vanish at end-of-storm regardless.
-        target_side.routed_units[chosen] = target_side.routed_units.get(chosen, 0) + 1
         return (False, chosen)
     # Roll Protection
     rng = roll_d6(state)
@@ -750,15 +766,17 @@ def _resolve_step(
     c8_ctx: dict[str, Any] | None = None,
     arrada_active: bool = False,
 ) -> StepResolution:
-    # Phase 6f: per-pair Strike when both sides have multi-Lord arrays
-    # AND context is Battle. Storm and single-Lord cases keep the legacy
-    # pooled path verbatim.
+    # Rules of Play 4.4.1-.2: unequal armies still resolve Hits per Lord.
+    # A singleton opposite a multi-Lord array occupies Front center.
+    if context == "battle":
+        _ensure_battle_arrays(attacker, defender)
     if (context == "battle"
             and attacker.array is not None
             and defender.array is not None):
         return _resolve_step_per_pair(
             state, step_id, actor_role, step_type, unit_class,
             attacker, defender, round_index=round_index, c8_ctx=c8_ctx,
+            walls_range=walls_range,
         )
 
     actor = attacker if actor_role == "attacker" else defender
@@ -894,6 +912,26 @@ def _resolve_step(
     return result
 
 
+def _cancel_hits_by_kind(
+    state: GameState,
+    per_kind_hits: dict[str, int],
+    protection_range: tuple[int, int] | None,
+) -> dict[str, int]:
+    """Rules of Play 4.4.2 ROLL WALLS: roll differing Hits separately.
+
+    A successful Walls/Siegeworks roll cancels the Hit rolled for; it
+    cannot be reassigned to preserve a Crossbow or Arrada Hit.
+    """
+    remaining = dict(per_kind_hits)
+    if protection_range is not None:
+        lo, hi = protection_range
+        for kind, count in per_kind_hits.items():
+            for _ in range(count):
+                if lo <= roll_d6(state) <= hi:
+                    remaining[kind] -= 1
+    return remaining
+
+
 def _apply_step_cancellation_and_hits(
     state: GameState,
     actor_role: Role,
@@ -909,37 +947,14 @@ def _apply_step_cancellation_and_hits(
     """Walls/Siegeworks cancellation then Protection-roll Hit
     application (shared by the normal and Storm-melee-override paths
     of _resolve_step)."""
-    # Bug D (Pattern 9) — Walls / Siegeworks roll cancels Hits.
-    # We apply cancellation proportionally across kinds (drain
-    # Crossbow Hits last since they got priority in rounding).
-    hits_to_apply_by_kind = dict(per_kind_hits)
-    if walls_range is not None and rounded > 0:
+    protection_range = None
+    if walls_range is not None:
         if actor_role == "attacker":
-            wlo, whi = walls_range
-            dice = [roll_d6(state) for _ in range(rounded)]
-            canceled = sum(1 for d in dice if wlo <= d <= whi)
-            # Drain non-Crossbow first, then Crossbow.
-            drain_order = ["javelins", "slingers", "bowmen", "missiles",
-                           "arrada", "melee", "crossbows"]
-            for k in drain_order:
-                if canceled <= 0:
-                    break
-                avail = hits_to_apply_by_kind.get(k, 0)
-                take = min(avail, canceled)
-                hits_to_apply_by_kind[k] = avail - take
-                canceled -= take
-        elif actor_role == "defender" and siege_markers > 0:
-            dice = [roll_d6(state) for _ in range(rounded)]
-            canceled = sum(1 for d in dice if d <= siege_markers)
-            drain_order = ["javelins", "slingers", "bowmen", "missiles",
-                           "arrada", "melee", "crossbows"]
-            for k in drain_order:
-                if canceled <= 0:
-                    break
-                avail = hits_to_apply_by_kind.get(k, 0)
-                take = min(avail, canceled)
-                hits_to_apply_by_kind[k] = avail - take
-                canceled -= take
+            protection_range = walls_range
+        elif siege_markers > 0:
+            protection_range = (1, siege_markers)
+    hits_to_apply_by_kind = _cancel_hits_by_kind(
+        state, per_kind_hits, protection_range)
 
     # Apply Hits per kind. Crossbow Hits use striker-selects
     # target selection; other Hits use target-selects.
@@ -1042,6 +1057,22 @@ def battle_side_from_snapshot(d: dict[str, Any]) -> BattleSide:
     )
 
 
+def _ensure_battle_arrays(attacker: BattleSide, defender: BattleSide) -> None:
+    """Complete an asymmetric Array without replacing live combat forces."""
+    if attacker.array is None and defender.array is None:
+        return
+    for side in (attacker, defender):
+        if side.array is None:
+            if len(side.lord_ids) != 1:
+                raise ValueError("a pooled army opposite an Array must be one Lord")
+            side.array = [LordPosition(
+                lord_id=side.lord_ids[0], position="front_center",
+                forces=dict(side.forces),
+                capabilities_in_play=list(side.capabilities_in_play),
+                routed_units=dict(side.routed_units),
+            )]
+
+
 def _battle_one_round(
     state: GameState,
     attacker: BattleSide,
@@ -1058,6 +1089,7 @@ def _battle_one_round(
     determination are the CALLER's responsibility -- shared by the
     synchronous resolve_battle (pre-declared concede) and the interactive
     round-stepped driver (reactive per-Round concede, 4.4.2)."""
+    _ensure_battle_arrays(attacker, defender)
     rnd = BattleRound(index=round_idx)
     # 4.4.1 one-Round timing: M7 Spear Wall is in effect only during its
     # owner-chosen Round (default 1). We gate its presence in
@@ -1136,16 +1168,16 @@ def resolve_battle(
     attacker: BattleSide,
     defender: BattleSide,
     *,
-    max_rounds: int = 6,
+    max_rounds: int | None = None,
     defender_walls_range: tuple[int, int] | None = None,
     attacker_concede_round: int | None = None,
     defender_concede_round: int | None = None,
 ) -> BattleResult:
     """Full Battle resolution per rule 4.4 (Phase 5e: single-Lord case).
 
-    Loops Rounds until one side has no unrouted units, capped at
-    max_rounds to bound runaway. Each Round runs the 6 Strike substeps
-    in canonical order with full Protection rolls.
+    Rules of Play 4.4.2 NEW ROUND continues until Rout or Concede,
+    without a round limit. An explicit max_rounds is available only
+    for internal bounded probes; game actions must leave it unset.
 
     Winner = side with unrouted units when battle ends.
     """
@@ -1154,13 +1186,18 @@ def resolve_battle(
         attacker=attacker,
         defender=defender,
     )
+    _ensure_battle_arrays(attacker, defender)
     # Bug T: initialize M7 Spear Wall cap.
     init_m7_cap(state, attacker)
     init_m7_cap(state, defender)
     # Camp Attack (C2/M2) consumed at Battle start (before Round 1).
     # C7 Baggage Parapet on the Christian side cancels Muslim M2.
     _consume_camp_attack(state, attacker, defender, result)
-    for round_idx in range(1, max_rounds + 1):
+    round_idx = 0
+    while not _battle_over(attacker, defender):
+        if max_rounds is not None and round_idx >= max_rounds:
+            break
+        round_idx += 1
         # 4.4.2 CONCEDE THE FIELD? Pre-declared per side via *_concede_round
         # here (the interactive driver sets these flags reactively instead).
         # Setting the flag before Strikes makes _resolve_step halve the
@@ -1198,7 +1235,8 @@ def resolve_battle(
         result.winner = defender.side
     else:
         result.winner = None
-        result.notes.append("Battle inconclusive after max rounds")
+        if max_rounds is not None and round_idx >= max_rounds:
+            result.notes.append("Battle inconclusive after max rounds")
     return result
 
 
@@ -1249,6 +1287,13 @@ def apply_losses_rolls(state: GameState, lord_id: str, loser_state: str) -> dict
         return {"lord_id": lord_id, "rolls": []}
     rolls = []
     for utype, n in list(lord.routed_units.items()):
+        # 4.4.2: older saved games may contain incorrectly Routed Serfs.
+        # They were removed on the Hit and never receive a Losses roll.
+        if utype == "serfs":
+            del lord.routed_units[utype]
+            rolls.append({"unit": utype, "n_routed": n, "keep_threshold": 0,
+                          "kept": 0, "lost": n})
+            continue
         if loser_state == "removed":
             keep = 0
         elif loser_state in ("retreated_no_concede", "storm_attacker"):
@@ -1388,10 +1433,25 @@ def apply_aftermath(
     # aftermath; the old blanket winner-restore is gone — winners also
     # roll for their Routed units per the rule.
 
-    # Bug J (Pattern 13): clear this_levy_events; discard the held cards.
-    for _side_key, cards in list(state.decks.this_levy_events.items()):
-        state.decks.discard.extend(cards)
-    state.decks.this_levy_events = {}
+    # AUDIT-04/05: 4.4.5 discards Events used in this engagement, not
+    # unrelated unplayed Holds such as Marriage or Runaway Slaves.
+    for side_obj in (result.attacker, result.defender):
+        used = {"C8"}
+        if result.engagement != "storm":
+            used.update(("C7", "M6", "M7"))
+            if side_obj.role == "defender":
+                used.add("C1" if side_obj.side == "christian" else "M1")
+        bucket = state.decks.this_levy_events.get(side_obj.side, [])
+        for card_id in list(bucket):
+            if card_id in used:
+                bucket.remove(card_id)
+                if card_id not in state.decks.discard:
+                    state.decks.discard.append(card_id)
+        # Spear Wall was played at Battle start even when combat ended
+        # before its selected Round (temporarily absent from the bucket).
+        if (result.engagement != "storm" and side_obj.m7_owned
+                and "M7" not in state.decks.discard):
+            state.decks.discard.append("M7")
 
 
 def _restore_routed_to_forces(state: GameState, side: BattleSide) -> None:
@@ -1755,7 +1815,8 @@ def _storm_push_losses(ss: dict[str, Any], who: str, side_obj: BattleSide,
                 forces[lid][ut] = have - take
                 if forces[lid][ut] <= 0:
                     forces[lid].pop(ut, None)
-                routed[lid][ut] = routed[lid].get(ut, 0) + take
+                if ut != "serfs":  # 4.4.2: removed, not Routed.
+                    routed[lid][ut] = routed[lid].get(ut, 0) + take
                 lost -= take
 
 
@@ -1950,6 +2011,8 @@ def _storm_setup(
     resolve_storm and the interactive Storm driver."""
     from almoravid.capabilities import any_lord_with_capability
     from almoravid.static_data import load_strongholds
+    _activate_combat_holds(state, attacker, storm=True)
+    _activate_combat_holds(state, defender, storm=True)
 
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
@@ -2313,7 +2376,7 @@ class _ReliefState:
     walls: tuple[int, int] | None
     active_side: Side
     other: Side
-    max_rounds: int
+    max_rounds: int | None
     locale_id: str
 
 
@@ -2362,7 +2425,8 @@ def _relief_push_lane(rs: _ReliefState, side_obj: BattleSide,
                 lf[lid][ut] = have - take
                 if lf[lid][ut] <= 0:
                     lf[lid].pop(ut, None)
-                lr[lid][ut] = lr[lid].get(ut, 0) + take
+                if ut != "serfs":  # 4.4.2: removed, not Routed.
+                    lr[lid][ut] = lr[lid].get(ut, 0) + take
                 lost -= take
 
 
@@ -2432,7 +2496,7 @@ def _relief_setup(
     *,
     besieger_side: Side,
     locale_id: str,
-    max_rounds: int,
+    max_rounds: int | None,
 ) -> _ReliefState:
     active_side: Side = state.lords[(marcher_ids or sallyer_ids)[0]].side
     other: Side = besieger_side
@@ -2679,7 +2743,7 @@ def resolve_relief_sally(
     *,
     besieger_side: Side,
     locale_id: str,
-    max_rounds: int = 6,
+    max_rounds: int | None = None,
     attacker_concede_round: int | None = None,
     defender_concede_round: int | None = None,
 ) -> tuple[BattleResult, tuple[
@@ -2691,7 +2755,11 @@ def resolve_relief_sally(
     rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_ids,
                        besieger_side=besieger_side, locale_id=locale_id,
                        max_rounds=max_rounds)
-    for rnd_i in range(1, max_rounds + 1):
+    rnd_i = 0
+    while not _relief_over(state, rs):
+        if max_rounds is not None and rnd_i >= max_rounds:
+            break
+        rnd_i += 1
         atk_concedes = (attacker_concede_round is not None
                         and rnd_i >= attacker_concede_round)
         dfd_concedes = (defender_concede_round is not None
@@ -2798,6 +2866,8 @@ def _consume_camp_attack(
       * Camp Attack does NOT apply in Storm — resolve_storm does not
         call this helper.
     """
+    _activate_combat_holds(state, attacker)
+    _activate_combat_holds(state, defender)
     for side_key in ("christian", "muslim"):
         ca_id = "C2" if side_key == "christian" else "M2"
         camp_bucket = state.decks.this_campaign_events.get(side_key, [])
@@ -2976,12 +3046,13 @@ def apply_retreat_aftermath(
     # branch fires), Muslim side may add 4 Jihad. Auto-fire greedy.
     loser_side_obj = (result.attacker if result.winner == result.defender.side
                       else result.defender)
+    from almoravid.events import consume_held_event, has_held_event
     if (loser_side_obj.side == "christian"
-            and "M13" in state.decks.this_levy_events.get("muslim", [])):
+            and has_held_event(state, "muslim", "M13")):
         from almoravid.events import _add_jihad
         placement = _add_jihad(state, 4, {})
         if placement is not None:
-            state.decks.this_levy_events["muslim"].remove("M13")
+            consume_held_event(state, "muslim", "M13")
             state.decks.discard.append("M13")
             summary["m13_severed_heads_jihad"] = {
                 "placement": placement, "added": 4,
@@ -3134,7 +3205,8 @@ def apply_retreat_aftermath(
                 entry["service_roll"] = d
                 entry["service_shift_boxes"] = shift
                 entry["new_service_box"] = new_box
-            entry["spoils_lost"] = _transfer_retreat_spoils(
+            # Arts of War C7: the paid opt-out skips BOTH penalties.
+            entry["spoils_lost"] = {} if opt_out_used else _transfer_retreat_spoils(
                 state, lord, "retreat", loser_conceded, winner_lord_ids)
             summary["losers"].append(entry)
             continue
@@ -3441,8 +3513,7 @@ def _resolve_protection_roll_for_lp(
         target_lp.forces[chosen] -= 1
         if target_lp.forces[chosen] <= 0:
             target_lp.forces.pop(chosen, None)
-        side.routed_units[chosen] = side.routed_units.get(chosen, 0) + 1
-        target_lp.routed_units[chosen] = target_lp.routed_units.get(chosen, 0) + 1
+        # 4.4.2: Serfs are removed, not eligible for Losses recovery.
         return (False, chosen)
     rng = roll_d6(state)
     canceled = False
@@ -3584,6 +3655,7 @@ def _resolve_step_per_pair(
     defender: BattleSide,
     round_index: int = 0,
     c8_ctx: dict[str, Any] | None = None,
+    walls_range: tuple[int, int] | None = None,
 ) -> StepResolution:
     """Per-pair Strike resolution (rule 4.4.2 multi-Lord Array).
 
@@ -3743,6 +3815,11 @@ def _resolve_step_per_pair(
         else:
             per_kind_hits = {"melee": rounded}
         step_res.rounded_hits += rounded   # (d) Hits dealt this step (pre-Protection)
+        # 4.5.3: besiegers retain Siegeworks when attacked by a Sally,
+        # including multi-Lord Arrays (4.4.2 differing Hits separately).
+        per_kind_hits = _cancel_hits_by_kind(
+            state, per_kind_hits,
+            walls_range if actor_role == "attacker" else None)
 
         # 4.4.2 ASSIGN HITS -- absorbing owner's per-combat policy.
         absorb_policy = state.meta.absorption_policy.get(

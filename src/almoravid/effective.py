@@ -181,3 +181,9 @@ def is_bypassed(state: GameState, lord_id: str) -> bool:
     if lord.side == "muslim":
         return loc.bypass_yellow
     return loc.bypass_green
+
+
+def effective_lordship(state: GameState, lord_id: str) -> int:
+    """Lordship available this Levy (3.4; C14/C15/M12 event bonuses)."""
+    lord = state.lords[lord_id]
+    return lord.lordship_rating + lord.lordship_bonus_this_levy

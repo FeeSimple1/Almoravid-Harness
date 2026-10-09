@@ -181,7 +181,9 @@ def test_bgbook_jativa_storm_exact_trace(monkeypatch) -> None:
     # Defender Melee dice in R1 2a; 2+2 Missiles and 3 Melee in R2...).
     phases: list[tuple[str, int]] = []
     for caller, _v in log:
-        kind = ("cancel" if caller == "<listcomp>" else
+        kind = ("cancel" if caller in ("<listcomp>",
+                                       "_apply_step_cancellation_and_hits",
+                                       "_cancel_hits_by_kind") else
                 "protection" if caller == "_resolve_protection_roll" else
                 caller)
         if phases and phases[-1][0] == kind:

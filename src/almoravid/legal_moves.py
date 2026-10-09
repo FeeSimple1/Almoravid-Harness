@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from almoravid.events import held_event_ids
 from almoravid.state import GameState, Lord, Side
 
 
@@ -118,7 +119,9 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
             and state.pending.kind == "oneround_timing"):
         side = state.pending.waiting_on
         pl = state.pending.payload
-        maxr = int(pl.get("max_rounds", 6))
+        # Ordinary Battle is unlimited (4.4.2). Offer a finite menu of
+        # example timings; the action accepts any positive round.
+        maxr = int(pl.get("max_rounds") or 6)
         effects = pl.get("timing_effects", {})
         moves.append({"type": "oneround_timing", "side": side})
         if effects.get("javelin"):
@@ -279,9 +282,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                     cart, mule = _shared_transport_at(state, here, side)
                     routes = _find_supply_routes(state, here, seats,
                                                  side, lord)
+                    from almoravid.capabilities import lord_has_capability, side_has_capability
+                    source_factor = (2 if lord_id in ("yusuf", "sir")
+                                     and side_has_capability(state, "muslim", "M12") else 1)
+                    if lord_has_capability(state, lord_id, "M8"):
+                        moves.append({"type": "winter_siege_action",
+                                      "side": side, "lord_id": lord_id,
+                                      "mode": "supply", "source_seats": []})
                     for seat, route in routes.items():
-                        if seat == here or (route is not None
-                                            and len(route) <= cart + mule):
+                        if (route is not None
+                                and len(route) * source_factor <= cart + mule):
                             moves.append({"type": "winter_siege_action",
                                           "side": side, "lord_id": lord_id,
                                           "mode": "supply",
@@ -304,13 +314,16 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "winter_siege_pay", "side": side, "done": True})
         return moves
 
+    from almoravid.events import held_event_ids, held_event_moves
+    moves.extend(held_event_moves(state, state.meta.active_player))
+
     # M11 "Al-Qadir balks at payment" is a discretionary HOLD event: the
     # Muslim may play it (to add Jihad) at any of his decision points
     # once held (3.1.3 / 1.4.4). Offered in Levy or Campaign on Muslim's
     # turn; carried through since the phase branches extend this list.
     if (state.meta.active_player == "muslim"
             and state.meta.phase in ("levy", "campaign")
-            and "M11" in state.decks.this_levy_events.get("muslim", [])
+            and "M11" in held_event_ids(state, "muslim")
             and any(state.lords.get(x) is not None
                     and state.lords[x].cylinder.kind == "locale"
                     for x in ("yusuf", "sir"))):
@@ -332,7 +345,7 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
             return any(sm.lord_id == lid and sm.vassal_id is None
                        for sm in state.calendar.service_markers)
 
-        _held_c = state.decks.this_levy_events.get("christian", [])
+        _held_c = held_event_ids(state, "christian")
         _c_targets = {
             "C14": (("sancho", "eudes"), "play_pope_gregory"),
             "C15": (tuple(lid for lid, lord_obj in state.lords.items()
@@ -346,15 +359,39 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
                 if _l is None or _l.cylinder.kind not in ("calendar", "locale"):
                     continue  # set-aside: not a usable target
                 if _l.cylinder.kind == "calendar" and _fs_c(state, _lid):
-                    moves.append({"type": _atype, "side": "christian",
-                                  "lord_id": _lid,
-                                  "mode": "muster_from_calendar"})
+                    muster_move = {"type": _atype, "side": "christian",
+                                   "lord_id": _lid,
+                                   "mode": "muster_from_calendar"}
+                    if _lid == "rodrigo_campeador":
+                        # 3.4.1 Arts of War still requires Rodrigo's
+                        # ordinary two-Coin employment cost (3.5.1).
+                        from almoravid.effective import is_besieged
+                        payments = []
+                        remaining = 2
+                        for payer_id, payer in state.lords.items():
+                            if (payer.side != "christian"
+                                    or payer.cylinder.kind != "locale"
+                                    or is_besieged(state, payer_id)):
+                                continue
+                            amount = min(remaining, payer.assets.get("coin", 0))
+                            if amount:
+                                payments.append({"lord_id": payer_id, "coin": amount})
+                                remaining -= amount
+                            if remaining == 0:
+                                break
+                        if remaining == 0:
+                            moves.append({**muster_move, "payments": payments})
+                    else:
+                        moves.append(muster_move)
                 if _has_svc_marker(_lid):
                     moves.append({"type": _atype, "side": "christian",
                                   "lord_id": _lid,
                                   "mode": "service_shift_right"})
-                moves.append({"type": _atype, "side": "christian",
-                              "lord_id": _lid, "mode": "lordship_plus_2"})
+                from almoravid.campaign import _muster_cap_lord_eligible
+                if (state.meta.phase == "levy" and state.meta.levy_step == "muster"
+                        and _muster_cap_lord_eligible(state, _lid, "christian")):
+                    moves.append({"type": _atype, "side": "christian",
+                                  "lord_id": _lid, "mode": "lordship_plus_2"})
 
     # Lifecycle: begin_levy only from setup. Levy<->Campaign transitions
     # are handled by _advance_step_if_both_done and _h_end_campaign — the
@@ -450,6 +487,37 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             # Implement Events in draw order (FIFO): only the first.
             out.append({"type": "aow_implement_event", "side": side,
                         "card_id": pend[0]})
+            if pend[0] in ("C13", "M23"):
+                # Berenguer Ramon is optional. Offer actual paid Levy
+                # choices as well as the no-target decline above.
+                from almoravid.campaign import _muster_cap_lord_eligible
+                enemy = "muslim" if side == "christian" else "christian"
+                targets = (("sancho", "eudes") if side == "christian"
+                           else ("al_mustain", "al_mundir"))
+                if state.meta.count_of_barcelona_side != enemy:
+                    for target in targets:
+                        if not _muster_cap_lord_eligible(state, target, side):
+                            continue
+                        lord = state.lords[target]
+                        if (len(lord.capabilities) >= 2
+                                or set(lord.capabilities) & {"C13", "M23"}):
+                            continue
+                        payloads = []
+                        for payer in state.lords.values():
+                            if (payer.side != side or payer.cylinder.kind != "locale"
+                                    or payer.cylinder.locale_id != lord.cylinder.locale_id):
+                                continue
+                            for asset in ("coin", "loot", "prov", "cart", "mule"):
+                                if payer.assets.get(asset, 0) > 0:
+                                    payloads.append({"target_lord_id": target,
+                                                     "payer_lord_id": payer.id,
+                                                     "asset": asset})
+                        if side == "muslim" and state.taifas_box_coin > 0:
+                            payloads.append({"target_lord_id": target,
+                                             "asset": "taifa_coin"})
+                        out.extend({"type": "aow_implement_event", "side": side,
+                                    "card_id": pend[0], "payload": payload}
+                                   for payload in payloads)
         return out
     # No pending cards. 3.1.2/3.1.3: each side MUST draw two AoW cards
     # this Levy before proceeding. Until that mandatory draw is done,
@@ -566,7 +634,7 @@ def pending_mandatory_disbands(state: GameState, side: Side) -> list[str]:
 
 def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     """3.4 Muster: Lord-Muster + Lordship-spending Levy actions."""
-    from almoravid.effective import is_besieged, is_friendly_locale
+    from almoravid.effective import effective_lordship, is_besieged, is_friendly_locale
     out: list[dict[str, Any]] = []
     # 3.4.1: a Levying Lord (on the map, eligible, with spare Lordship,
     # not newly Mustered this segment) must spend a point to enable a
@@ -576,7 +644,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         if (cl.side == side and cl.cylinder.kind == "locale"
                 and not cl.just_arrived_this_levy
                 and clid not in state.meta.muster_banned_this_levy_lord_ids
-                and cl.lordship_used < cl.lordship_rating):
+                and cl.lordship_used < effective_lordship(state, clid)):
             try:
                 cl_here = cl.cylinder.locale_id
                 assert cl_here is not None
@@ -607,7 +675,8 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         # the Lord must be on the map at a Friendly Locale and Unbesieged
         # (Bypassed is OK) to take any Levy action.
         if (lord.cylinder.kind == "locale"
-                and lord.lordship_used < lord.lordship_rating):
+                and not lord.just_arrived_this_levy
+                and lord.lordship_used < effective_lordship(state, lid)):
             from almoravid.effective import is_besieged, is_friendly_locale
             here = lord.cylinder.locale_id
             assert here is not None
@@ -631,6 +700,8 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 # the board edge.
                 for card_id in _unused_capability_cards(state, side):
                     _rec = _capcards.get(card_id, {})
+                    if card_id == "C16" and lid != "alfonso":
+                        continue  # C16: only Alfonso may Levy Cathedrals.
                     if _rec.get("capability_scope") == "this_lord":
                         # 3.4.4: max 2 This-Lord caps, no same title, and
                         # card-text eligibility (e.g. C8/C15/C24). [Q-001]
@@ -792,8 +863,7 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         # Christian Call-to-Arms option, available only when C25 is held
         # AND al-Sayyid is on the map (card text). Reconciles for 1 VP.
         if (sayyid.cylinder.kind == "locale"
-                and "C25" in state.decks.this_levy_events.get(
-                    "christian", [])):
+                and "C25" in held_event_ids(state, "christian")):
             out.append({"type": "play_de_vivar_reconcile",
                         "side": "christian"})
         if ready(camp):
@@ -994,7 +1064,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             # C16 Cathedrals: Alfonso at a Christian-Conquered City with
             # the capability may place a Cathedral Seat (free, optional).
             if (state.meta.active_lord_id == "alfonso"
-                    and "C16" in state.lords["alfonso"].capabilities
+                    and ("C16" in state.lords["alfonso"].capabilities
+                         or any(c.card_id == "C16" and c.owner_side == "christian"
+                                for c in state.decks.capabilities_in_play))
                     and state.lords["alfonso"].cylinder.kind == "locale"):
                 _al = state.lords["alfonso"]
                 assert _al.cylinder.locale_id is not None
@@ -1043,12 +1115,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_bishoprics",
                                         "side": "christian",
                                         "target_lord_id": _clid})
-            # M19 Guadalquivir (capability): a Taifa Lord may March across
-            # the Port + Sevilla-City network for 1 action (Arts of War ref).
+            # M19 Guadalquivir retains normal Laden and Group March costs.
             if active == "muslim" and _al is not None and _al.is_taifa:
-                from almoravid.campaign import _guadalquivir_targets as _gqt
-                if state.meta.actions_remaining > 0:
-                    for _gd in _gqt(state, _alid):
+                from almoravid.campaign import (
+                    _guadalquivir_targets,
+                    _march_load,
+                    _marching_lords,
+                )
+                _moving = _marching_lords(state, _alid)
+                _gcost = 2 if _march_load(state, _moving)[0] else 1
+                if state.meta.actions_remaining >= _gcost:
+                    for _gd in _guadalquivir_targets(state, _alid):
                         out.append({"type": "cmd_guadalquivir",
                                     "side": "muslim", "target_locale_id": _gd})
             # C25/M25 El Cid + M8 Dawud(b): play a named Event from deck.
@@ -1088,7 +1165,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 # M13 Severed Heads (Ravaging mode): shift a Taifa Lord 2
                 # boxes OR +2 Jihad (Arts of War ref).
                 if (active == "muslim"
-                        and "M13" in state.decks.this_levy_events.get("muslim", [])):
+                        and "M13" in held_event_ids(state, "muslim")):
                     out.append({"type": "play_severed_heads",
                                 "side": "muslim", "mode": "jihad"})
                     for _tl, _tlo in state.lords.items():
@@ -1150,35 +1227,40 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     for _ct in _cabalgadas_targets(state, lord_id, active):
                         out.append({"type": "cmd_cabalgadas", "side": active,
                                     "target_locale": _ct})
-                # M19 African Fleet (Hold): a Muslim Lord may use his entire
-                # Command card to March directly between two Ports free of
-                # Christian Lords (Arts of War ref M19). The handler exists
-                # but was never advertised; mirror its gates here.
-                if (active == "muslim"
-                        and "M19" in state.decks.this_levy_events.get(
-                            "muslim", [])):
-                    try:
-                        from almoravid.effective import is_besieged as _isb_m19
-                        _here_m19 = (lord.cylinder.locale_id
-                                     if lord.cylinder.kind == "locale"
-                                     else None)
-                        if (_here_m19 is not None
-                                and state.locales[_here_m19].has_port
-                                and not _isb_m19(state, lord_id)):
-                            for _pid, _ploc in state.locales.items():
-                                if (_pid != _here_m19 and _ploc.has_port
-                                        and not any(
-                                            lo.side == "christian"
-                                            and lo.cylinder.kind == "locale"
-                                            and lo.cylinder.locale_id == _pid
-                                            for lo in state.lords.values())):
-                                    out.append({
-                                        "type": "cmd_march_port_to_port",
-                                        "side": active,
-                                        "target_locale_id": _pid,
-                                    })
-                    except (KeyError, AttributeError):
-                        pass
+                # M19 Fleet shares normal March load/group rules and uses
+                # the entire Command card (Arts of War Reference M19).
+                if active == "muslim":
+                    from almoravid.campaign import (
+                        _african_fleet_targets,
+                        _is_marshal,
+                        _march_load,
+                        _marching_lords,
+                    )
+                    from almoravid.effective import is_besieged as _isb_m19
+                    _fleet_groups: list[list[str]] = [[]]
+                    if _is_marshal(lord_id, active):
+                        _fleet_companions = [
+                            lo.id for lo in state.lords.values()
+                            if lo.side == active and lo.id != lord_id
+                            and lo.cylinder.kind == "locale"
+                            and lo.cylinder.locale_id == lord.cylinder.locale_id
+                            and lo.lieutenant_of is None
+                            and not _isb_m19(state, lo.id)
+                            and not lo.bypassed_this_card
+                        ]
+                        if _fleet_companions:
+                            _fleet_groups.append(_fleet_companions)
+                    for _group in _fleet_groups:
+                        _moving = _marching_lords(state, lord_id, _group)
+                        _cost = 2 if _march_load(state, _moving)[0] else 1
+                        if state.meta.actions_remaining >= _cost:
+                            for _pid in _african_fleet_targets(state, lord_id):
+                                _move: dict[str, Any] = {
+                                    "type": "cmd_march_port_to_port",
+                                    "side": active, "target_locale_id": _pid}
+                                if _group:
+                                    _move["group_lord_ids"] = _group
+                                out.append(_move)
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.
@@ -1191,9 +1273,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.campaign import _bypass_without_stopping as _bwos
                     from almoravid.campaign import (
                         _counts_as_marshal_for_march,
-                        _group_laden,
-                        _is_laden,
                         _is_marshal,
+                        _march_load,
+                        _marching_lords,
                     )
                     from almoravid.effective import is_besieged
                     from almoravid.map import neighbors_via
@@ -1228,7 +1310,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             # Single-Lord cost mirrors the handler: a
                             # Cart-over-Pass (or 2-Provender / Loot) March is
                             # Laden and costs 2 actions — NOT suppressed.
-                            cost = 2 if _is_laden(lord, way_type) else 1
+                            moving = _marching_lords(state, lord_id)
+                            cost = 2 if _march_load(state, moving, way_type)[0] else 1
                             can_single = state.meta.actions_remaining >= cost
                             for nbr in neighbors_via(from_loc, way_type):
                                 if can_single:
@@ -1249,9 +1332,9 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                         grp = [g for g in grp
                                                if g != "alfonso"]
                                     if grp:
-                                        gcost = (2 if _group_laden(
-                                            state, [lord_id, *grp], way_type)
-                                            else 1)
+                                        moving = _marching_lords(state, lord_id, grp)
+                                        gcost = (2 if _march_load(
+                                            state, moving, way_type)[0] else 1)
                                         if state.meta.actions_remaining >= gcost:
                                             out.append({
                                                 "type": "cmd_march",
@@ -1289,12 +1372,17 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         cart, mule = _shared_transport_at(state, here, active)
                         routes = _find_supply_routes(state, here, seats,
                                                      active, lord)
+                        from almoravid.capabilities import lord_has_capability, side_has_capability
+                        source_factor = (2 if lord_id in ("yusuf", "sir")
+                                         and side_has_capability(state, "muslim", "M12") else 1)
+                        # M8 explicitly permits Supply with no Source in
+                        # reach, even with no Transport (M8 Tips).
+                        if lord_has_capability(state, lord_id, "M8"):
+                            out.append({"type": "cmd_supply", "side": active,
+                                        "source_seats": []})
                         for s, route in routes.items():
-                            if s == here:
-                                out.append({"type": "cmd_supply",
-                                            "side": active,
-                                            "source_seat": s})
-                            elif route is not None and len(route) <= (cart + mule):
+                            if (route is not None
+                                    and len(route) * source_factor <= cart + mule):
                                 out.append({"type": "cmd_supply",
                                             "side": active,
                                             "source_seat": s})
@@ -1306,8 +1394,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         # Ways); custom subsets remain submittable via
                         # source_seats.
                         _reach = [(s, route) for s, route in routes.items()
-                                  if s == here or (route is not None
-                                                   and len(route) <= cart + mule)]
+                                  if route is not None
+                                  and len(route) * source_factor <= cart + mule]
                         if len(_reach) >= 2:
                             _ordered = sorted(
                                 _reach,
@@ -1316,7 +1404,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             _chosen: list[str] = []
                             _used = 0
                             for _s, _route in _ordered:
-                                _hops = 0 if _s == here else len(_route or [])
+                                _hops = len(_route or []) * source_factor
                                 if _used + _hops <= cart + mule:
                                     _chosen.append(_s)
                                     _used += _hops

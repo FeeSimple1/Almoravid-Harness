@@ -216,5 +216,5 @@ def test_c26_freebooter_disbands_rodrigo_al_sayyid() -> None:
     r = resolve_event(s, "christian", "C26")
     assert r.get("no_op") is not True
     assert r["disbanded"] == "rodrigo_al_sayyid"
-    assert s.lords["rodrigo_al_sayyid"].cylinder.kind == "removed"
+    assert s.lords["rodrigo_al_sayyid"].cylinder.kind == "calendar"
     assert sum(s.lords["rodrigo_al_sayyid"].forces.values()) == 0
