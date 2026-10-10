@@ -93,35 +93,65 @@ def _require_campaign_step(state: GameState, step: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _capability_discard_excess(state: GameState, side: Side) -> int:
+    """4.0: board-edge Capabilities only; each Mustered Lord allows one."""
+    n_lords = sum(lord.side == side and lord.cylinder.kind == "locale"
+                  for lord in state.lords.values())
+    return max(0, len(state.decks.board_edge.get(side, [])) - n_lords)
+
+
 def _apply_capability_discard(state: GameState) -> dict[str, Any]:
-    """Rule 4.0 CAPABILITY DISCARD: at the start of each Campaign the
-    players (Christian first, then Muslim) must discard side-wide
-    Capability cards (those tucked under the map edge, state.decks.
-    board_edge) in excess of their number of Mustered (on-map) Lords.
-    'This Lord' Capabilities (on Lord mats) are NOT counted or
-    discarded. Excess is discarded deterministically from the end of
-    the board_edge list (a minor player choice that does not affect
-    totals).
+    """Begin/advance the owner's 4.0 choice, Christians then Muslims.
+
+    Never choose a card on the player's behalf. The palette offers one
+    discard at a time (linear in the number of cards), and the action also
+    accepts a batch. This-Lord cards neither count nor can be selected.
     """
-    out: dict[str, Any] = {}
-    for side in ("christian", "muslim"):
-        edge = state.decks.board_edge.get(side, [])
-        n_lords = sum(1 for lord in state.lords.values()
-                      if lord.side == side and lord.cylinder.kind == "locale")
-        if len(edge) > n_lords:
-            discarded = edge[n_lords:]
-            state.decks.board_edge[side] = edge[:n_lords]
-            state.decks.discard.extend(discarded)
-            state.decks.capabilities_in_play = [c for c in state.decks.capabilities_in_play
-                                                if c.card_id not in discarded]
-            for cid in discarded:
-                if cid == "C22":
-                    _remove_bishops(state)
-                if cid in ("C13", "M23"):
-                    from almoravid.events import _remove_count_units
-                    _remove_count_units(state, cid)
-            out[side] = {"discarded": discarded, "kept": n_lords}
-    return out
+    for side in ACTOR_ORDER:
+        excess = _capability_discard_excess(state, side)
+        if excess:
+            edge = list(state.decks.board_edge.get(side, []))
+            state.meta.campaign_step = "capability_discard"
+            state.meta.active_player = side
+            state.pending = PendingDecision(
+                kind="capability_discard", waiting_on=side,
+                payload={"cards": edge, "discard_required": excess,
+                         "keep_count": len(edge) - excess})
+            return {"pending": "capability_discard", "side": side,
+                    "discard_required": excess, "cards": edge}
+    if state.pending is not None and state.pending.kind == "capability_discard":
+        state.pending = None
+    state.meta.campaign_step = "plan"
+    state.meta.active_player = ACTOR_ORDER[0]
+    return {"campaign_step": "plan"}
+
+
+def _h_discard_capabilities(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """4.0: discard an explicit nonempty subset of this side's excess."""
+    from almoravid.capabilities import discard_capability
+    side = _require_side(action)
+    _require_campaign_step(state, "capability_discard")
+    _require_active(state, side)
+    _require(state.pending is not None
+             and state.pending.kind == "capability_discard"
+             and state.pending.waiting_on == side,
+             "no Capability Discard choice for this side", code="not_pending")
+    cards = action.get("card_ids")
+    _require(isinstance(cards, list) and bool(cards)
+             and all(isinstance(cid, str) for cid in cards),
+             "card_ids must be a nonempty list of card IDs", code="bad_arg")
+    _require(len(set(cards)) == len(cards), "duplicate card IDs", code="bad_arg")
+    _require(len(cards) <= _capability_discard_excess(state, side),
+             "cannot discard more than the excess", code="bad_discard_count")
+    edge = state.decks.board_edge.get(side, [])
+    _require(all(cid in edge for cid in cards),
+             "select only this side's board-edge Capabilities", code="bad_card")
+    # All validation above precedes any card, troop, or history mutation.
+    for cid in cards:
+        discard_capability(state, cid)
+    result = _apply_capability_discard(state)
+    _record(state, action, f"{side} discards excess Capabilities: {', '.join(cards)}")
+    return {"discarded": cards, **result}
 
 
 def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -135,6 +165,9 @@ def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any
     _require(state.meta.phase == "campaign",
              f"begin_campaign requires phase=campaign (got {state.meta.phase})",
              code="bad_phase")
+    _require(state.pending is None,
+             "resolve the pending decision before beginning a Campaign",
+             code="pending_decision")
     # Rule 5.2: a side with no Mustered Lords on the map at any moment
     # during the Campaign loses immediately (the other side wins). A
     # side with zero Mustered Lords also cannot legally build a Plan
@@ -148,8 +181,6 @@ def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any
                 f"Begin Campaign: rule 5.2 — {cw} wins (opponent has no "
                 f"Mustered Lords on the map)")
         return {"phase": "ended", "victory": verdict}
-    # 4.0 CAPABILITY DISCARD (Christian first, then Muslim).
-    _apply_capability_discard(state)
     state.meta.campaign_step = "plan"
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
@@ -159,9 +190,10 @@ def _h_begin_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any
     state.meta.active_lord_id = None
     state.decks.plan = {"christian": [], "muslim": []}
     state.meta.active_player = ACTOR_ORDER[0]
-    _record(state, action, "Begin Campaign — Plan step")
-    return {"campaign_step": "plan",
-            "plan_target_size": _plan_target_size(state)}
+    discard = _apply_capability_discard(state)
+    _record(state, action, f"Begin Campaign — {state.meta.campaign_step}")
+    return {"campaign_step": state.meta.campaign_step,
+            "plan_target_size": _plan_target_size(state), **discard}
 
 
 # ---------------------------------------------------------------------------
@@ -1141,6 +1173,9 @@ def apply_curias(state: GameState, box: int) -> dict[str, Any]:
             new_box = 17
             state.calendar.off_right.append(lid)
         lord.cylinder = Cylinder(kind="calendar", box=new_box)
+        from almoravid.capabilities import discard_capability
+        for cid in list(lord.capabilities):
+            discard_capability(state, cid)
         lord.forces = {}
         lord.assets = {}
         lord.capabilities = []
@@ -1204,9 +1239,11 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         # Permanently removed from the game (3.3.1): Forces/Assets to
         # pools (cleared), This-Lord Capabilities to their deck,
         # cylinder/mat/Seat markers out of the game.
-        state.decks.discard.extend(lord.capabilities)
         _strip_seats(lid)
         lord.cylinder = Cylinder(kind="removed")
+        from almoravid.capabilities import discard_capability
+        for cid in list(lord.capabilities):
+            discard_capability(state, cid)
         lord.forces = {}
         lord.assets = {}
         lord.capabilities = []
@@ -1242,6 +1279,9 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         if is_rodrigo:
             lord.cylinder = Cylinder(kind="calendar", box=9)
             results["rodrigo_to_box_9"].append(lid)
+            from almoravid.capabilities import discard_capability
+            for cid in list(lord.capabilities):
+                discard_capability(state, cid)
             lord.forces = {}
             lord.assets = {}
             lord.capabilities = []
@@ -1262,6 +1302,9 @@ def winter_disband(state: GameState) -> dict[str, Any]:
                 results["taifas_box_coin_added"] += coin
         lord.cylinder = Cylinder(kind="mat")
         results["disbanded_to_mat"].append(lid)
+        from almoravid.capabilities import discard_capability
+        for cid in list(lord.capabilities):
+            discard_capability(state, cid)
         lord.forces = {}
         lord.assets = {}
         lord.capabilities = []
@@ -1269,43 +1312,19 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         lord.moved_fought = False
         lord.routed_units = {}
 
-    # Discard board-edge Capabilities (3.4.4). C18 Milites is "removed from
-    # the game" on discard (its Event #C18 Runaway Slaves leaves with it),
-    # so it must NOT recycle into a later Campaign's draw deck.
-    _removed_on_discard = {"C18"}
-    for side in ("christian", "muslim"):
-        edge = state.decks.board_edge.get(side, [])
-        for cid in edge:
-            if cid in _removed_on_discard:
-                if cid not in state.decks.removed_from_game:
-                    state.decks.removed_from_game.append(cid)
-                results.setdefault("board_edge_removed_from_game", []).append(cid)
-            else:
-                state.decks.discard.append(cid)
+    # 6.3.1: all board-edge cards leave play. Use the same printed cleanup
+    # as 4.0; personal cards at continuing sieges remain active/used.
+    from almoravid.capabilities import discard_capability
+    for side in ACTOR_ORDER:
+        for cid in list(state.decks.board_edge.get(side, [])):
+            discard_capability(state, cid)
             results["board_edge_discarded"].append(cid)
-        state.decks.capabilities_in_play = [c for c in state.decks.capabilities_in_play
-                                            if c.card_id not in edge]
-        for cid in edge:
-            if cid == "C22":
-                _remove_bishops(state)
-            if cid in ("C13", "M23"):
-                from almoravid.events import _remove_count_units
-                _remove_count_units(state, cid)
-        state.decks.board_edge[side] = []
-    # This-Lord Count cards on Winter-disbanded mats lose their contingent
-    # and once-only bookkeeping, just as with normal 3.3.2 Disband.
-    for cid in ("C13", "M23"):
-        rec = state.meta.aow_cap_state.get(f"{cid}_units", {})
-        holder = state.lords.get(rec.get("lord"))
-        if holder is not None and holder.cylinder.kind != "locale":
-            from almoravid.events import _remove_count_units
-            _remove_count_units(state, cid)
+            if cid in state.decks.removed_from_game:
+                results.setdefault("board_edge_removed_from_game", []).append(cid)
     for cap in list(state.decks.capabilities_in_play):
         if (cap.scope == "this_lord" and cap.owner_lord_id in state.lords
                 and cap.card_id not in state.lords[cap.owner_lord_id].capabilities):
-            state.decks.capabilities_in_play.remove(cap)
-            if cap.card_id not in state.decks.discard:
-                state.decks.discard.append(cap.card_id)
+            discard_capability(state, cap.card_id)
 
     # 6.3.1 removes Service only for Lords actually Disbanded/removed.
     # Siege Lords retain BOTH their own and advanced Vassal markers for
@@ -3923,6 +3942,9 @@ def _finish_storm(
             for atype, n in list(elord.assets.items()):
                 if n > 0:
                     sack_spoils[atype] = sack_spoils.get(atype, 0) + n
+            from almoravid.capabilities import discard_capability
+            for cid in list(elord.capabilities):
+                discard_capability(state, cid)
             for fld in elord.cleanup_on_removal_fields:
                 try:
                     setattr(elord, fld, type(getattr(elord, fld))())
@@ -5730,15 +5752,8 @@ def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
         caps = capabilities_for_lord(state, lid)
         if len(caps) > 1:
             drop = sorted(caps)[-1]
-            lord.capabilities.remove(drop)
-            state.decks.capabilities_in_play = [
-                c for c in state.decks.capabilities_in_play
-                if not (c.card_id == drop and c.owner_lord_id == lid)
-            ]
-            if drop in ("C13", "M23"):
-                from almoravid.events import _remove_count_units
-                _remove_count_units(state, drop)
-            state.decks.discard.append(drop)
+            from almoravid.capabilities import discard_capability
+            discard_capability(state, drop)
             out.append({"lord_id": lid, "discarded_capability": drop})
     return out
 
@@ -5799,15 +5814,8 @@ def _apply_one_wastage(state: GameState, lid: str,
     cid = item["capability"]
     _require(cid in lord.capabilities,
              f"{lid} does not hold capability {cid} (Wastage)", code="bad_arg")
-    lord.capabilities.remove(cid)
-    state.decks.capabilities_in_play = [
-        c for c in state.decks.capabilities_in_play
-        if not (c.card_id == cid and c.owner_lord_id == lid)
-    ]
-    if cid in ("C13", "M23"):
-        from almoravid.events import _remove_count_units
-        _remove_count_units(state, cid)
-    state.decks.discard.append(cid)
+    from almoravid.capabilities import discard_capability
+    discard_capability(state, cid)
     return {"lord_id": lid, "discarded_capability": cid}
 
 
@@ -6566,9 +6574,10 @@ def _h_sagrajas_defend(state: GameState, action: dict[str, Any]) -> dict[str, An
         state.lords["al_mutamid"].forces.get("men_at_arms", 0) + 2
     state.lords["al_mutamid"].capabilities.append("M15")
     state.decks.capabilities_in_play.append(CardInPlay(
-        card_id="M15", scope="side_wide", owner_side="muslim",
-        owner_lord_id=None))
-    state.decks.board_edge.setdefault("muslim", []).append("M15")
+        card_id="M15", scope="this_lord", owner_side="muslim",
+        owner_lord_id="al_mutamid"))
+    state.meta.aow_cap_state["M15_used"] = True
+    state.meta.aow_cap_state["M15_units"] = {"lord": "al_mutamid", "men_at_arms": 2}
     # Harbah (M3) at a Taifa Lord (not Yusuf/Sir): al-Mutawakkil.
     state.lords["al_mutawakkil"].capabilities.append("M3")
     state.decks.capabilities_in_play.append(CardInPlay(
@@ -6717,11 +6726,11 @@ def _fueros_targets(state: GameState) -> list[str]:
 def _h_cap_fueros(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C20 Fueros (Arts of War ref): once each Levy, the Christians remove
     up to 2 Jihad from a Reconquista-Taifa Locale to which Alfonso is
-    closer than any Muslim (1.4.4). Free (0-action), modeled at Alfonso's
-    Activation; gated once per turn via meta.aow_cap_state."""
+    closer than any Muslim (1.4.4). Free, at any moment of each Levy;
+    acquiring it and using it both depend on Alfonso, not the active Lord."""
     side = _require_side(action)
     _require(side == "christian", "Fueros is Christian", code="wrong_side")
-    _require_campaign_step(state, "activation")
+    _require_phase(state, "levy")
     _require_active(state, side)
     _require(state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index,
              "Fueros already used this turn", code="cap_used")
@@ -6732,7 +6741,9 @@ def _h_cap_fueros(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="bad_target")
     target = cast(str, target)
     loc = state.locales[target]
-    removed = min(2, loc.jihad_markers)
+    removed = action.get("count", min(2, loc.jihad_markers))
+    _require(type(removed) is int and 1 <= removed <= min(2, loc.jihad_markers),
+             "count must be 1 or 2, within available Jihad", code="bad_arg")
     loc.jihad_markers -= removed
     state.meta.aow_cap_state["fueros_turn"] = state.meta.turn_index
     _record(state, action, f"Fueros (C20): remove {removed} Jihad at {target}")
@@ -6971,7 +6982,7 @@ def _h_cap_saqalibah(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     side = _require_side(action)
     _require(side == "muslim", "Saqalibah is Muslim", code="wrong_side")
     _require_muster_segment(state, side)
-    from almoravid.capabilities import lord_has_capability, side_has_capability
+    from almoravid.capabilities import lord_has_capability
     lid = action.get("lord_id") or state.meta.active_lord_id
     _require(isinstance(lid, str) and lid in state.lords,
              "lord_id required", code="bad_arg")
@@ -6983,8 +6994,7 @@ def _h_cap_saqalibah(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(_muster_cap_lord_eligible(state, lid, side),
              f"{lid} not eligible to Muster this segment (3.4)",
              code="not_eligible")
-    _require(side_has_capability(state, side, "M15")
-             or lord_has_capability(state, lid, "M15"),
+    _require(lord_has_capability(state, lid, "M15"),
              "M15 not in play", code="no_cap")
     _require(not state.meta.aow_cap_state.get("M15_used"),
              "Saqalibah already used", code="cap_used")
@@ -7001,7 +7011,7 @@ def _h_cap_al_rum(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     _require(side == "muslim", "Al-Rum is Muslim", code="wrong_side")
     _require_muster_segment(state, side)
-    from almoravid.capabilities import lord_has_capability, side_has_capability
+    from almoravid.capabilities import lord_has_capability
     lid = action.get("lord_id") or state.meta.active_lord_id
     _require(isinstance(lid, str) and lid in state.lords,
              "lord_id required", code="bad_arg")
@@ -7012,8 +7022,7 @@ def _h_cap_al_rum(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(_muster_cap_lord_eligible(state, lid, side),
              f"{lid} not eligible to Muster this segment (3.4)",
              code="not_eligible")
-    _require(side_has_capability(state, side, "M20")
-             or lord_has_capability(state, lid, "M20"),
+    _require(lord_has_capability(state, lid, "M20"),
              "M20 not in play", code="no_cap")
     _require(not state.meta.aow_cap_state.get("M20_used"),
              "Al-Rum already used", code="cap_used")
@@ -7199,6 +7208,7 @@ CAMPAIGN_HANDLERS = {
     "cap_al_faraj": _h_cap_al_faraj,
     "play_severed_heads": _h_play_severed_heads,
     "begin_campaign": _h_begin_campaign,
+    "discard_capabilities": _h_discard_capabilities,
     "plan_add_card": _h_plan_add_card,
     "finalize_plan": _h_finalize_plan,
     "command_reveal": _h_command_reveal,

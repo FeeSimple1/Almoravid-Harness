@@ -1,0 +1,27 @@
+{
+  "25": {
+    "type": "levy_take_capability",
+    "side": "muslim",
+    "lord_id": "al_mutamid",
+    "card_id": "M15"
+  },
+  "350": {
+    "type": "levy_take_capability",
+    "side": "muslim",
+    "lord_id": "al_mutamid",
+    "card_id": "M20"
+  },
+  "449": {
+    "type": "levy_take_capability",
+    "side": "christian",
+    "lord_id": "sancho",
+    "card_id": "C20"
+  },
+  "558": {
+    "type": "pass_step",
+    "side": "muslim"
+  },
+  "610": {
+    "type": "end_campaign"
+  }
+}

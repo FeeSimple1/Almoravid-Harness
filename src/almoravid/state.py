@@ -63,7 +63,8 @@ CardScope = Literal["this_lord", "side_wide"]
 RavagedState = Literal["none", "yellow", "green"]
 CylinderKind = Literal["calendar", "locale", "mat", "set_aside", "removed"]
 LevyStep = Literal["arts_of_war", "pay", "service_disband", "muster", "call_to_arms", "done"]
-CampaignStep = Literal["plan", "activation", "end_card", "end_campaign", "done"]
+CampaignStep = Literal["capability_discard", "plan", "activation", "end_card",
+                       "end_campaign", "done"]
 PlanEntryKind = Literal["command", "pass"]
 
 

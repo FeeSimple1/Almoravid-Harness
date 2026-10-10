@@ -367,7 +367,7 @@
       "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Saqalibah",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "M16": {
@@ -412,7 +412,7 @@
       "event_persistence": "hold",
       "no_event": false,
       "capability_name": "Al-Rûm",
-      "capability_scope": "side_wide",
+      "capability_scope": "this_lord",
       "no_capability": false
     },
     "M21": {

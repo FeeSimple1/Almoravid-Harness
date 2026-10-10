@@ -1709,24 +1709,11 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     if lord_id == "alfonso":
         state.cathedral_seat_locales = []
 
-    # Route "This Lord" Capability cards: 3.3.1 returns them to the
-    # side's board-edge stock; 3.3.2 discards them (cards at his mat).
-    caps = list(lord.capabilities)
-    if caps:
-        for cap in caps:
-            if cap in ("C13", "M23"):
-                from almoravid.events import _remove_count_units
-                _remove_count_units(state, cap)
-                if state.meta.count_of_barcelona_side == side:
-                    state.meta.count_of_barcelona_side = None
-        state.decks.capabilities_in_play = [
-            cap for cap in state.decks.capabilities_in_play
-            if not (cap.owner_lord_id == lord_id and cap.card_id in caps)
-        ]
-        if beyond:
-            state.decks.board_edge.setdefault(side, []).extend(caps)
-        else:
-            state.decks.discard.extend(caps)
+    # 3.3.1 returns This-Lord cards to their deck; 3.3.2 discards them.
+    # Both rejoin the unused pool, never the active board-edge Capabilities.
+    from almoravid.capabilities import discard_capability
+    for cap in list(lord.capabilities):
+        discard_capability(state, cap)
 
     # Remove the Lord's own AND Vassal Service markers; clear off-edge.
     state.calendar.service_markers = [

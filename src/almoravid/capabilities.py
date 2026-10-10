@@ -55,6 +55,9 @@ _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "C13": frozenset({"sancho", "eudes"}),
     "M23": frozenset({"al_mustain", "al_mundir"}),
     "C16": frozenset({"alfonso"}),
+    "C20": frozenset({"alfonso"}),  # Fueros (board edge)
+    "M15": MUSLIM_TAIFA_SIX,          # Saqalibah (This Lord)
+    "M20": MUSLIM_TAIFA_SIX,          # Al-Rum (This Lord)
     "C21": frozenset({"alfonso"}),  # Sisnando Davidez (board edge)
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
@@ -177,6 +180,49 @@ def any_capability(
             return lord_has_capability(state, lord_id, card_id)
         return bool(any_lord_with_capability(state, side, card_id))
     return False
+
+
+def discard_capability(state: GameState, card_id: str) -> None:
+    """Remove a Capability and its printed discard effects exactly once.
+
+    Called for Campaign excess (4.0), Winter (6.3.1), Disband/removal
+    (3.3), and Wastage (4.9.4). This is not an Event-discard operation:
+    C18's permanent removal applies to *Milites*, not Runaway Slaves.
+    M15/M20 and the Count lose their tracked contingent and once-per-card
+    usage, while Milites explicitly leaves its recruited units in place.
+    """
+    if card_id in ("M15", "M20"):
+        rec = state.meta.aow_cap_state.pop(f"{card_id}_units", {})
+        state.meta.aow_cap_state.pop(f"{card_id}_used", None)
+        lord = state.lords.get(rec.get("lord"))
+        unit = "men_at_arms" if card_id == "M15" else "knights"
+        if lord is not None and rec.get(unit, 0):
+            lord.forces[unit] = max(0, lord.forces.get(unit, 0) - rec[unit])
+    elif card_id in ("C13", "M23"):
+        from almoravid.events import _remove_count_units
+        _remove_count_units(state, card_id)
+    elif card_id == "C22":
+        from almoravid.campaign import _remove_bishops
+        _remove_bishops(state)
+    elif card_id == "C18":
+        # Printed C18: discard leaves the units, but removes both card halves.
+        state.meta.aow_cap_state.pop("C18_pool", None)
+        state.meta.aow_cap_state.pop("C18_lords", None)
+        if card_id not in state.decks.removed_from_game:
+            state.decks.removed_from_game.append(card_id)
+
+    for lord in state.lords.values():
+        if card_id in lord.capabilities:
+            lord.capabilities = [c for c in lord.capabilities if c != card_id]
+    for side, edge in state.decks.board_edge.items():
+        state.decks.board_edge[side] = [c for c in edge if c != card_id]
+    state.decks.capabilities_in_play = [
+        c for c in state.decks.capabilities_in_play if c.card_id != card_id]
+    state.decks.draw = [c for c in state.decks.draw if c != card_id]
+    if card_id in state.decks.removed_from_game:
+        state.decks.discard = [c for c in state.decks.discard if c != card_id]
+    elif card_id not in state.decks.discard:
+        state.decks.discard.append(card_id)
 
 
 # ---------------------------------------------------------------------------

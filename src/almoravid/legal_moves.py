@@ -41,6 +41,11 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
+    if state.pending is not None and state.pending.kind == "capability_discard":
+        side = state.pending.waiting_on
+        return [{"type": "discard_capabilities", "side": side, "card_ids": [cid]}
+                for cid in state.decks.board_edge.get(side, [])]
+
     # Battle of Sagrajas minigame (Background Book pp.44-47). The Christian
     # chooses Attack/Defend, then the Attacker resolves the Battle.
     if (state.pending is not None
@@ -430,6 +435,15 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     active: Side = state.meta.active_player
     step = state.meta.levy_step
 
+    # C20: free once during each Levy, including the choice of one or two.
+    if (active == "christian"
+            and state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index):
+        from almoravid.campaign import _fueros_targets
+        for target in _fueros_targets(state):
+            for count in range(1, min(2, state.locales[target].jihad_markers) + 1):
+                moves.append({"type": "cap_fueros", "side": active,
+                              "target_locale": target, "count": count})
+
     # C21: a discretionary, free choice at any moment of each Levy.
     if (active == "christian"
             and state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index):
@@ -724,6 +738,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     from almoravid.campaign import (
         _muster_cap_lord_eligible as _mce,
     )
+    from almoravid.capabilities import lord_has_capability as _lhc_m
     from almoravid.capabilities import side_has_capability as _shc_m
     # C13/M23 Count of Barcelona: the eligible Lord pays 2 Coin once.
     _cb_lid = _cbu_m(state, side)
@@ -735,11 +750,11 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             continue
         # M15 Saqalibah / M20 Al-Rum: an eligible Taifa Lord Musters units.
         if side == "muslim" and lord.is_taifa and _mce(state, lid, side):
-            if (_shc_m(state, "muslim", "M15")
+            if (_lhc_m(state, lid, "M15")
                     and not state.meta.aow_cap_state.get("M15_used")):
                 out.append({"type": "cap_saqalibah", "side": "muslim",
                             "lord_id": lid})
-            if (_shc_m(state, "muslim", "M20")
+            if (_lhc_m(state, lid, "M20")
                     and not state.meta.aow_cap_state.get("M20_used")
                     and _cav_m(state, lid, "muslim") >= 1):
                 out.append({"type": "cap_al_rum", "side": "muslim",
@@ -1080,15 +1095,6 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         and _gate):
                     out.append({"type": "place_cathedral_seat",
                                 "side": "christian"})
-            # C20 Fueros: Alfonso may remove up to two Jihad from a
-            # Reconquista Locale to which he is closer than any Muslim.
-            # C21 Sisnando is offered separately during Levy.
-            if state.meta.active_lord_id == "alfonso":
-                from almoravid.campaign import _fueros_targets as _ft
-                if state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index:
-                    for _fl in _ft(state):
-                        out.append({"type": "cap_fueros", "side": "christian",
-                                    "target_locale": _fl})
             # (C13/M23, M15, M20, C18, C23 moved to _muster_moves —
             # they are Muster-segment Levy effects per 3.4.2/3.4.3.)
             _alid = state.meta.active_lord_id

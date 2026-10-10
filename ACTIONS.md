@@ -57,6 +57,31 @@ When both sides have ratified, the step advances (3.1 → 3.2 → 3.3 →
 {"type": "pass_step", "side": "christian"}
 ```
 
+## 4.0 Campaign-entry Capability Discard
+
+When a side has more board-edge Capabilities than Mustered Lords, Campaign
+entry now sets `campaign_step="capability_discard"` and a matching pending
+decision. Christians select first, then Muslims. Planning cannot start until
+both sides are within their limits. Personal This-Lord cards do not count.
+
+### `discard_capabilities`
+
+Choose one or more of the waiting side's excess cards explicitly:
+
+```json
+{"type":"discard_capabilities","side":"christian","card_ids":["C22","C20"]}
+```
+
+`card_ids` must be a nonempty list of distinct, owned board-edge cards and
+cannot exceed the pending excess. The legal palette offers each card as a
+single-card action; the caller may also submit a batch. Invalid choices leave
+state unchanged. The prompt is refreshed after each choice and survives a
+save/load round trip. There is no default selection and no Pass option.
+
+Discarding C18 **Milites** permanently removes the entire card, but leaves
+recruited troops in place. Ordinary discard of its **Runaway Slaves** Event
+half is unchanged and does not invoke this Capability-only removal rule.
+
 ## 3.1 Arts of War
 
 ### `aow_shuffle`
@@ -204,3 +229,29 @@ troops, subject to normal Lord eligibility and Lordship cost. Special Bishops
 never receive Calendar Service markers under advanced Vassal Service.
 Discarding C22 removes its special Bishop markers and Mustered units and
 resets availability. Sancho's printed Bishop of Jaca is unaffected.
+
+## Troop Capability scope and lifetime (M15 / M20)
+
+Saqalibah and Al-Rûm are **This Lord** Capabilities, eligible only for Taifa
+Muslim Lords. They occupy personal mat slots, not board-edge capacity. Only
+their holder may invoke `cap_saqalibah` or `cap_al_rum` during an eligible
+Muster segment. Al-Rûm still costs one Coin, with Sharing and Taifas-box
+payment allowed. Each acquisition can recruit once; discard removes the
+tracked contingent and clears that acquisition's usage record. A new
+acquisition may recruit again. A Lord staying at a Winter Siege keeps the
+card and its existing usage status.
+
+## Fueros (C20)
+
+Only Alfonso may Levy Fueros. It deploys at the board edge, not his mat.
+Its Jihad-removal action is free once during each **Levy**, not Campaign.
+The target must be in a Reconquista Taifa and strictly closer to Alfonso
+than to every Muslim Lord. Choose one or two eligible markers:
+
+```json
+{"type":"cap_fueros","side":"christian","target_locale":"toledo","count":1}
+```
+
+`count` may be one or two, within the number present; omitting it retains
+the existing maximum-up-to-two payload behavior. Decline by not invoking
+the action. The menu includes both counts when available.

@@ -18,9 +18,12 @@ def _act(s, lord_id, side):
     s.meta.actions_remaining = 0
 
 
-def _deploy(s, card, side):
-    s.decks.capabilities_in_play.append(
-        CardInPlay(card_id=card, scope="side_wide", owner_side=side))
+def _deploy(s, card, side, lord_id=None):
+    if lord_id is not None:
+        s.lords[lord_id].capabilities.append(card)
+    s.decks.capabilities_in_play.append(CardInPlay(
+        card_id=card, scope="this_lord" if lord_id else "side_wide",
+        owner_side=side, owner_lord_id=lord_id))
 
 
 def test_c13_count_of_barcelona_musters_units_for_2_coin() -> None:
@@ -54,7 +57,7 @@ def test_m23_count_blocked_when_count_on_christian_side() -> None:
 
 def test_m15_saqalibah_musters_two_maa_free() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    _deploy(s, "M15", "muslim")
+    _deploy(s, "M15", "muslim", "al_mundir")
     al = s.lords["al_mundir"]
     al.cylinder = Cylinder(kind="locale", locale_id="valencia")
     m0 = al.forces.get("men_at_arms", 0)
@@ -68,7 +71,7 @@ def test_m15_saqalibah_musters_two_maa_free() -> None:
 
 def test_m20_al_rum_pays_taifa_box_coin_for_two_knights() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    _deploy(s, "M20", "muslim")
+    _deploy(s, "M20", "muslim", "al_mundir")
     al = s.lords["al_mundir"]
     # His own Seat (Muslim-Friendly, 3.4 "Important"); other Muslim
     # Lords leave the map so no co-located Sharing; only the box pays.
