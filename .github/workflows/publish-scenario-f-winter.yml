@@ -1,0 +1,78 @@
+name: Verify Scenario F winter fixes
+on:
+  push:
+    branches: ['maintenance/scenario-f-winter-publish-20261010']
+    paths: ['.github/workflows/publish-scenario-f-winter.yml']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: engine
+        shell: bash
+    steps:
+      - name: Check out patch payload
+        uses: actions/checkout@v4
+        with:
+          path: payload
+          persist-credentials: false
+      - name: Check out exact engine baseline
+        uses: actions/checkout@v4
+        with:
+          ref: c4468413f486fa7361ade8467ee90f352ebcc323
+          path: engine
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify patch and source tree
+        run: |
+          python - <<'PY'
+          import base64
+          import hashlib
+          import lzma
+          import pathlib
+          import subprocess
+          parts = sorted(pathlib.Path('../payload/maintenance').glob('scenario-f-winter.patch.b64.part*'))
+          assert len(parts) == 4, parts
+          encoded = ''.join(''.join(p.read_text().split()) for p in parts)
+          patch = lzma.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '12c86531d1b0df1f44692179af6229fdcfe8e4eaf7c6aa76800e8bd33ab0b345'
+          path = pathlib.Path('../scenario-f-winter.patch')
+          path.write_bytes(patch)
+          subprocess.run(['git', 'apply', '--check', str(path)], check=True)
+          subprocess.run(['git', 'apply', '--index', str(path)], check=True)
+          tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
+          assert tree == 'f7dcd62d87fff7b12a4e3a912152a1b5a595af16', tree
+          pathlib.Path('../verified-tree.txt').write_text(tree + '\n')
+          print('Verified exact source tree:', tree)
+          PY
+      - name: Install verification dependencies
+        run: python -m pip install -e . pytest ruff
+      - name: Ruff
+        run: ruff check src/almoravid/ | tee ../ruff.txt
+      - name: Full regression suite
+        run: python -m pytest -q -p no:cacheprovider --junitxml=../pytest.xml | tee ../pytest.txt
+      - name: Publish tested source branch
+        run: |
+          test "$(git write-tree)" = f7dcd62d87fff7b12a4e3a912152a1b5a595af16
+          git diff --exit-code
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Fix Scenario F winter Service, Spring Muster, and Bishoprics lifecycle'
+          git rev-parse HEAD > ../verified-commit.txt
+          git push origin HEAD:refs/heads/fix/scenario-f-winter-2026-10-10
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-f-winter-verification
+          path: |
+            verified-tree.txt
+            verified-commit.txt
+            ruff.txt
+            pytest.txt
+            pytest.xml
+          retention-days: 7
