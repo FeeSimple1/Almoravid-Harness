@@ -3016,19 +3016,12 @@ def _ravaged_count_in_taifa_for_side(state: GameState, locale_id: str,
 
 def _conquer_stronghold(state: GameState, locale_id: str,
                         conquering_side: Side) -> dict[str, Any]:
-    """Apply Conquest of a Stronghold (rule 1.4.4, 4.5.1 Surrender,
-    4.5.2 Storm victory, 4.5.3 Sally retreat).
+    """Apply 1.3.1 Conquest for Surrender, Storm and political transitions.
 
-    Effects:
-      - Place Conquered or Jihad markers per Taifa status (per Quick
-        Reference Table 4 — see Phase 5l for the full Adjust Status
-        cascade).
-      - Remove Siege markers there.
-      - Adjust VP (1.3.1: 1 VP per Conquered; 1/2 VP per Jihad).
-      - Phase 5i baseline ignores Taifa-status-transition cascades —
-        those are Phase 5l Adjust Status work.
-
-    Returns dict with marker counts placed and VP delta.
+    Remove enemy markers/Seats. Enemy or Neutral Territory gains Conquered
+    (Jihad for Muslims in a Taifa); Friendly Territory gains no new markers.
+    Flip own Ravage to enemy color, clear own Siege/Bypass, and update both
+    sides' marker VP. Taifa-status cascades are handled by the caller.
     """
     from almoravid.static_data import load_strongholds
     loc = state.locales[locale_id]
@@ -3036,51 +3029,51 @@ def _conquer_stronghold(state: GameState, locale_id: str,
         return {"no_op": True, "reason": "region_no_stronghold"}
     sh_value = load_strongholds()["strongholds"][loc.base_type]["value"]
     taifa = state.taifas.get(loc.territory)
-    # Determine marker type (Quick Reference Table 4):
-    # Independent + Christian conquers: Conquered (1 VP × value)
-    # Reconquista + Muslim conquers: Jihad (1/2 VP × value)
-    # Parias + either: 1 VP / 0.5 VP per side
-    # Full Table 4 rule (implemented below):
-    #   - Muslim conquers a Parias/Reconquista Taifa Stronghold -> Jihad;
-    #   - otherwise (incl. Christian conquest, Muslim conquest of a
-    #     Christian Kingdom) -> Conquered.
-    # 1.4.4 / 4.5: Muslim Conquest of ANY Stronghold in a Parias or
-    # Reconquista Taifa places Jihad markers (1 per Stronghold Value)
-    # AND removes any Christian Conquered + Christian Seat markers
-    # there. Christian Conquest (anywhere), and Muslim Conquest of a
-    # Christian Kingdom, place Conquered markers AND remove all Jihad.
-    # A Locale never holds both Conquered and Jihad markers.
+    before_vp = compute_final_vp(state)
+    friendly_territory = (
+        (conquering_side == "muslim" and taifa is not None
+         and taifa.status == "independent")
+        or (conquering_side == "christian"
+            and (taifa is None or taifa.status in ("reconquista", "kingdoms")))
+    )
     place_jihad = (conquering_side == "muslim" and taifa is not None
                    and taifa.status in ("parias", "reconquista"))
     removed: dict[str, Any] = {}
-    if place_jihad:
-        if loc.conquered_markers:
-            removed["conquered"] = loc.conquered_markers
-            loc.conquered_markers = 0
-        # Remove Christian Seat markers (Muslim Jihad cannot coexist).
-        christian_seats = [sid for sid in loc.seat_marker_lord_ids
-                           if state.lords.get(sid)
-                           and state.lords[sid].side == "christian"]
-        if christian_seats:
-            removed["christian_seats"] = christian_seats
-            loc.seat_marker_lord_ids = [
-                sid for sid in loc.seat_marker_lord_ids
-                if sid not in christian_seats]
-        # A Cathedral Seat is removed when the Enemy Conquers the City.
-        if locale_id in state.cathedral_seat_locales:
-            state.cathedral_seat_locales.remove(locale_id)
-            removed["cathedral_seat"] = locale_id
-        loc.add_jihad(sh_value)
-        vp_delta = 0.5 * sh_value
+    # 1.3.1: enemy Seat markers disappear on ANY enemy conquest, including
+    # a recapture in Friendly Territory (not only a Muslim Jihad conquest).
+    enemy_seats = [sid for sid in loc.seat_marker_lord_ids
+                   if sid in state.lords and state.lords[sid].side != conquering_side]
+    if enemy_seats:
+        enemy = "christian" if conquering_side == "muslim" else "muslim"
+        removed[f"{enemy}_seats"] = enemy_seats
+        loc.seat_marker_lord_ids = [sid for sid in loc.seat_marker_lord_ids
+                                   if sid not in enemy_seats]
+    if conquering_side == "muslim" and locale_id in state.cathedral_seat_locales:
+        state.cathedral_seat_locales.remove(locale_id)
+        removed["cathedral_seat"] = locale_id
+    # A Taifa's Conquered markers are Christian; a Kingdom's are Muslim.
+    conquered_owner = "christian" if taifa is not None else "muslim"
+    if loc.conquered_markers and conquered_owner != conquering_side:
+        removed["conquered"] = loc.conquered_markers
+        loc.conquered_markers = 0
+    if conquering_side == "christian" and loc.jihad_markers:
+        removed["jihad"] = loc.jihad_markers
+        loc.jihad_markers = 0
+    if friendly_territory:
+        # Reconquest restores the Territory's allegiance without awarding
+        # fresh Conquered/Jihad markers. Existing FRIENDLY markers stay.
+        marker = "removed"
+    elif place_jihad:
+        loc.jihad_markers = sh_value
         marker = "jihad"
     else:
-        if loc.jihad_markers:
-            removed["jihad"] = loc.jihad_markers
-            loc.jihad_markers = 0
-        # Conquered markers = exactly the Stronghold Value (1.3.1).
         loc.conquered_markers = sh_value
-        vp_delta = 1.0 * sh_value
         marker = "conquered"
+    after_vp = compute_final_vp(state)
+    marker_deltas = (after_vp[0] - before_vp[0], after_vp[1] - before_vp[1])
+    state.score.christian += marker_deltas[0]
+    state.score.muslim += marker_deltas[1]
+    vp_delta = marker_deltas[0 if conquering_side == "christian" else 1]
     # 1.3.1: Conquest of a Stronghold flips a Ravage marker there to the
     # NON-conquering (Enemy) side's color. The summary (4.5) phrases it
     # "Conquest flips Ravage to Enemy color"; the 4.5.1 Surrender bullet
@@ -3105,10 +3098,10 @@ def _conquer_stronghold(state: GameState, locale_id: str,
     # Remove the Conquering side's Siege markers (Conquest ends Siege).
     if conquering_side == "christian":
         loc.siege_yellow = 0
-        state.score.christian += vp_delta
+        loc.bypass_yellow = False
     else:
         loc.siege_green = 0
-        state.score.muslim += vp_delta
+        loc.bypass_green = False
     return {"locale": locale_id, "marker": marker, "value": sh_value,
             "vp_delta": vp_delta, "conquered_total": loc.conquered_markers,
             "jihad_total": loc.jihad_markers, "removed": removed,
@@ -6747,11 +6740,11 @@ def _h_cap_fueros(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _sisnando_targets(state: GameState) -> list[str]:
     """C21 Sisnando Davidez: Locales with a Jihad marker, no Lord of
     either side present, and not Besieged or Bypassed. Requires Alfonso
-    on the map holding C21."""
-    from almoravid.capabilities import lord_has_capability
+    on the map and C21 at the board edge."""
+    from almoravid.capabilities import side_has_capability
     alf = state.lords.get("alfonso")
     if (alf is None or alf.cylinder.kind != "locale"
-            or not lord_has_capability(state, "alfonso", "C21")):
+            or not side_has_capability(state, "christian", "C21")):
         return []
     occupied = {cast(str, lo.cylinder.locale_id) for lo in state.lords.values()
                 if lo.cylinder.kind == "locale"}
@@ -6767,11 +6760,11 @@ def _sisnando_targets(state: GameState) -> list[str]:
 def _h_cap_sisnando(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C21 Sisnando Davidez (Arts of War ref): once each Levy, remove up
     to 1 Jihad from a Locale with no Lord of either side (and not
-    Besieged/Bypassed). Free (0-action) at Alfonso's Activation; gated
-    once per turn."""
+    Besieged/Bypassed). Free at any moment of each Levy."""
     side = _require_side(action)
     _require(side == "christian", "Sisnando is Christian", code="wrong_side")
-    _require_campaign_step(state, "activation")
+    _require(state.meta.phase == "levy", "Sisnando is used during Levy", code="wrong_step")
+    _require(state.pending is None, "resolve the pending decision first", code="pending_decision")
     _require_active(state, side)
     _require(state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index,
              "Sisnando already used this turn", code="cap_used")
@@ -6782,6 +6775,7 @@ def _h_cap_sisnando(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="bad_target")
     target = cast(str, target)
     state.locales[target].jihad_markers -= 1
+    state.score.muslim -= 0.5
     state.meta.aow_cap_state["sisnando_turn"] = state.meta.turn_index
     _record(state, action, f"Sisnando (C21): remove 1 Jihad at {target}")
     return {"locale": target, "jihad_removed": 1}
@@ -6840,23 +6834,10 @@ def _muster_cap_lord_eligible(state: GameState, lord_id: str, side: Side,
     the map, Unbesieged, not newly Mustered this Levy; at a Friendly
     Locale unless the card waives it (C23 Fonsadera "may be Bypassed
     or at a Neutral or Enemy Locale")."""
-    from almoravid.effective import is_besieged, is_friendly_locale
+    from almoravid.effective import muster_ineligibility
     lord = state.lords.get(lord_id)
-    if lord is None or lord.side != side:
-        return False
-    if lord.cylinder.kind != "locale" or lord.just_arrived_this_levy:
-        return False
-    try:
-        if is_besieged(state, lord_id):
-            return False
-        if need_friendly:
-            here = lord.cylinder.locale_id
-            assert here is not None
-            if not is_friendly_locale(state, here, side):
-                return False
-    except Exception:
-        return False
-    return True
+    return (lord is not None and lord.side == side
+            and muster_ineligibility(state, lord_id, need_friendly=need_friendly) is None)
 
 
 def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -6870,7 +6851,6 @@ def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(side == "christian", "Fonsadera is Christian", code="wrong_side")
     _require_muster_segment(state, side)
     from almoravid.capabilities import side_has_capability
-    from almoravid.effective import is_besieged
     _require(side_has_capability(state, side, "C23"), "C23 not in play",
              code="no_cap")
     lid = action.get("lord_id") or state.meta.active_lord_id
@@ -6878,8 +6858,8 @@ def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     _require(lid in state.lords and state.lords[lid].side == "christian",
              "Christian lord_id required", code="bad_arg")
     lord = state.lords[lid]
-    _require(lord.cylinder.kind == "locale" and not is_besieged(state, lid),
-             "Lord must be on the map and Unbesieged", code="ineligible")
+    _require(_muster_cap_lord_eligible(state, lid, side, need_friendly=False),
+             "Lord cannot participate in Muster (3.4)", code="ineligible")
     vi = action.get("vassal_index")
     _require(isinstance(vi, int) and 0 <= vi < len(lord.vassals),
              "vassal_index required", code="bad_arg")

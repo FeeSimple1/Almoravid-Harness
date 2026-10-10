@@ -116,6 +116,39 @@ def is_friendly_locale(state: GameState, locale_id: str, side: Side) -> bool:
     return False
 
 
+def muster_ineligibility(
+    state: GameState, lord_id: str, *, need_friendly: bool = True,
+) -> tuple[str, str] | None:
+    """3.4 participation gate shared by handlers, menus and free Muster effects.
+
+    Scenario D permits Alfonso and al-Mustain in the first Muster despite
+    their siege. That exception does not waive arrival or Event restrictions.
+    Fonsadera alone may waive the Friendly-Locale requirement (C23).
+    """
+    lord = state.lords[lord_id]
+    if lord.cylinder.kind != "locale":
+        return "not_on_map", f"{lord_id} not on the map (3.4)"
+    if lord.just_arrived_this_levy:
+        return ("levier_just_arrived",
+                f"{lord_id} was newly Mustered this segment (3.4.1)")
+    if lord_id in state.meta.muster_banned_this_levy_lord_ids:
+        return "muster_banned", f"{lord_id} cannot participate in Muster this Levy (Event)"
+    first_muster_exception = (
+        state.meta.scenario_letter == "D"
+        and not state.meta.first_levy_done
+        and state.meta.phase == "levy" and state.meta.levy_step == "muster"
+        and lord_id in ("alfonso", "al_mustain")
+    )
+    here = lord.cylinder.locale_id
+    assert here is not None
+    if not first_muster_exception:
+        if need_friendly and not is_friendly_locale(state, here, lord.side):
+            return "not_friendly_locale", f"{lord_id} is not at a Friendly Locale (3.4)"
+        if is_besieged(state, lord_id):
+            return "besieged", f"{lord_id} is Besieged; cannot participate in Muster (3.4)"
+    return None
+
+
 def is_enemy_locale(state: GameState, locale_id: str, side: Side) -> bool:
     """Is `locale_id` Enemy to `side` per rule 1.3.1?
 

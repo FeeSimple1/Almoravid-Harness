@@ -342,6 +342,18 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
                 owner_lord_id=lid,
             ))
 
+    # Scenario setup must register board-edge capabilities in the same
+    # authoritative collection as cards deployed during play (3.1.2).
+    for side, card_ids in board_edge.items():
+        for cap_id in card_ids:
+            rec = cards_static[cap_id]
+            if rec.get("capability_scope") != "side_wide" or rec["side"] != side:
+                raise ValueError(f"invalid starting board-edge capability: {cap_id}")
+            capabilities_in_play.append(CardInPlay(
+                card_id=cap_id, scope="side_wide", owner_side=side,
+                owner_lord_id=None,
+            ))
+
     decks = Decks(
         draw=[], discard=[], held=held,
         capabilities_in_play=capabilities_in_play,

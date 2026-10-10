@@ -84,7 +84,8 @@ def test_c20_al_qadir_removes_within_one_taifa() -> None:
     total_before = sum(s.locales[l].jihad_markers
                        for t in picks for l in s.taifas[t].locale_ids)
     assert total_before == 2
-    r = resolve_event(s, "christian", "C20")
+    r = resolve_event(s, "christian", "C20",
+                      {"locale_ids": [s.taifas[picks[0]].locale_ids[0]]})
     # Only ONE Taifa's single marker may be removed (can't span Taifas).
     assert r["jihad_removed"] == 1
     remaining = sum(s.locales[l].jihad_markers
@@ -106,7 +107,8 @@ def test_c20_al_qadir_removes_two_from_same_taifa() -> None:
         s.locales[t.locale_ids[0]].jihad_markers = 3   # 3 in one Taifa
         target = t.id
         break
-    r = resolve_event(s, "christian", "C20")
+    r = resolve_event(s, "christian", "C20",
+                      {"locale_ids": [s.taifas[target].locale_ids[0]] * 2})
     assert r["jihad_removed"] == 2                       # two from one Taifa
     assert sum(s.locales[l].jihad_markers
                for l in s.taifas[target].locale_ids) == 1
