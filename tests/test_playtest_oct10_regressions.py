@@ -112,12 +112,15 @@ def test_starting_camels_double_only_almoravid_mules():
 def test_starting_board_edge_card_discard_removes_its_effect(card):
     s = load_scenario("scenario_d_arrival", seed=42)
     # Leave two Muslim Lords: at Campaign start exactly one of the three
-    # board-edge cards must be discarded. Put this card last in that queue.
+    # board-edge cards must be discarded. The player selects this card.
     for lid, lord in s.lords.items():
         if lord.side == "muslim" and lid not in ("yusuf", "al_mutamid"):
             lord.cylinder = Cylinder(kind="calendar", box=16)
     s.decks.board_edge["muslim"] = [c for c in s.decks.board_edge["muslim"] if c != card] + [card]
+    s.meta.phase = "campaign"
     _apply_capability_discard(s)
+    apply_action(s, {"type": "discard_capabilities", "side": "muslim",
+                     "card_ids": [card]})
     assert not side_has_capability(s, "muslim", card)
     assert card not in s.decks.board_edge["muslim"]
     if card == "M12":

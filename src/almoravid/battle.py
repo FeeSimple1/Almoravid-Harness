@@ -1376,6 +1376,9 @@ def apply_battle_losses(
             if (not lord.forces and not lord.routed_units
                     and lord.cylinder.kind == "locale"):
                 from almoravid.actions import _shift_service_left as _ssl
+                from almoravid.capabilities import discard_capability
+                for cid in list(lord.capabilities):
+                    discard_capability(state, cid)
                 for fld in lord.cleanup_on_removal_fields:
                     try:
                         setattr(lord, fld, type(getattr(lord, fld))())
@@ -3222,6 +3225,9 @@ def apply_retreat_aftermath(
         # a permanently-removed Lord hands all Assets to the winner.
         entry["spoils_lost"] = _transfer_retreat_spoils(
             state, lord, "removed", loser_conceded, winner_lord_ids)
+        from almoravid.capabilities import discard_capability
+        for cid in list(lord.capabilities):
+            discard_capability(state, cid)
         for field_name in lord.cleanup_on_removal_fields:
             try:
                 setattr(lord, field_name,

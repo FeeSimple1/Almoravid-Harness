@@ -17,9 +17,13 @@ def test_c6_discards_capabilities_beyond_mustered_lord_count() -> None:
                 if l.side == "christian" and l.cylinder.kind == "locale")
     s.decks.board_edge["christian"] = [f"C{i}" for i in range(n_chr + 2)]
     s.decks.discard = []
-    out = _apply_capability_discard(s)
+    s.meta.phase = "campaign"
+    _apply_capability_discard(s)
+    assert s.pending.kind == "capability_discard"
+    out = apply_action(s, {"type": "discard_capabilities", "side": "christian",
+                           "card_ids": [f"C{i}" for i in (n_chr, n_chr + 1)]})
     assert len(s.decks.board_edge["christian"]) == n_chr
-    assert out["christian"]["discarded"] == [f"C{i}" for i in (n_chr, n_chr + 1)]
+    assert out["discarded"] == [f"C{i}" for i in (n_chr, n_chr + 1)]
     assert set(s.decks.discard) >= {f"C{n_chr}", f"C{n_chr+1}"}
 
 

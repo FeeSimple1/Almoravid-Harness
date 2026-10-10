@@ -333,12 +333,15 @@ def test_discard_removes_mustered_units_and_reacquisition_has_three_markers(boun
         s.calendar.current_box = 7
         winter_disband(s)
     else:
-        # One on-map Christian Lord, two edge cards: the last (C22) is discarded.
+        # One on-map Christian Lord, two edge cards: the owner selects C22.
         for other in s.lords.values():
             if other.side == "christian" and other.id != lord.id:
                 other.cylinder = Cylinder(kind="calendar", box=10)
         s.decks.board_edge["christian"] = ["C21", "C22"]
+        s.meta.phase = "campaign"
         _apply_capability_discard(s)
+        apply_action(s, {"type": "discard_capabilities", "side": "christian",
+                         "card_ids": ["C22"]})
     assert {u: n for u, n in lord.forces.items() if n} == {u: n for u, n in before.items() if n}
     assert "C22" not in s.decks.board_edge["christian"]
     assert not any(c.card_id == "C22" for c in s.decks.capabilities_in_play)

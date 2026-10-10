@@ -7,9 +7,9 @@ from almoravid.scenarios import load_scenario
 from almoravid.state import CardInPlay, Cylinder
 
 
-def _activation(s, lord_id="alfonso"):
-    s.meta.phase = "campaign"
-    s.meta.campaign_step = "activation"
+def _levy(s, lord_id="alfonso"):
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
     s.meta.active_player = "christian"
     s.meta.active_lord_id = lord_id
     s.meta.actions_remaining = 2
@@ -29,7 +29,7 @@ def test_fueros_removes_two_jihad_when_alfonso_closer() -> None:
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id=loc_id)
     s.decks.capabilities_in_play.append(
         CardInPlay(card_id="C20", scope="side_wide", owner_side="christian"))
-    _activation(s)
+    _levy(s)
     assert any(m["type"] == "cap_fueros" for m in legal_moves(s))
     r = apply_action(s, {"type": "cap_fueros", "side": "christian",
                          "target_locale": loc_id})
@@ -50,7 +50,7 @@ def test_fueros_not_offered_when_muslim_co_located() -> None:
         CardInPlay(card_id="C20", scope="side_wide", owner_side="christian"))
     # A Muslim Lord co-located => Alfonso not "closer".
     s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id=loc_id)
-    _activation(s)
+    _levy(s)
     assert loc_id not in __import__("almoravid.campaign", fromlist=["_fueros_targets"])._fueros_targets(s)
 
 

@@ -833,6 +833,7 @@
           "anyOf": [
             {
               "enum": [
+                "capability_discard",
                 "plan",
                 "activation",
                 "end_card",
