@@ -156,3 +156,27 @@ Common codes:
 - `no_free_seat`: all Lord's Seats are Enemy-occupied
 - `bad_seat`: named Seat is not a free Seat for this Lord
 - `deck_underflow`: requested more cards than the deck contains
+
+## Playtest corrections (2026-10-10)
+
+Held C20 Al-Qadir requires an explicit marker selection:
+
+```json
+{"type":"play_event","side":"christian","card_id":"C20",
+ "payload":{"locale_ids":["ucles","ucles"]}}
+```
+
+Repeat a Locale id to remove both markers there, or name two Locales in one
+eligible Taifa. `payload.locale_id` is a single-Locale shorthand. Omitting
+the selection does not choose targets automatically. Invalid choices preserve
+the card and board. `legal_moves` provides each valid choice.
+
+C21 Sisnando Davidez is an Alfonso-only, board-edge Capability. During Levy,
+its free once-per-Levy action is:
+
+```json
+{"type":"cap_sisnando","side":"christian","target_locale":"ucles"}
+```
+
+See `PLAYTEST_FIXES_2026-10-10.md` for the source-rule references and other
+Scenario D setup, Muster, and reconquest corrections.

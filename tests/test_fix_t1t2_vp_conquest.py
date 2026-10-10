@@ -58,7 +58,7 @@ def test_t2_muslim_conquest_in_taifa_places_jihad_removes_christian() -> None:
     assert "alfonso" not in loc.seat_marker_lord_ids  # Christian Seat removed
 
 
-def test_t2_christian_conquest_removes_jihad_places_conquered() -> None:
+def test_t2_christian_reconquista_recapture_removes_jihad_without_new_markers() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     loc_id = next(lid for lid, loc in s.locales.items()
                   if loc.base_type == "city" and loc.territory in s.taifas)
@@ -67,6 +67,8 @@ def test_t2_christian_conquest_removes_jihad_places_conquered() -> None:
     loc.jihad_markers = 2
     loc.conquered_markers = 0
     r = _conquer_stronghold(s, loc_id, "christian")
-    assert r["marker"] == "conquered"
-    assert loc.conquered_markers == 3        # City value
-    assert loc.jihad_markers == 0            # Jihad removed
+    # 1.3.1: Reconquista is Friendly Christian Territory. Recapture
+    # removes enemy Jihad; it does not create new Conquered markers.
+    assert r["marker"] == "removed"
+    assert loc.conquered_markers == 0
+    assert loc.jihad_markers == 0

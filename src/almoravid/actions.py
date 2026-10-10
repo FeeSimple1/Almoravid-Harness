@@ -1810,24 +1810,13 @@ def _require_levy_actor_eligible(state: GameState, lord: Lord,
                                  lord_id: str) -> None:
     """3.4 Muster intro: a Lord taking Levy actions must be on the map
     at a Friendly Locale with no Siege there (he may be Bypassed,
-    4.3.5). Applies to all Lordship-spending Levy actions (Levy Lord
-    to Muster, Levy Vassal, Levy Transport, Levy Capability)."""
-    from almoravid.effective import is_besieged, is_friendly_locale
-    _require(lord.cylinder.kind == "locale",
-             f"{lord_id} not on the map (3.4)", code="not_on_map")
-    # Pattern 3: newly Mustered Lords cannot use Lordship in this same
-    # Muster segment (Rules of Play 3.4 Important / 3.4.1).
-    _require(not lord.just_arrived_this_levy,
-             f"{lord_id} was newly Mustered this segment and cannot "
-             f"use Lordship now (3.4.1)", code="levier_just_arrived")
-    here = lord.cylinder.locale_id
-    assert here is not None
-    _require(is_friendly_locale(state, here, lord.side),
-             f"{lord_id} is not at a Friendly Locale ({here}); cannot take "
-             f"Levy actions (3.4)", code="not_friendly_locale")
-    _require(not is_besieged(state, lord_id),
-             f"{lord_id} is Besieged; cannot take Levy actions (3.4, "
-             f"Bypassed is OK)", code="besieged")
+    4.3.5). Scenario D's first-Muster exception and Event bans apply.
+    Shared with all Lordship-spending and free Muster effects."""
+    from almoravid.effective import muster_ineligibility
+    error = muster_ineligibility(state, lord_id)
+    if error is not None:
+        code, message = error
+        _require(False, message, code=code)
 
 
 def _h_levy_transport(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -2045,10 +2034,11 @@ def _h_levy_take_capability(state: GameState, action: dict[str, Any]) -> dict[st
     _require(rec and not rec["no_capability"],
              f"{card_id} has no Capability half", code="no_capability_half")
     scope = rec["capability_scope"]
-    # C16 Cathedrals card text: only Alfonso may Levy this Capability,
-    # even though the card is kept at the board edge (not on his mat).
-    _require(card_id != "C16" or lord_id == "alfonso",
-             "Only Alfonso may Levy Cathedrals (C16)", code="lord_not_eligible")
+    # Printed Lord restrictions apply to board-edge cards too (C16/C21).
+    from almoravid.capabilities import capability_eligible_lords
+    eligible = capability_eligible_lords(card_id)
+    _require(eligible is None or lord_id in eligible,
+             f"{lord_id} may not Levy {card_id}", code="lord_not_eligible")
     if scope == "this_lord":
         _check_this_lord_cap_limits(lord, card_id)
     # Deploy: this_lord caps tuck under the Lord's mat; side_wide caps go

@@ -180,6 +180,9 @@ def held_event_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             if muster:
                 for transport in ("cart", "mule"):
                     moves.append({**move, "payload": {"transport": transport}})
+        elif card_id == "C20":
+            for selected in al_qadir_choices(state):
+                moves.append({**move, "payload": {"locale_ids": selected}})
         elif card_id == "M12":
             targets = [lid for lid, lord in state.lords.items()
                        if lord.is_taifa and lord.side == side
@@ -1603,48 +1606,73 @@ def _c19_fitna(state: GameState, side: Side, card_id: str,
     return {"card_id": card_id, "side": side, "shifted": shifted}
 
 
+def al_qadir_choices(state: GameState) -> list[list[str]]:
+    """C20 marker selections: repeat a Locale id to choose two markers there.
+
+    Both markers must be in one eligible Taifa. Remove only one when that
+    Taifa has only one, per the general do-as-much-as-possible Event rule.
+    """
+    from itertools import combinations_with_replacement
+
+    choices: list[list[str]] = []
+    for taifa in state.taifas.values():
+        if taifa.status not in ("reconquista", "parias"):
+            continue
+        if any(lord.side == "muslim" and lord.cylinder.kind == "locale"
+               and lord.cylinder.locale_id in taifa.locale_ids
+               for lord in state.lords.values()):
+            continue
+        targets = sorted(lid for lid in taifa.locale_ids
+                         if state.locales[lid].jihad_markers > 0)
+        available = sum(state.locales[lid].jihad_markers for lid in targets)
+        if available == 1:
+            choices.append(targets)
+        elif available >= 2:
+            for first, second in combinations_with_replacement(targets, 2):
+                if first != second or state.locales[first].jihad_markers >= 2:
+                    choices.append([first, second])
+    return choices
+
+
 @register("C20")  # Al-Qadir
 def _c20_al_qadir(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C20 (Hold): Remove 2 Jihad from a Reconquista or Parias Taifa
-    free of Muslim Lords."""
-    eligible = []
-    for t in state.taifas.values():
-        if t.status not in ("reconquista", "parias"):
-            continue
-        if any(
-            lord.side == "muslim" and lord.cylinder.kind == "locale"
-            and lord.cylinder.locale_id in t.locale_ids
-            for lord in state.lords.values()
-        ):
-            continue
-        for lid in t.locale_ids:
-            if state.locales[lid].jihad_markers > 0:
-                eligible.append((t.id, lid))
-    if not eligible:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Taifa free of Muslim Lords")
-    # Removal must stay WITHIN ONE eligible Taifa (card text: "any two
-    # Jihad markers within a single eligible Taifa"). Pick the Taifa with
-    # the most Jihad available so the Christian can remove up to two.
-    by_taifa: dict[str, list[str]] = {}
-    for _tid, lid in eligible:
-        by_taifa.setdefault(_tid, []).append(lid)
-    chosen_taifa = max(
-        by_taifa,
-        key=lambda tid: sum(state.locales[loc_id].jihad_markers
-                            for loc_id in by_taifa[tid]))
-    removed = 0
-    for lid in by_taifa[chosen_taifa]:
-        loc = state.locales[lid]
-        take = min(loc.jihad_markers, 2 - removed)
-        loc.jihad_markers -= take
-        removed += take
-        if removed >= 2:
-            break
+                  payload: dict[str, Any]) -> dict[str, Any]:
+    """C20 Hold: the player selects two Jihad within one eligible Taifa.
+
+    payload.locale_ids selects individual markers, e.g. ["ucles", "ucles"]
+    or ["ucles", "calatrava"]. payload.locale_id is a single-Locale shorthand.
+    No target is chosen automatically, and invalid play leaves the card held.
+    """
+    from almoravid.actions import _require
+
+    _require(side == "christian", "Al-Qadir is a Christian Event", code="wrong_side")
+    choices = al_qadir_choices(state)
+    _require(bool(choices), "no eligible Jihad in a Taifa free of Muslim Lords",
+             code="bad_target")
+    _require(not ("locale_ids" in payload and "locale_id" in payload),
+             "choose locale_ids or locale_id, not both", code="bad_arg")
+    selected = payload.get("locale_ids")
+    if "locale_id" in payload:
+        target = payload["locale_id"]
+        _require(isinstance(target, str), "locale_id must be a string", code="bad_arg")
+        selected = next((choice for choice in choices
+                         if all(lid == target for lid in choice)), None)
+        _require(selected is not None, "cannot remove the required markers there",
+                 code="bad_target")
+    _require(selected is not None, "select Jihad markers with payload.locale_ids",
+             code="choice_required")
+    _require(isinstance(selected, list) and all(isinstance(lid, str) for lid in selected),
+             "locale_ids must be a list of Locale ids", code="bad_arg")
+    selected = sorted(selected)
+    _require(selected in choices, "select two available Jihad within one eligible Taifa",
+             code="bad_target")
+    taifa_id = state.locales[selected[0]].territory
+    for lid in selected:
+        state.locales[lid].jihad_markers -= 1
+    state.score.muslim -= 0.5 * len(selected)
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "jihad_removed": removed,
-            "taifa": chosen_taifa}
+    return {"card_id": card_id, "side": side, "jihad_removed": len(selected),
+            "taifa": taifa_id, "locale_ids": selected}
 
 
 _C22_LORDS = ("al_mutawakkil", "abd_allah", "yusuf", "sir")

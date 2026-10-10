@@ -126,9 +126,8 @@ def test_andalusians_light_horse_evades_more() -> None:
 
 
 def test_dawud_supply_amount_via_handler() -> None:
-    """Dawud ibn Aisha (M8): the Lord's Supply adds +2 Prov (1 base +
-    1 extra). Set up an activation state directly to avoid scenario-
-    specific plan-size plumbing."""
+    """M8 adds one Provender to the two from Scenario D's M12 double Seat.
+    Set up an activation state directly to avoid plan-size plumbing."""
     s = load_scenario("scenario_d_arrival", seed=1)
     assert "yusuf" in s.lords
     from almoravid.static_data import load_lords
@@ -146,8 +145,9 @@ def test_dawud_supply_amount_via_handler() -> None:
     s.meta.active_lord_id = "yusuf"
     s.meta.actions_remaining = 2
     r = apply_action(s, {"type": "cmd_supply", "side": "muslim"})
-    # Dawud => +2 Prov instead of +1 (1 base seat + 1 Dawud).
-    assert s.lords["yusuf"].assets.get("prov", 0) == 3
+    # Scenario D starts M12 active: two Seat sources + one Dawud.
+    assert r["prov_gained"] == 3
+    assert s.lords["yusuf"].assets.get("prov", 0) == 4
 
 
 # ---------------------------------------------------------------------------

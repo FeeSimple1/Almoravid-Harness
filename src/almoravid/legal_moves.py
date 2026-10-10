@@ -416,6 +416,14 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
     active: Side = state.meta.active_player
     step = state.meta.levy_step
 
+    # C21: a discretionary, free choice at any moment of each Levy.
+    if (active == "christian"
+            and state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index):
+        from almoravid.campaign import _sisnando_targets
+        for target in _sisnando_targets(state):
+            moves.append({"type": "cap_sisnando", "side": active,
+                          "target_locale": target})
+
     if step == "arts_of_war":
         moves.extend(_aow_moves(state, active))
     elif step == "pay":
@@ -634,25 +642,14 @@ def pending_mandatory_disbands(state: GameState, side: Side) -> list[str]:
 
 def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     """3.4 Muster: Lord-Muster + Lordship-spending Levy actions."""
-    from almoravid.effective import effective_lordship, is_besieged, is_friendly_locale
+    from almoravid.effective import effective_lordship, muster_ineligibility
     out: list[dict[str, Any]] = []
-    # 3.4.1: a Levying Lord (on the map, eligible, with spare Lordship,
-    # not newly Mustered this segment) must spend a point to enable a
-    # Muster roll. Enumerate the eligible leviers once.
-    leviers: list[str] = []
-    for clid, cl in state.lords.items():
-        if (cl.side == side and cl.cylinder.kind == "locale"
-                and not cl.just_arrived_this_levy
-                and clid not in state.meta.muster_banned_this_levy_lord_ids
-                and cl.lordship_used < effective_lordship(state, clid)):
-            try:
-                cl_here = cl.cylinder.locale_id
-                assert cl_here is not None
-                if (is_friendly_locale(state, cl_here, side)
-                        and not is_besieged(state, clid)):
-                    leviers.append(clid)
-            except Exception:
-                pass
+    # Use the executor's shared gate for both recruiting another Lord and
+    # the Lord's own Levy actions. This includes Scenario D and Event bans.
+    leviers = [lid for lid, lord in state.lords.items()
+               if lord.side == side
+               and muster_ineligibility(state, lid) is None
+               and lord.lordship_used < effective_lordship(state, lid)]
     for lid, lord in state.lords.items():
         if lord.side != side:
             continue
@@ -671,53 +668,38 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                     out.append({"type": "muster_lord", "side": side,
                                 "lord_id": lid, "seat": seat,
                                 "levying_lord_id": levier_id})
-        # Path 2: Spend Lordship on a Mustered Lord. 3.4 intro gate:
-        # the Lord must be on the map at a Friendly Locale and Unbesieged
-        # (Bypassed is OK) to take any Levy action.
-        if (lord.cylinder.kind == "locale"
-                and not lord.just_arrived_this_levy
-                and lord.lordship_used < effective_lordship(state, lid)):
-            from almoravid.effective import is_besieged, is_friendly_locale
-            here = lord.cylinder.locale_id
-            assert here is not None
-            try:
-                eligible = (is_friendly_locale(state, here, side)
-                            and not is_besieged(state, lid))
-            except Exception:
-                eligible = False
-            if eligible:
-                for i, v in enumerate(lord.vassals):
-                    if v.ready:
-                        out.append({"type": "levy_take_vassal", "side": side,
-                                    "lord_id": lid, "vassal_index": i})
-                from almoravid.actions import _unused_capability_cards
-                from almoravid.static_data import load_cards as _lc_cap
-                _capcards = _lc_cap()["cards"]
-                _held = [_capcards.get(c, {}).get("capability_name")
-                         for c in lord.capabilities]
-                # 3.4.4: select from ANY of the side's unused Capability
-                # cards (full deck minus in-play/held/pending), not just
-                # the board edge.
-                for card_id in _unused_capability_cards(state, side):
-                    _rec = _capcards.get(card_id, {})
-                    if card_id == "C16" and lid != "alfonso":
-                        continue  # C16: only Alfonso may Levy Cathedrals.
-                    if _rec.get("capability_scope") == "this_lord":
-                        # 3.4.4: max 2 This-Lord caps, no same title, and
-                        # card-text eligibility (e.g. C8/C15/C24). [Q-001]
-                        from almoravid.capabilities import capability_eligible_lords as _cel_l
-                        _elig_l = _cel_l(card_id)
-                        if (len(lord.capabilities) >= 2
-                                or _rec.get("capability_name") in _held
-                                or (_elig_l is not None
-                                    and lid not in _elig_l)):
-                            continue
-                    out.append({"type": "levy_take_capability", "side": side,
-                                "lord_id": lid, "card_id": card_id})
-                # 3.4.3 Levy Transport: add a Cart or a Mule.
-                for tr in ("cart", "mule"):
-                    out.append({"type": "levy_transport", "side": side,
-                                "lord_id": lid, "transport": tr})
+        # Path 2: the same eligible Lord spends his own Lordship.
+        if lid in leviers:
+            for i, v in enumerate(lord.vassals):
+                if v.ready:
+                    out.append({"type": "levy_take_vassal", "side": side,
+                                "lord_id": lid, "vassal_index": i})
+            from almoravid.actions import _unused_capability_cards
+            from almoravid.static_data import load_cards as _lc_cap
+            _capcards = _lc_cap()["cards"]
+            _held = [_capcards.get(c, {}).get("capability_name")
+                     for c in lord.capabilities]
+            # 3.4.4: select from ANY of the side's unused Capability
+            # cards (full deck minus in-play/held/pending), not just
+            # the board edge.
+            for card_id in _unused_capability_cards(state, side):
+                _rec = _capcards.get(card_id, {})
+                from almoravid.capabilities import capability_eligible_lords as _cel_l
+                _elig_l = _cel_l(card_id)
+                if _elig_l is not None and lid not in _elig_l:
+                    continue
+                if _rec.get("capability_scope") == "this_lord":
+                    # 3.4.4: max 2 This-Lord caps, no same title, and
+                    # card-text eligibility (e.g. C8/C15/C24). [Q-001]
+                    if (len(lord.capabilities) >= 2
+                            or _rec.get("capability_name") in _held):
+                        continue
+                out.append({"type": "levy_take_capability", "side": side,
+                            "lord_id": lid, "card_id": card_id})
+            # 3.4.3 Levy Transport: add a Cart or a Mule.
+            for tr in ("cart", "mule"):
+                out.append({"type": "levy_transport", "side": side,
+                            "lord_id": lid, "transport": tr})
     # --- Muster-segment capabilities (3.4.2/3.4.3, "for no actions") ---
     from almoravid.campaign import (
         _coin_available_for_cap as _cav_m,
@@ -1084,21 +1066,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         and _gate):
                     out.append({"type": "place_cathedral_seat",
                                 "side": "christian"})
-            # C20 Fueros / C21 Sisnando Davidez: Alfonso (bearer) may once
-            # per turn remove Jihad markers (free, 0-action) -- Fueros up to
-            # 2 from a Reconquista Locale he is closer to; Sisnando 1 from a
-            # Lord-free unbesieged Locale (Arts of War ref).
+            # C20 Fueros: Alfonso may remove up to two Jihad from a
+            # Reconquista Locale to which he is closer than any Muslim.
+            # C21 Sisnando is offered separately during Levy.
             if state.meta.active_lord_id == "alfonso":
                 from almoravid.campaign import _fueros_targets as _ft
-                from almoravid.campaign import _sisnando_targets as _st
                 if state.meta.aow_cap_state.get("fueros_turn") != state.meta.turn_index:
                     for _fl in _ft(state):
                         out.append({"type": "cap_fueros", "side": "christian",
                                     "target_locale": _fl})
-                if state.meta.aow_cap_state.get("sisnando_turn") != state.meta.turn_index:
-                    for _sl in _st(state):
-                        out.append({"type": "cap_sisnando", "side": "christian",
-                                    "target_locale": _sl})
             # (C13/M23, M15, M20, C18, C23 moved to _muster_moves —
             # they are Muster-segment Levy effects per 3.4.2/3.4.3.)
             from almoravid.capabilities import side_has_capability as _shc

@@ -147,7 +147,7 @@ def test_c20_al_qadir_removes_jihad_from_taifa_with_no_muslims() -> None:
         if (l.side == "muslim" and l.cylinder.kind == "locale"
                 and l.cylinder.locale_id in taifa.locale_ids):
             l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
-    r = resolve_event(s, "christian", "C20")
+    r = resolve_event(s, "christian", "C20", {"locale_ids": [loc_id, loc_id]})
     assert r.get("no_op") is not True
     assert r["jihad_removed"] == 2
     assert s.locales[loc_id].jihad_markers == 1

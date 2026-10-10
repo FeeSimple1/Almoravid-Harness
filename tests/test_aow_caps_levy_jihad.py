@@ -66,8 +66,13 @@ def test_sisnando_removes_one_jihad_from_empty_locale() -> None:
     loc.siege_yellow = loc.siege_green = 0
     loc.bypass_yellow = loc.bypass_green = False
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="leon")
-    s.lords["alfonso"].capabilities.append("C21")
-    _activation(s)
+    # C21 is a board-edge capability used during Levy, not Activation.
+    s.decks.board_edge.setdefault("christian", []).append("C21")
+    s.decks.capabilities_in_play.append(
+        CardInPlay(card_id="C21", scope="side_wide", owner_side="christian"))
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
+    s.meta.active_player = "christian"
     assert any(m["type"] == "cap_sisnando" and m["target_locale"] == loc_id
                for m in legal_moves(s))
     r = apply_action(s, {"type": "cap_sisnando", "side": "christian",
@@ -86,7 +91,12 @@ def test_sisnando_skips_besieged_locale() -> None:
     loc.jihad_markers = 1
     loc.siege_yellow = 1   # besieged => ineligible
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="leon")
-    s.lords["alfonso"].capabilities.append("C21")
-    _activation(s)
+    # C21 is a board-edge capability used during Levy, not Activation.
+    s.decks.board_edge.setdefault("christian", []).append("C21")
+    s.decks.capabilities_in_play.append(
+        CardInPlay(card_id="C21", scope="side_wide", owner_side="christian"))
+    s.meta.phase = "levy"
+    s.meta.levy_step = "muster"
+    s.meta.active_player = "christian"
     from almoravid.campaign import _sisnando_targets
     assert loc_id not in _sisnando_targets(s)

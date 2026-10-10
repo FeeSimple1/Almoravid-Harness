@@ -55,6 +55,7 @@ _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
     "C13": frozenset({"sancho", "eudes"}),
     "M23": frozenset({"al_mustain", "al_mundir"}),
     "C16": frozenset({"alfonso"}),
+    "C21": frozenset({"alfonso"}),  # Sisnando Davidez (board edge)
     "C8": CHRISTIAN_CAPTAINS_FOUR,    # Hueste
     "C15": CHRISTIAN_CAPTAINS_FOUR,   # Alferez
     "C24": CHRISTIAN_CAPTAINS_FOUR,   # Garcia Jimenez
@@ -79,9 +80,11 @@ _CAPABILITY_ELIGIBLE_LORDS: dict[str, frozenset[str]] = {
 
 
 def capability_eligible_lords(card_id: str) -> frozenset[str] | None:
-    """The set of Lord ids that may hold This-Lord capability `card_id`,
-    or None if any Lord (of the right side) may hold it (3.4.4 + card
-    text). Used to gate both deploy (3.1.2) and Levy (3.4.4) assignment."""
+    """Printed Lords who may Levy a capability, or hold a This-Lord card.
+
+    None means any Lord of the card's side (3.4.4). Board-edge cards drawn
+    during Arts of War deploy without assignment to a Lord (3.1.2).
+    """
     return _CAPABILITY_ELIGIBLE_LORDS.get(card_id)
 
 

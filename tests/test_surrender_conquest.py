@@ -61,7 +61,8 @@ def test_muslim_reconquers_reconquista_taifa_places_jihad() -> None:
     assert s.locales["toledo"].ravaged == "yellow"
     assert r["ravaged_flip"] == ("green", "yellow")
     assert s.score.muslim == vp_before_m + 1.5 - 0.5
-    assert s.score.christian == vp_before_c + 0.5
+    # The three enemy Conquered markers were also removed (1.3.1/5.1).
+    assert s.score.christian == vp_before_c - 3.0 + 0.5
 
 
 def test_cmd_siege_with_no_defender_attempts_surrender() -> None:
