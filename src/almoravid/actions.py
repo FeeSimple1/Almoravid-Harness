@@ -1913,8 +1913,9 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
     lord.lordship_used += 1
     # Phase 7d: advanced Vassal Service (3.4.2) — place the Vassal's
     # Service marker on the Calendar at the Lord's current Service box.
-    if state.meta.advanced_vassal_service:
+    if state.meta.advanced_vassal_service and not vassal.id.startswith("bishop_"):
         from almoravid.state import ServiceMarker
+        # Bishops are exempt from advanced Service (3.4.2 / C22 Tips).
         # 3.4.2: place the Vassal's Service marker right of the Levy
         # marker by the Vassal's Service Rating (service_cost), just as
         # for a Lord (3.4.1) — NOT at the Lord's current box.

@@ -180,3 +180,27 @@ its free once-per-Levy action is:
 
 See `PLAYTEST_FIXES_2026-10-10.md` for the source-rule references and other
 Scenario D setup, Muster, and reconquest corrections.
+
+## Bishoprics (C22): free marker placement at any time
+
+`cap_bishoprics` places a **Ready Vassal marker**, not its troops, on a
+Mustered Christian Lord other than Sancho. It costs no Lordship or Command
+and is valid during Levy as well as Campaign (including planning and pending
+responses). It leaves the active player, Command card, and pending decision
+unchanged. The Christian may invoke it during the opponent's turn; the normal
+legal menu offers it when the Christian is the active player.
+
+```json
+{"type":"cap_bishoprics","side":"christian","target_lord_id":"alfonso","bishop_id":"bishop_2"}
+```
+
+`bishop_id` chooses an available printed marker: `bishop_1` (Orense),
+`bishop_2` (León), or `bishop_3` (Lugo). Omitting it selects the first available
+marker. The menu enumerates every available marker/eligible-Lord combination.
+There are at most three special Bishops and no more than one per Lord.
+
+Use the ordinary `levy_take_vassal` action in Muster to recruit the Bishop's
+troops, subject to normal Lord eligibility and Lordship cost. Special Bishops
+never receive Calendar Service markers under advanced Vassal Service.
+Discarding C22 removes its special Bishop markers and Mustered units and
+resets availability. Sancho's printed Bishop of Jaca is unaffected.
