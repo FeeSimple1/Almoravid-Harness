@@ -1,0 +1,104 @@
+[
+  {
+    "type": "end_campaign"
+  },
+  {
+    "type": "aow_draw",
+    "side": "christian"
+  },
+  {
+    "type": "aow_deploy_capability",
+    "side": "christian",
+    "card_id": "C24",
+    "lord_id": "alvar_fanez"
+  },
+  {
+    "type": "aow_deploy_capability",
+    "side": "christian",
+    "card_id": "C23"
+  },
+  {
+    "type": "pass_step",
+    "side": "christian"
+  },
+  {
+    "type": "aow_draw",
+    "side": "muslim"
+  },
+  {
+    "type": "aow_deploy_capability",
+    "side": "muslim",
+    "card_id": "M11",
+    "lord_id": "al_mutamid"
+  },
+  {
+    "type": "aow_deploy_capability",
+    "side": "muslim",
+    "card_id": "M5",
+    "lord_id": "al_mutamid"
+  },
+  {
+    "type": "pass_step",
+    "side": "muslim"
+  },
+  {
+    "type": "pass_step",
+    "side": "christian"
+  },
+  {
+    "type": "pass_step",
+    "side": "muslim"
+  },
+  {
+    "type": "pass_step",
+    "side": "christian"
+  },
+  {
+    "type": "pass_step",
+    "side": "muslim"
+  },
+  {
+    "type": "cap_fonsadera",
+    "side": "christian",
+    "lord_id": "alvar_fanez",
+    "vassal_index": 1,
+    "mode": "coin"
+  },
+  {
+    "type": "muster_lord",
+    "side": "christian",
+    "lord_id": "garcia_ordonez",
+    "seat": "najera",
+    "levying_lord_id": "alfonso"
+  },
+  {
+    "type": "muster_lord",
+    "side": "christian",
+    "lord_id": "pedro_ansurez",
+    "seat": "simancas",
+    "levying_lord_id": "alfonso"
+  },
+  {
+    "type": "muster_lord",
+    "side": "christian",
+    "lord_id": "pedro_ansurez",
+    "seat": "simancas",
+    "levying_lord_id": "alfonso"
+  },
+  {
+    "type": "levy_transport",
+    "side": "christian",
+    "lord_id": "alvar_fanez",
+    "transport": "mule"
+  },
+  {
+    "type": "levy_transport",
+    "side": "christian",
+    "lord_id": "alvar_fanez",
+    "transport": "mule"
+  },
+  {
+    "type": "pass_step",
+    "side": "christian"
+  }
+]

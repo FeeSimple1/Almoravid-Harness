@@ -24,7 +24,21 @@ from almoravid.state import GameState, Lord, Side
 
 
 def legal_moves(state: GameState) -> list[dict[str, Any]]:
-    """Return the list of currently-legal action dicts."""
+    """Return legal actions, including free at-any-time Bishop placement."""
+    moves = _phase_legal_moves(state)
+    # C22 does not replace a pending response or require an active Command
+    # card. Surface it throughout live play when Christians have the turn.
+    if state.meta.active_player == "christian":
+        from almoravid.campaign import _available_bishops, _bishoprics_targets
+        for target in _bishoprics_targets(state):
+            for bishop_id in _available_bishops(state):
+                moves.append({"type": "cap_bishoprics", "side": "christian",
+                              "target_lord_id": target, "bishop_id": bishop_id})
+    return moves
+
+
+def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
+    """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
     # Battle of Sagrajas minigame (Background Book pp.44-47). The Christian
@@ -1077,20 +1091,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                     "target_locale": _fl})
             # (C13/M23, M15, M20, C18, C23 moved to _muster_moves —
             # they are Muster-segment Levy effects per 3.4.2/3.4.3.)
-            from almoravid.capabilities import side_has_capability as _shc
             _alid = state.meta.active_lord_id
             _al = state.lords.get(_alid) if _alid else None
-            # C22 Bishoprics: place a Bishop on an eligible Christian Lord.
-            if (active == "christian" and _shc(state, "christian", "C22")):
-                _placed = state.meta.aow_cap_state.get("C22_bishops", [])
-                if len(_placed) < 3:
-                    for _clid, _cl in state.lords.items():
-                        if (_cl.side == "christian" and _clid != "sancho"
-                                and _cl.cylinder.kind == "locale"
-                                and _clid not in _placed):
-                            out.append({"type": "cap_bishoprics",
-                                        "side": "christian",
-                                        "target_lord_id": _clid})
             # M19 Guadalquivir retains normal Laden and Group March costs.
             if active == "muslim" and _al is not None and _al.is_taifa:
                 from almoravid.campaign import (

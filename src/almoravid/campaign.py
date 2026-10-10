@@ -115,6 +115,8 @@ def _apply_capability_discard(state: GameState) -> dict[str, Any]:
             state.decks.capabilities_in_play = [c for c in state.decks.capabilities_in_play
                                                 if c.card_id not in discarded]
             for cid in discarded:
+                if cid == "C22":
+                    _remove_bishops(state)
                 if cid in ("C13", "M23"):
                     from almoravid.events import _remove_count_units
                     _remove_count_units(state, cid)
@@ -1165,10 +1167,9 @@ def winter_disband(state: GameState) -> dict[str, Any]:
     Disbanding either Rodrigo, cylinder goes to Calendar box 9 even
     if Beyond Service. Discard all board-edge Capabilities.
 
-    Phase 5k baseline: applies the structural pieces (cylinder->mat,
-    clear forces/assets/caps, Rodrigo->box 9). Taifas-box coin
-    aggregation is a stub; full pool model lands with the Taifas Box
-    state expansion.
+    Siege Lords keep their Service and Vassals for Winter Siege. Only
+    Lords that actually leave the map lose those markers; their printed
+    available Vassals are initialized anew at Spring Muster.
     """
     from almoravid.state import Cylinder
     results: dict[str, Any] = {"disbanded_to_mat": [], "rodrigo_to_box_9": [],
@@ -1285,6 +1286,8 @@ def winter_disband(state: GameState) -> dict[str, Any]:
         state.decks.capabilities_in_play = [c for c in state.decks.capabilities_in_play
                                             if c.card_id not in edge]
         for cid in edge:
+            if cid == "C22":
+                _remove_bishops(state)
             if cid in ("C13", "M23"):
                 from almoravid.events import _remove_count_units
                 _remove_count_units(state, cid)
@@ -1304,8 +1307,19 @@ def winter_disband(state: GameState) -> dict[str, Any]:
             if cap.card_id not in state.decks.discard:
                 state.decks.discard.append(cap.card_id)
 
-    # Clear Service markers (6.3.1 Disbands; Spring Muster re-places them)
-    state.calendar.service_markers = []
+    # 6.3.1 removes Service only for Lords actually Disbanded/removed.
+    # Siege Lords retain BOTH their own and advanced Vassal markers for
+    # Winter Feed/Pay/Disband (6.3.2); Spring Muster must not reset them.
+    departed = set(results["disbanded_to_mat"] + results["rodrigo_to_box_9"]
+                   + results["beyond_service_removed"])
+    state.calendar.service_markers = [
+        marker for marker in state.calendar.service_markers
+        if marker.lord_id not in departed
+    ]
+    for lane in (state.calendar.off_left_service, state.calendar.off_right_service):
+        lane[:] = [lid for lid in lane if lid not in departed]
+    for lid in departed:
+        state.lords[lid].vassals = []
     return results
 
 
@@ -1317,11 +1331,10 @@ def spring_muster(state: GameState) -> dict[str, Any]:
     as if Disbanded this turn. Then Muslim Lords likewise; Taifa Lords
     with no free Seat go to Calendar and adjust Taifa status.
     """
-    from almoravid.state import Cylinder, ServiceMarker
-    from almoravid.static_data import load_lords
+    from almoravid.actions import _free_seats_for, _initialize_mustered_lord
+    from almoravid.state import Cylinder
     results: dict[str, Any] = {"christian_mustered": [], "muslim_mustered": [],
                "no_free_seat": []}
-    static = load_lords()["lords"]
 
     for side in ("christian", "muslim"):
         for lid, lord in state.lords.items():
@@ -1329,30 +1342,19 @@ def spring_muster(state: GameState) -> dict[str, Any]:
                 continue
             if lord.cylinder.kind != "mat":
                 continue
-            free_seats = []
-            for seat in lord.seats:
-                # Free = no Enemy Lord present
-                enemy_here = any(
-                    o for o in state.lords.values()
-                    if o.side != side
-                    and o.cylinder.kind == "locale"
-                    and o.cylinder.locale_id == seat
-                )
-                if not enemy_here:
-                    free_seats.append(seat)
+            # 6.3.3 uses normal Muster (3.4.1), including the Errata's
+            # no-Enemy-Seat restriction as well as no Enemy Lord present.
+            free_seats = _free_seats_for(state, lid)
             if free_seats:
                 # Alfonso prefers Leon (per Scenario F rule)
                 if lid == "alfonso" and "leon" in free_seats:
                     chosen = "leon"
                 else:
                     chosen = free_seats[0]
-                lord.cylinder = Cylinder(kind="locale", locale_id=chosen)
-                lord.forces = dict(static[lid]["forces"])
-                lord.assets = dict(static[lid]["assets"])
-                # Service marker advanced
-                new_box = state.calendar.current_box + lord.service_rating
-                state.calendar.service_markers.append(
-                    ServiceMarker(lord_id=lid, box=min(new_box, 17)))
+                # Prepare the ENTIRE mat anew: available printed Vassals
+                # Ready (not their troops), excluding permanently removed
+                # Vassals. Reuse the same initializer as every other Muster.
+                _initialize_mustered_lord(state, lid, chosen)
                 results[f"{side}_mustered"].append((lid, chosen))
             else:
                 # No free Seat: place on Calendar as if Disbanded this
@@ -7089,39 +7091,96 @@ _BISHOPS = [
 ]
 
 
+def _available_bishops(state: GameState) -> list[str]:
+    """Available C22 markers, derived from the actual Vassals on mats."""
+    used = {v.id for lord in state.lords.values() for v in lord.vassals}
+    return [f"bishop_{i + 1}" for i in range(len(_BISHOPS))
+            if f"bishop_{i + 1}" not in used]
+
+
+def _bishoprics_targets(state: GameState) -> list[str]:
+    """C22: Ready markers may be placed at any time, not just activation.
+
+    Placement neither Musters troops nor consumes Lordship/Command, so it
+    does not depend on the target's location allegiance, Muster eligibility,
+    active Lord, or a pending combat decision.
+    """
+    from almoravid.capabilities import side_has_capability
+    if (state.meta.phase not in ("levy", "campaign", "winter")
+            or not side_has_capability(state, "christian", "C22")
+            or not _available_bishops(state)):
+        return []
+    return [lid for lid, lord in state.lords.items()
+            if lord.side == "christian" and lid != "sancho"
+            and lord.cylinder.kind == "locale"
+            and not any(v.id.startswith("bishop_") for v in lord.vassals)]
+
+
+def _remove_bishops(state: GameState) -> None:
+    """C22 discard: remove its markers, Mustered units, and allocation state.
+
+    Sancho's printed Bishop of Jaca is an ordinary Vassal, not a bishop_N
+    marker. Ready Bishops have added no troops and must not remove any.
+    """
+    for lid, lord in state.lords.items():
+        bishops = [v for v in lord.vassals if v.id.startswith("bishop_")]
+        for bishop in bishops:
+            if not bishop.ready and not bishop.pennant_down:
+                for unit, count in bishop.forces.items():
+                    # Troops are pooled by type. Remove at most the printed
+                    # contingent, including Routed survivors, never below 0.
+                    for pool in (lord.forces, lord.routed_units):
+                        removed = min(count, pool.get(unit, 0))
+                        if removed:
+                            pool[unit] -= removed
+                            count -= removed
+            lord.vassals.remove(bishop)
+        if bishops:
+            ids = {v.id for v in bishops}
+            state.calendar.service_markers = [
+                marker for marker in state.calendar.service_markers
+                if not (marker.lord_id == lid and marker.vassal_id in ids)
+            ]
+    state.meta.aow_cap_state.pop("C22_bishops", None)
+
+
 def _h_cap_bishoprics(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """C22 Bishoprics: place an available Bishop as a Ready Vassal on a
-    Mustered Christian Lord other than Sancho (<=3 Bishops total, max one
-    per Lord; Arts of War ref + Lords reference)."""
+    """C22: add a chosen available Ready Bishop, free, at any time in play.
+
+    `bishop_id` selects one of the three printed markers. When omitted,
+    take the first available marker (the original action shorthand).
+    The Christian may act out of turn without consuming or changing the
+    other player's activation/pending decision.
+    """
     side = _require_side(action)
     _require(side == "christian", "Bishoprics is Christian", code="wrong_side")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
+    _require(state.meta.phase in ("levy", "campaign", "winter"),
+             "Bishoprics requires a game in progress", code="bad_phase")
     from almoravid.capabilities import side_has_capability
     _require(side_has_capability(state, side, "C22"), "C22 not in play",
              code="no_cap")
     target = action.get("target_lord_id")
-    _require(target in state.lords, "target_lord_id required", code="bad_arg")
+    _require(isinstance(target, str) and target in state.lords,
+             "target_lord_id required", code="bad_arg")
     target = cast(str, target)
-    tl = state.lords[target]
-    _require(tl.side == "christian" and target != "sancho",
-             "Bishop goes to a Christian Lord other than Sancho",
-             code="bad_target")
-    _require(tl.cylinder.kind == "locale", "target Lord not Mustered",
-             code="not_on_map")
-    placed = state.meta.aow_cap_state.setdefault("C22_bishops", [])
-    _require(len(placed) < 3, "all 3 Bishops placed", code="cap_used")
-    _require(target not in placed, f"{target} already has a Bishop",
-             code="cap_used")
-    bishop = _BISHOPS[len(placed)]
+    _require(target in _bishoprics_targets(state),
+             "target must be a Mustered Christian Lord other than Sancho "
+             "without a Bishop, and a Bishop must be available", code="bad_target")
+    available = _available_bishops(state)
+    bishop_id = action.get("bishop_id", available[0])
+    _require(bishop_id in available, "Bishop marker unavailable", code="bad_arg")
+    bishop = _BISHOPS[int(bishop_id.rsplit("_", 1)[1]) - 1]
     from almoravid.state import Vassal
-    tl.vassals.append(Vassal(id=f"bishop_{len(placed)+1}", name=bishop["name"],
-                             forces=dict(bishop["forces"]), service_cost=0,
-                             ready=True))
-    placed.append(target)
+    state.lords[target].vassals.append(Vassal(
+        id=bishop_id, name=bishop["name"], forces=dict(bishop["forces"]),
+        service_cost=0, ready=True))
+    state.meta.aow_cap_state["C22_bishops"] = [
+        lid for lid, lord in state.lords.items()
+        if any(v.id.startswith("bishop_") for v in lord.vassals)
+    ]
     _record(state, action,
             f"C22 Bishoprics: {bishop['name']} -> {target} (Ready Vassal)")
-    return {"lord": target, "bishop": bishop["name"]}
+    return {"lord": target, "bishop": bishop["name"], "bishop_id": bishop_id}
 
 
 CAMPAIGN_HANDLERS = {
