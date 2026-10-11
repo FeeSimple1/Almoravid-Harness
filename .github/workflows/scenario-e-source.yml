@@ -1,0 +1,25 @@
+name: Scenario E playtest source snapshot
+on:
+  push:
+    branches: ['playtest/scenario-e-20261010']
+    paths: ['.github/workflows/scenario-e-source.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b72ba8db1e8ab3975be271cbc9cc39ff8fb48f43
+          persist-credentials: false
+      - run: |
+          git archive --format=tar.gz --output=almoravid-source.tar.gz HEAD
+          git rev-parse HEAD > source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: almoravid-scenario-e-source
+          path: |
+            almoravid-source.tar.gz
+            source-commit.txt
+          retention-days: 2
