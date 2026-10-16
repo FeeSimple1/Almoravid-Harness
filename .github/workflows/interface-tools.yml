@@ -1,0 +1,25 @@
+name: Interface verification tools
+on:
+  push:
+    branches: ['maintenance/llm-interface-verify-20261016']
+    paths: ['.github/workflows/interface-tools.yml']
+permissions:
+  contents: read
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip download --only-binary=:all: ruff==0.11.13 tiktoken==0.9.0 -d wheels
+          python -m pip install tiktoken==0.9.0
+          TIKTOKEN_CACHE_DIR=encodings python -c "import tiktoken; tiktoken.get_encoding('o200k_base')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interface-verification-tools
+          path: |
+            wheels
+            encodings
+          retention-days: 2
