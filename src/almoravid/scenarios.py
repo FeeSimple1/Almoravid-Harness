@@ -559,11 +559,9 @@ def build_sagrajas(seed: int = 0) -> GameState:
     # Muslims hold M7 Spear Wall to play at the outset of Battle.
     s.decks.this_levy_events.setdefault("muslim", []).append("M7")
 
-    # NOTE (documented limitation): the Background Book also gives Yusuf and
-    # Sir a Javelins marker for their AFRICAN HORSE. The harness models
-    # Javelins (C7/M3/M6) for Unarmored Foot/Light Horse only (forces.json
-    # has no African-Horse Javelin row), so the African-Horse Javelins
-    # marker is not represented. Recorded in RULES_QUESTIONS (Sagrajas note).
+    # Yusuf/Sir's African Horse have native once-per-Battle Javelin rows
+    # in forces.json (4.4.1-.2); they need no Harbah capability card.
+    # Their LordPosition.javelin_round can select independent use rounds.
 
     # Pending: the Christian player decides Attack (historical) or Defend.
     s.meta.active_player = "christian"

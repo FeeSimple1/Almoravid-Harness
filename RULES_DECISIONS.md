@@ -448,3 +448,17 @@ conveys `absorption_policy` (`_apply_absorption_policy`).
 Tests: tests/test_crossbow_target_policy.py, tests/test_bgbook_jativa_storm.py.
 **Revisit:** if per-Hit interactive targeting is added for LLM play (the
 policy would become the non-interactive fallback, as with DECISION-005).
+
+
+## 2026-10-20 — Sagrajas study: missile ownership and Lord timing
+
+Rules 4.4.1–4.4.2 and Arts of War this-Lord missile cards apply each
+capability only to its holder. The per-pair battle builder must not union
+the army aggregate card list into each Lord's profile. A regression exposed
+that leak; the builder now uses the LordPosition's cards. Native African
+Horse Javelins remain unconditional. Rule 4.4.2 gives each Lord a separate
+once-per-Battle marker: LordPosition.javelin_round provides an independent
+round, with None preserving the existing side-wide standing schedule. The
+field round-trips through combat snapshots. This is rules implementation,
+not a house rule or a historical outcome adjustment. The batch study selects
+these existing battle inputs and uses the harness's own combat resolver.

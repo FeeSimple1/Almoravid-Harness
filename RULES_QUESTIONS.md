@@ -174,14 +174,13 @@ side (capability_eligible_lords returns None for all six).
 **Affected code:** src/almoravid/data/static/cards.json;
 tests/test_q003_bowmen_javelin_caps.py.
 
-## Sagrajas minigame — documented modeling limitation (not a Q)
-The Background Book gives Yusuf and Sir a Javelins marker for their AFRICAN
-HORSE. The harness models Javelins (C7/M3/M6) for Unarmored Foot + Light Horse
-only (forces.json has no African-Horse Javelin row, and the Javelins MARKER's
-owner-declared round-of-use is not modeled — see resolver-fix (a) TODO). So in
-the minigame Yusuf/Sir's African Horse do not gain the Javelin Missile bonus.
-All other Sagrajas setup is faithful. Wiring African-Horse Javelins + the
-owner round-choice is broader resolver work (the Javelins-marker subsystem).
+## Sagrajas minigame — corrected stale limitation note (2026-10-20)
+African Horse already have native Javelin rows in forces.json. The earlier
+claim that these were missing was incorrect. The battle-study regression
+checks both Yusuf and Sir. LordPosition.javelin_round now also supports
+separate per-Lord timing (4.4.2), including reserve Lords firing after they
+enter Front. The standard atomic Sagrajas action still uses fixed setup
+and Round-1 timing; the study driver explicitly selects its tactical policies.
 
 ## Q-004 — Storm Defender 6-Melee cap: does it govern the combined Lord+Garrison total?
 

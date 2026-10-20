@@ -1,0 +1,764 @@
+{
+  "n_per_cell": 2000,
+  "seed_start": 10000,
+  "configurations": [
+    {
+      "name": "attack_default_h0v0",
+      "role": "attack",
+      "public": true,
+      "hidden": false,
+      "service": false
+    },
+    {
+      "name": "attack_default_h1v0",
+      "role": "attack",
+      "public": true,
+      "hidden": true,
+      "service": false
+    },
+    {
+      "name": "attack_default_h0v1",
+      "role": "attack",
+      "public": true,
+      "hidden": false,
+      "service": true
+    },
+    {
+      "name": "attack_default_h1v1",
+      "role": "attack",
+      "public": true,
+      "hidden": true,
+      "service": true
+    },
+    {
+      "name": "attack_soak_ww",
+      "role": "attack",
+      "c_policy": "weakest_first",
+      "m_policy": "weakest_first"
+    },
+    {
+      "name": "attack_soak_wa",
+      "role": "attack",
+      "c_policy": "weakest_first",
+      "m_policy": "armored_first"
+    },
+    {
+      "name": "attack_soak_aw",
+      "role": "attack",
+      "c_policy": "armored_first",
+      "m_policy": "weakest_first"
+    },
+    {
+      "name": "attack_soak_aa",
+      "role": "attack",
+      "c_policy": "armored_first",
+      "m_policy": "armored_first"
+    },
+    {
+      "name": "attack_javelins_r2",
+      "role": "attack",
+      "javelins": 2
+    },
+    {
+      "name": "attack_wall_r2",
+      "role": "attack",
+      "wall": 2
+    },
+    {
+      "name": "attack_both_r2",
+      "role": "attack",
+      "javelins": 2,
+      "wall": 2
+    },
+    {
+      "name": "attack_africans_front",
+      "role": "attack",
+      "africans_front": true
+    },
+    {
+      "name": "attack_pedro_front",
+      "role": "attack",
+      "pedro_front": true
+    },
+    {
+      "name": "attack_bowmen_front",
+      "role": "attack",
+      "bowmen_front": true
+    },
+    {
+      "name": "defend_default_h0v0",
+      "role": "defend",
+      "public": true,
+      "hidden": false,
+      "service": false
+    },
+    {
+      "name": "defend_default_h1v0",
+      "role": "defend",
+      "public": true,
+      "hidden": true,
+      "service": false
+    },
+    {
+      "name": "defend_default_h0v1",
+      "role": "defend",
+      "public": true,
+      "hidden": false,
+      "service": true
+    },
+    {
+      "name": "defend_default_h1v1",
+      "role": "defend",
+      "public": true,
+      "hidden": true,
+      "service": true
+    },
+    {
+      "name": "defend_soak_ww",
+      "role": "defend",
+      "c_policy": "weakest_first",
+      "m_policy": "weakest_first"
+    },
+    {
+      "name": "defend_soak_wa",
+      "role": "defend",
+      "c_policy": "weakest_first",
+      "m_policy": "armored_first"
+    },
+    {
+      "name": "defend_soak_aw",
+      "role": "defend",
+      "c_policy": "armored_first",
+      "m_policy": "weakest_first"
+    },
+    {
+      "name": "defend_soak_aa",
+      "role": "defend",
+      "c_policy": "armored_first",
+      "m_policy": "armored_first"
+    },
+    {
+      "name": "defend_javelins_r2",
+      "role": "defend",
+      "javelins": 2
+    },
+    {
+      "name": "defend_wall_r2",
+      "role": "defend",
+      "wall": 2
+    },
+    {
+      "name": "defend_both_r2",
+      "role": "defend",
+      "javelins": 2,
+      "wall": 2
+    },
+    {
+      "name": "defend_africans_front",
+      "role": "defend",
+      "africans_front": true
+    },
+    {
+      "name": "defend_pedro_front",
+      "role": "defend",
+      "pedro_front": true
+    },
+    {
+      "name": "defend_bowmen_front",
+      "role": "defend",
+      "bowmen_front": true
+    }
+  ],
+  "summary": {
+    "attack_default_h0v0": {
+      "n": 2000,
+      "christian_wins": 1968,
+      "christian_rate": 0.984,
+      "ci95": [
+        0.9775005335818276,
+        0.9886437646499193
+      ],
+      "mean_rounds": 3.725,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.2185,
+      "mean_m_unrouted": 0.169
+    },
+    "attack_default_h1v0": {
+      "n": 2000,
+      "christian_wins": 1968,
+      "christian_rate": 0.984,
+      "ci95": [
+        0.9775005335818276,
+        0.9886437646499193
+      ],
+      "mean_rounds": 3.725,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.2185,
+      "mean_m_unrouted": 0.169
+    },
+    "attack_default_h0v1": {
+      "n": 2000,
+      "christian_wins": 1968,
+      "christian_rate": 0.984,
+      "ci95": [
+        0.9775005335818276,
+        0.9886437646499193
+      ],
+      "mean_rounds": 3.725,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.2185,
+      "mean_m_unrouted": 0.169
+    },
+    "attack_default_h1v1": {
+      "n": 2000,
+      "christian_wins": 1968,
+      "christian_rate": 0.984,
+      "ci95": [
+        0.9775005335818276,
+        0.9886437646499193
+      ],
+      "mean_rounds": 3.725,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.2185,
+      "mean_m_unrouted": 0.169
+    },
+    "attack_soak_ww": {
+      "n": 2000,
+      "christian_wins": 1968,
+      "christian_rate": 0.984,
+      "ci95": [
+        0.9775005335818276,
+        0.9886437646499193
+      ],
+      "mean_rounds": 3.725,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.2185,
+      "mean_m_unrouted": 0.169
+    },
+    "attack_soak_wa": {
+      "n": 2000,
+      "christian_wins": 1994,
+      "christian_rate": 0.997,
+      "ci95": [
+        0.9934700849260646,
+        0.9986243700763698
+      ],
+      "mean_rounds": 3.6885,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 31.885,
+      "mean_m_unrouted": 0.056
+    },
+    "attack_soak_aw": {
+      "n": 2000,
+      "christian_wins": 1954,
+      "christian_rate": 0.977,
+      "ci95": [
+        0.9694587928717646,
+        0.9827123440219199
+      ],
+      "mean_rounds": 3.595,
+      "median_rounds": 3.0,
+      "mean_c_unrouted": 34.786,
+      "mean_m_unrouted": 0.283
+    },
+    "attack_soak_aa": {
+      "n": 2000,
+      "christian_wins": 1984,
+      "christian_rate": 0.992,
+      "ci95": [
+        0.9870439223284629,
+        0.995069703146784
+      ],
+      "mean_rounds": 3.519,
+      "median_rounds": 3.0,
+      "mean_c_unrouted": 38.9305,
+      "mean_m_unrouted": 0.123
+    },
+    "attack_javelins_r2": {
+      "n": 2000,
+      "christian_wins": 1904,
+      "christian_rate": 0.952,
+      "ci95": [
+        0.9417339082484883,
+        0.9605330810092589
+      ],
+      "mean_rounds": 4.036,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 20.61,
+      "mean_m_unrouted": 0.513
+    },
+    "attack_wall_r2": {
+      "n": 2000,
+      "christian_wins": 1967,
+      "christian_rate": 0.9835,
+      "ci95": [
+        0.9769190388862818,
+        0.9882271763927466
+      ],
+      "mean_rounds": 3.8585,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 26.724,
+      "mean_m_unrouted": 0.1725
+    },
+    "attack_both_r2": {
+      "n": 2000,
+      "christian_wins": 1901,
+      "christian_rate": 0.9505,
+      "ci95": [
+        0.9400999950103993,
+        0.9591727453891917
+      ],
+      "mean_rounds": 4.1415,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 19.48,
+      "mean_m_unrouted": 0.53
+    },
+    "attack_africans_front": {
+      "n": 2000,
+      "christian_wins": 1127,
+      "christian_rate": 0.5635,
+      "ci95": [
+        0.5416631431550185,
+        0.5850933918402623
+      ],
+      "mean_rounds": 4.5995,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 8.761,
+      "mean_m_unrouted": 7.6155
+    },
+    "attack_pedro_front": {
+      "n": 2000,
+      "christian_wins": 1959,
+      "christian_rate": 0.9795,
+      "ci95": [
+        0.9723087105210271,
+        0.9848528411362514
+      ],
+      "mean_rounds": 3.706,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 28.9675,
+      "mean_m_unrouted": 0.1905
+    },
+    "attack_bowmen_front": {
+      "n": 2000,
+      "christian_wins": 1994,
+      "christian_rate": 0.997,
+      "ci95": [
+        0.9934700849260646,
+        0.9986243700763698
+      ],
+      "mean_rounds": 3.188,
+      "median_rounds": 3.0,
+      "mean_c_unrouted": 34.3575,
+      "mean_m_unrouted": 0.025
+    },
+    "defend_default_h0v0": {
+      "n": 2000,
+      "christian_wins": 918,
+      "christian_rate": 0.459,
+      "ci95": [
+        0.4372601333273435,
+        0.48089706454971914
+      ],
+      "mean_rounds": 5.076,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 6.672,
+      "mean_m_unrouted": 8.5595
+    },
+    "defend_default_h1v0": {
+      "n": 2000,
+      "christian_wins": 918,
+      "christian_rate": 0.459,
+      "ci95": [
+        0.4372601333273435,
+        0.48089706454971914
+      ],
+      "mean_rounds": 5.076,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 6.672,
+      "mean_m_unrouted": 8.5595
+    },
+    "defend_default_h0v1": {
+      "n": 2000,
+      "christian_wins": 918,
+      "christian_rate": 0.459,
+      "ci95": [
+        0.4372601333273435,
+        0.48089706454971914
+      ],
+      "mean_rounds": 5.076,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 6.672,
+      "mean_m_unrouted": 8.5595
+    },
+    "defend_default_h1v1": {
+      "n": 2000,
+      "christian_wins": 918,
+      "christian_rate": 0.459,
+      "ci95": [
+        0.4372601333273435,
+        0.48089706454971914
+      ],
+      "mean_rounds": 5.076,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 6.672,
+      "mean_m_unrouted": 8.5595
+    },
+    "defend_soak_ww": {
+      "n": 2000,
+      "christian_wins": 918,
+      "christian_rate": 0.459,
+      "ci95": [
+        0.4372601333273435,
+        0.48089706454971914
+      ],
+      "mean_rounds": 5.076,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 6.672,
+      "mean_m_unrouted": 8.5595
+    },
+    "defend_soak_wa": {
+      "n": 2000,
+      "christian_wins": 1067,
+      "christian_rate": 0.5335,
+      "ci95": [
+        0.5115928272302488,
+        0.5552787306019071
+      ],
+      "mean_rounds": 5.3145,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 7.7795,
+      "mean_m_unrouted": 8.303
+    },
+    "defend_soak_aw": {
+      "n": 2000,
+      "christian_wins": 950,
+      "christian_rate": 0.475,
+      "ci95": [
+        0.45318320659358524,
+        0.4969126457704772
+      ],
+      "mean_rounds": 4.9745,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 9.8555,
+      "mean_m_unrouted": 8.8835
+    },
+    "defend_soak_aa": {
+      "n": 2000,
+      "christian_wins": 1144,
+      "christian_rate": 0.572,
+      "ci95": [
+        0.5501976494175025,
+        0.5935262957739971
+      ],
+      "mean_rounds": 5.261,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 11.398,
+      "mean_m_unrouted": 7.936
+    },
+    "defend_javelins_r2": {
+      "n": 2000,
+      "christian_wins": 984,
+      "christian_rate": 0.492,
+      "ci95": [
+        0.47012608411848256,
+        0.5139045886380174
+      ],
+      "mean_rounds": 5.048,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 7.3365,
+      "mean_m_unrouted": 8.122
+    },
+    "defend_wall_r2": {
+      "n": 2000,
+      "christian_wins": 1005,
+      "christian_rate": 0.5025,
+      "ci95": [
+        0.48060343126068417,
+        0.5243869835029094
+      ],
+      "mean_rounds": 5.043,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 7.702,
+      "mean_m_unrouted": 7.953
+    },
+    "defend_both_r2": {
+      "n": 2000,
+      "christian_wins": 1071,
+      "christian_rate": 0.5355,
+      "ci95": [
+        0.5135950381499113,
+        0.5572688514931197
+      ],
+      "mean_rounds": 5.036,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 8.357,
+      "mean_m_unrouted": 7.3215
+    },
+    "defend_africans_front": {
+      "n": 2000,
+      "christian_wins": 649,
+      "christian_rate": 0.3245,
+      "ci95": [
+        0.3043345034048159,
+        0.34533838019090385
+      ],
+      "mean_rounds": 4.7985,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 4.115,
+      "mean_m_unrouted": 14.3695
+    },
+    "defend_pedro_front": {
+      "n": 2000,
+      "christian_wins": 963,
+      "christian_rate": 0.4815,
+      "ci95": [
+        0.45965837761892475,
+        0.5034125531304815
+      ],
+      "mean_rounds": 5.0265,
+      "median_rounds": 5.0,
+      "mean_c_unrouted": 7.3575,
+      "mean_m_unrouted": 8.362
+    },
+    "defend_bowmen_front": {
+      "n": 2000,
+      "christian_wins": 1632,
+      "christian_rate": 0.816,
+      "ci95": [
+        0.7984177551006988,
+        0.8323706710175491
+      ],
+      "mean_rounds": 4.6065,
+      "median_rounds": 4.0,
+      "mean_c_unrouted": 17.3155,
+      "mean_m_unrouted": 2.281
+    }
+  },
+  "effects": {
+    "attack_default_h0v0": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "attack_default_h1v0": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "attack_default_h0v1": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "attack_default_h1v1": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "attack_soak_ww": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "attack_soak_wa": {
+      "delta_c_win": 0.013,
+      "paired_ci95": [
+        0.007146204798668682,
+        0.018853795201331316
+      ],
+      "changed_winners": 36
+    },
+    "attack_soak_aw": {
+      "delta_c_win": -0.007,
+      "paired_ci95": [
+        -0.015077481269048287,
+        0.0010774812690482862
+      ],
+      "changed_winners": 68
+    },
+    "attack_soak_aa": {
+      "delta_c_win": 0.008,
+      "paired_ci95": [
+        0.0013609106382142374,
+        0.014639089361785762
+      ],
+      "changed_winners": 46
+    },
+    "attack_javelins_r2": {
+      "delta_c_win": -0.032,
+      "paired_ci95": [
+        -0.041897660463024615,
+        -0.022102339536975386
+      ],
+      "changed_winners": 104
+    },
+    "attack_wall_r2": {
+      "delta_c_win": -0.0005,
+      "paired_ci95": [
+        -0.00148,
+        0.00047999999999999996
+      ],
+      "changed_winners": 1
+    },
+    "attack_both_r2": {
+      "delta_c_win": -0.0335,
+      "paired_ci95": [
+        -0.04353282168462481,
+        -0.023467178315375196
+      ],
+      "changed_winners": 107
+    },
+    "attack_africans_front": {
+      "delta_c_win": -0.4205,
+      "paired_ci95": [
+        -0.4426231458113509,
+        -0.39837685418864904
+      ],
+      "changed_winners": 863
+    },
+    "attack_pedro_front": {
+      "delta_c_win": -0.0045,
+      "paired_ci95": [
+        -0.01163356486434636,
+        0.0026335648643463615
+      ],
+      "changed_winners": 53
+    },
+    "attack_bowmen_front": {
+      "delta_c_win": 0.013,
+      "paired_ci95": [
+        0.007146204798668682,
+        0.018853795201331316
+      ],
+      "changed_winners": 36
+    },
+    "defend_default_h0v0": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "defend_default_h1v0": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "defend_default_h0v1": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "defend_default_h1v1": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "defend_soak_ww": {
+      "delta_c_win": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "changed_winners": 0
+    },
+    "defend_soak_wa": {
+      "delta_c_win": 0.0745,
+      "paired_ci95": [
+        0.046950063896813755,
+        0.10204993610318625
+      ],
+      "changed_winners": 801
+    },
+    "defend_soak_aw": {
+      "delta_c_win": 0.016,
+      "paired_ci95": [
+        -0.011367768863871475,
+        0.043367768863871475
+      ],
+      "changed_winners": 780
+    },
+    "defend_soak_aa": {
+      "delta_c_win": 0.113,
+      "paired_ci95": [
+        0.08478559000677788,
+        0.14121440999322213
+      ],
+      "changed_winners": 854
+    },
+    "defend_javelins_r2": {
+      "delta_c_win": 0.033,
+      "paired_ci95": [
+        0.006337657847733592,
+        0.059662342152266415
+      ],
+      "changed_winners": 742
+    },
+    "defend_wall_r2": {
+      "delta_c_win": 0.0435,
+      "paired_ci95": [
+        0.029595179317261598,
+        0.057404820682738396
+      ],
+      "changed_winners": 205
+    },
+    "defend_both_r2": {
+      "delta_c_win": 0.0765,
+      "paired_ci95": [
+        0.049347113637425034,
+        0.10365288636257497
+      ],
+      "changed_winners": 779
+    },
+    "defend_africans_front": {
+      "delta_c_win": -0.1345,
+      "paired_ci95": [
+        -0.16289023160217636,
+        -0.10610976839782366
+      ],
+      "changed_winners": 875
+    },
+    "defend_pedro_front": {
+      "delta_c_win": 0.0225,
+      "paired_ci95": [
+        0.0007573882529538015,
+        0.0442426117470462
+      ],
+      "changed_winners": 493
+    },
+    "defend_bowmen_front": {
+      "delta_c_win": 0.357,
+      "paired_ci95": [
+        0.33097081022851305,
+        0.3830291897714869
+      ],
+      "changed_winners": 960
+    }
+  }
+}

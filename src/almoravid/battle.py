@@ -110,6 +110,10 @@ class LordPosition:
     capabilities_in_play: list[str] = field(default_factory=list)
     routed_units: dict[UnitType, int] = field(default_factory=dict)
     m7_marked: bool = False
+    # 4.4.2 JAVELINS: each Lord owns a separate once-per-Battle marker.
+    # None preserves the side's standing timing; an explicit round permits
+    # independent timing (including a reserve Lord's first Front round).
+    javelin_round: int | None = None
 
     def has_unrouted(self) -> bool:
         return any(v > 0 for v in self.forces.values())
@@ -1037,6 +1041,7 @@ def battle_side_from_snapshot(d: dict[str, Any]) -> BattleSide:
                 capabilities_in_play=list(p["capabilities_in_play"]),
                 routed_units=dict(p["routed_units"]),
                 m7_marked=p["m7_marked"],
+                javelin_round=p.get("javelin_round"),
             )
             for p in arr
         ]
@@ -3402,11 +3407,15 @@ def _build_strike_rows_for_position(
     *,
     context: Literal["battle", "storm"] = "battle",
 ) -> list[StrikeRow]:
-    """Like build_strike_rows but for a single LordPosition. The
-    capability set is the per-Lord capabilities (lp.capabilities_in_play)
-    union the side-wide capabilities_in_play already on `side`."""
+    """Like build_strike_rows but for a single LordPosition.
+
+    All capability-gated missile profiles are this-Lord capabilities
+    (Arts of War C2/C4/C5/C7/C9, M2/M3/M4/M5/M6/M7). The aggregate
+    side.capabilities_in_play contains OTHER Lords' cards too; it must
+    never arm this Lord. Side-wide effects have separate event hooks.
+    """
     forces_data = load_forces()
-    caps_in_play = set(side.capabilities_in_play) | set(lp.capabilities_in_play)
+    caps_in_play = set(lp.capabilities_in_play)
     rows: list[StrikeRow] = []
     javelin_budget = 4   # (b) up to 4 Unarmored units per Lord (C7/M3/M6)
     slinger_budget = 3   # C9/M7 Slingers: up to 3 Militia per Lord
@@ -3739,7 +3748,10 @@ def _resolve_step_per_pair(
                                                context="battle")
         # (a) one_round_only Strikes (Javelins) fire on the owner's
         # chosen Round (4.4.1 "any 1 Round"; default Round 1).
-        if round_index != actor.oneround_round:
+        javelin_round = (actor_lp.javelin_round
+                        if actor_lp.javelin_round is not None
+                        else actor.oneround_round)
+        if round_index != javelin_round:
             rows = [r for r in rows if not r.one_round_only]
         rows = _dedupe_missile_overlap(rows)
         raw, by_kind = _step_hits(rows, step_type, unit_class)
