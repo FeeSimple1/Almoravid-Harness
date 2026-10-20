@@ -92,6 +92,10 @@ class Meta(StrictModel):
     # Battle of Sagrajas minigame: "attack" (Christians attack, historical)
     # or "defend" (Christians defend); None until the Christian chooses.
     sagrajas_role: str | None = None
+    # C8 Cantador: optional fixed holder, per the card's one-Lord scope.
+    # None retains the existing automatic choice; the Sagrajas variant
+    # specifically assigns the Event to Alfonso.
+    cantador_lord_id: str | None = None
     version: str = "0.2.0"
 
     # Levy sub-phase tracking (Pattern 1: state-set-but-unreachable —

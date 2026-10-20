@@ -475,3 +475,22 @@ dice. A newly selected M7 round is activated immediately before resolving
 the pending step. Fixed schedules and ordinary atomic callers are unchanged.
 The study uses this choice point and existing absorption policies; it does
 not replace the combat engine. No historical outcome is imposed.
+
+## 2026-10-20 — Optional GermanBrau1 Sagrajas variant [HOUSE RULE]
+
+The user explicitly requested adding the variant discussed at
+https://boardgamegeek.com/thread/3717102/battle-of-sagrajas-variant.
+This authorizes this specific fan setup beyond BRIEF.md's original scope.
+`sagrajas_variant` selects its base three-Lord Christian force; mounted
+men-at-arms map to Sergeants, infantry men-at-arms to Men-at-Arms. It is a
+replacement force, so no additional Vassal, Bishoprics, Milites, Crusader,
+or missile-capability grants apply. Christians attack, with C8 on Alfonso.
+Muslim setup is the original Christian-attack setup. No optional additional
+cavalry from the author's balancing suggestion is added. Battle resolution
+uses the existing rules engine, without altered combat odds or victory rules.
+
+The variant's explicit C8 placement uses an optional `cantador_lord_id`
+state field. C8 remains on the specified Lord even if another Lord has more
+eligible units, and cannot transfer when the holder leaves the Front.
+Its assignment clears when C8 is discarded. Unspecified placement preserves
+the existing resolver policy. The original scenario remains `sagrajas`.

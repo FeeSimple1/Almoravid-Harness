@@ -109,6 +109,8 @@ def load_scenario(name: str, seed: int = 0) -> GameState:
     raw = load_scenario_raw(name)
     if raw.get("battle_minigame") == "sagrajas":
         return build_sagrajas(seed)
+    if raw.get("battle_minigame") == "sagrajas_variant":
+        return build_sagrajas_variant(seed)
 
     # ---- Meta -----------------------------------------------------
     meta = Meta(
@@ -567,4 +569,46 @@ def build_sagrajas(seed: int = 0) -> GameState:
     s.meta.active_player = "christian"
     s.pending = PendingDecision(kind="sagrajas_who_attacks",
                                 waiting_on="christian", payload={})
+    return s
+
+
+def build_sagrajas_variant(seed: int = 0) -> GameState:
+    """GermanBrau1's three-Lord Sagrajas variant, BGG thread 3717102.
+
+    User-authorized house rule (RULES_DECISIONS.md, 2026-10-20).
+    Replace the Christian setup with the author's fixed forces, retain
+    Cantador on Alfonso, and begin as Attacker. Muslim setup and combat
+    rules are inherited from the original battle-only scenario.
+    """
+    from almoravid.state import PendingDecision
+
+    raw = load_scenario_raw("sagrajas_variant")
+    s = build_sagrajas(seed)
+    s.meta.scenario_id = raw["scenario_id"]
+    s.meta.sagrajas_role = "attack"
+    s.meta.cantador_lord_id = "alfonso"
+    # The listed forces REPLACE all starting/Vassal/Bishoprics/Milites
+    # forces. The author's mounted men-at-arms are Sergeants (Horse);
+    # infantry men-at-arms are Men-at-Arms (Foot), per the Forces table.
+    for lid, lord in s.lords.items():
+        if lord.side != "christian":
+            continue
+        lord.forces = dict(raw["christian_forces"].get(lid, {}))
+        lord.capabilities = []
+        lord.vassals = []
+        lord.cylinder = (Cylinder(kind="locale", locale_id=_SAGRAJAS_LOCALE)
+                         if lid in raw["christian_forces"]
+                         else Cylinder(kind="set_aside"))
+    s.decks.capabilities_in_play = [
+        card for card in s.decks.capabilities_in_play
+        if card.owner_side != "christian"
+    ]
+    s.decks.board_edge.pop("christian", None)
+    s.decks.this_levy_events["christian"] = ["C8"]
+    # No Who-Attacks choice: the variant specifies a Christian attack.
+    # Bypass the ordinary attack setup so no Crusaders/missile cards enter.
+    s.pending = PendingDecision(kind="sagrajas_resolve",
+                                waiting_on="christian", payload={})
+    s.history[0].summary = f"Loaded scenario S: {raw['name']}"
+    s.history[0].action = "load_sagrajas_variant"
     return s

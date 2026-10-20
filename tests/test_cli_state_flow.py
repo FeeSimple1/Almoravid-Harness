@@ -162,12 +162,12 @@ def test_multi_step_playthrough_via_cli(tmp_path) -> None:
     assert data["meta"]["levy_step"] == "pay"
 
 
-def test_scenarios_command_lists_all_six(tmp_path) -> None:
+def test_scenarios_command_lists_campaigns_and_battle_options(tmp_path) -> None:
     r = _run("scenarios")
     lines = r.stdout.strip().splitlines()
-    # Six campaign scenarios + the Sagrajas battle-only minigame.
-    assert len(lines) == 7
-    assert any("sagrajas" in ln for ln in lines)
+    # Six campaign scenarios + the original and variant Sagrajas minigames.
+    assert len(lines) == 8
+    assert {"sagrajas", "sagrajas_variant"} <= set(lines)
 
 
 def test_new_with_unknown_scenario_exits_with_code_1(tmp_path) -> None:

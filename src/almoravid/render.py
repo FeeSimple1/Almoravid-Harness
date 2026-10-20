@@ -106,12 +106,19 @@ def render_sagrajas(state: GameState) -> str:
     Battle Events, and the pending decision -- so an agent never inspects
     raw objects to understand the battle."""
     role = state.meta.sagrajas_role
+    variant = state.meta.scenario_id == "sagrajas_variant"
+    label = ("GermanBrau1 variant — unofficial" if variant
+             else "Almoravid Background Book")
     lines = ["=== Battle of Sagrajas — battle-only minigame "
-             "(Almoravid Background Book) ===",
+             f"({label}) ===",
              f"Scenario {state.meta.scenario_letter}  |  Active: "
              f"{state.meta.active_player}",
              "A single self-contained Battle (Rules 4.4). Whoever wins the "
              "Battle wins the game."]
+    if variant:
+        lines.append("Variant setup: three Christian Lords; 15 cavalry + "
+                     "10 infantry; no Christian missile capabilities; "
+                     "Cantador assigned to Alfonso. Christians attack.")
     if role is None:
         lines.append("DECISION: the Christian player chooses to ATTACK "
                      "(historical) or DEFEND. Legal actions: sagrajas_attack, "

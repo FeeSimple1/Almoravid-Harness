@@ -1789,8 +1789,9 @@ def _build_c8_ctx(
       bonus doubles to 8.
     * Confined to the ONE Christian Lord whose mat holds the card. We pick
       the Front Christian Lord with the most eligible (Knights+Sergeants)
-      units -- the placement a rational player makes -- and apply the
-      bonus to that Lord only. (Single-Lord Battles: holder is that Lord.)
+      units when no explicit cantador_lord_id is set, and apply the
+      bonus to that Lord only. A specified holder never transfers C8
+      to another Lord. (Single-Lord Battles: holder is that Lord.)
 
     Returns None when C8 is not in effect this Round.
     """
@@ -1799,10 +1800,16 @@ def _build_c8_ctx(
     if "C8" not in state.decks.this_levy_events.get("christian", []):
         return None
     chr_side = attacker if attacker.side == "christian" else defender
+    selected = state.meta.cantador_lord_id
+    if selected is not None and chr_side.array is None:
+        if selected not in chr_side.lord_ids:
+            return {"budget": 0, "holder_id": None}
     holder_id: int | None = None
     if chr_side.array is not None:
         best = -1
         for lp in chr_side.array:
+            if selected is not None and lp.lord_id != selected:
+                continue
             if lp.position not in ("front_center", "front_left",
                                    "front_right"):
                 continue
@@ -1812,6 +1819,8 @@ def _build_c8_ctx(
             if elig > best:
                 best = elig
                 holder_id = id(lp)
+        if selected is not None and holder_id is None:
+            return {"budget": 0, "holder_id": None}
     return {"budget": 4, "holder_id": holder_id}
 
 
@@ -2865,6 +2874,8 @@ def _discard_round1_events(state: GameState, card_ids: list[str]) -> None:
             while cid in bucket:
                 bucket.remove(cid)
                 state.decks.discard.append(cid)
+                if cid == "C8":
+                    state.meta.cantador_lord_id = None
         if not bucket:
             state.decks.this_levy_events.pop(side_key, None)
 

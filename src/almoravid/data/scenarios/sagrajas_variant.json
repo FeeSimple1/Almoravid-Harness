@@ -1,0 +1,14 @@
+{
+  "scenario_id": "sagrajas_variant",
+  "scenario_letter": "S",
+  "name": "Battle of Sagrajas — GermanBrau1 variant (unofficial)",
+  "battle_minigame": "sagrajas_variant",
+  "source": "https://boardgamegeek.com/thread/3717102/battle-of-sagrajas-variant",
+  "author": "GermanBrau1",
+  "christian_forces": {
+    "alfonso": {"knights": 3, "sergeants": 2, "men_at_arms": 3, "militia": 1},
+    "garcia_ordonez": {"knights": 2, "sergeants": 2, "light_horse": 1, "men_at_arms": 3},
+    "pedro_ansurez": {"knights": 2, "sergeants": 2, "light_horse": 1, "men_at_arms": 3}
+  },
+  "starting_vp": {"christian": 0, "muslim": 0}
+}

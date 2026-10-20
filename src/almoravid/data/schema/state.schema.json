@@ -771,6 +771,18 @@
           "default": null,
           "title": "Sagrajas Role"
         },
+        "cantador_lord_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cantador Lord Id"
+        },
         "version": {
           "default": "0.2.0",
           "title": "Version",
