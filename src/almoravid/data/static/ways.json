@@ -1,5 +1,5 @@
 {
-  "_doc": "109 Ways total: 72 Roads + 37 Passes. Source: reference/Almoravid Map.txt (Parts 2-3, v13). Each Way is undirected; way_type distinguishes Roads (open-country routes) from Passes (mountain/border routes). Stored as a list (not a dict keyed by (a,b)) because Pattern 4 from FUTURE_PROJECTS_LESSONS.md.",
+  "_doc": "105 Ways total: 69 Roads + 36 Passes. Source: reference/Almoravid Map.txt (Parts 2-3, v14). Verified against published board artwork in Vassal 1.3; see VASSAL_AUDIT.md. Each Way is undirected; way_type distinguishes Roads (open-country routes) from Passes (mountain/border routes). Stored as a list (not a dict keyed by (a,b)) because Pattern 4 from FUTURE_PROJECTS_LESSONS.md.",
   "ways": [
     {
       "a": "leon",
@@ -29,6 +29,11 @@
     {
       "a": "palencia",
       "b": "burgos",
+      "way_type": "road"
+    },
+    {
+      "a": "palencia",
+      "b": "simancas",
       "way_type": "road"
     },
     {
@@ -113,11 +118,6 @@
     },
     {
       "a": "zaragoza",
-      "b": "calatayud",
-      "way_type": "road"
-    },
-    {
-      "a": "zaragoza",
       "b": "iberico",
       "way_type": "road"
     },
@@ -158,11 +158,6 @@
     },
     {
       "a": "lerida",
-      "b": "barbastro",
-      "way_type": "road"
-    },
-    {
-      "a": "lerida",
       "b": "tortosa",
       "way_type": "road"
     },
@@ -174,11 +169,6 @@
     {
       "a": "burriana",
       "b": "baniskula",
-      "way_type": "road"
-    },
-    {
-      "a": "alicante",
-      "b": "denia",
       "way_type": "road"
     },
     {
@@ -304,11 +294,6 @@
     {
       "a": "sevilla",
       "b": "huelva",
-      "way_type": "road"
-    },
-    {
-      "a": "sevilla",
-      "b": "moron",
       "way_type": "road"
     },
     {
@@ -518,11 +503,6 @@
     },
     {
       "a": "granada",
-      "b": "almeria",
-      "way_type": "pass"
-    },
-    {
-      "a": "lorca",
       "b": "almeria",
       "way_type": "pass"
     },

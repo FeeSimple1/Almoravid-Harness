@@ -1,8 +1,8 @@
 ============================================================
- ALMORAVID MAP REFERENCE — v13 (Town Capacity corrected)
+ ALMORAVID MAP REFERENCE — v14 (printed map audit corrected)
 ============================================================
  
-Iberia, circa 1085. 72 Locales, 109 Ways.
+Iberia, circa 1085. 72 Locales, 105 Ways.
  
 Christian Territory:  Kingdoms of León and Aragón
 Muslim Territory:     Taifas of Badajoz, Toledo, Zaragoza,
@@ -64,7 +64,7 @@ Medinaceli | Fortress | 2 | Y | N | —          | N
 Calatayud  | Castle   | 1 | — | N | —          | N
 Tudela     | Fortress | 2 | Y | N | —          | N
 Huesca     | Fortress | 2 | Y | N | —          | N
-Zaragoza   | City     | 3 | Y | Y | Al-Mustain | Y      (river port)
+Zaragoza   | City     | 3 | Y | N | Al-Mustain | Y
 Ibérico    | Region   |   |   |   |            |
 Albarracín | Region   |   |   |   |            |
 Alpuente   | Region   |   |   |   |            |
@@ -74,7 +74,7 @@ Alicante  | Town     | 2 | — | Y | —         | N
 Denia     | Town     | 2 | — | Y | —         | N
 Burriana  | Castle   | 1 | — | N | —         | N
 Tortosa   | Fortress | 2 | Y | Y | —         | N
-Lérida    | Fortress | 2 | Y | Y | Al-Mundir | Y      (river port)
+Lérida    | Fortress | 2 | Y | N | Al-Mundir | Y
 Barbastro | Town     | 2 | — | N | —         | N
 Baniskula | Region   |   |   |   |           |
  
@@ -130,7 +130,7 @@ Almería | Fortress | 2 | Y | Y | —         | N
  
  
 ============================================================
- PART 2 — WAYS (ROADS — 72 total)
+ PART 2 — WAYS (ROADS — 69 total)
 ============================================================
  
 --- KINGDOM OF LEÓN — internal ---
@@ -140,6 +140,7 @@ León — Sahagún          | Road
 Sahagún — Palencia      | Road
 Sahagún — Burgos        | Road
 Palencia — Burgos       | Road
+Palencia — Simancas     | Road
 Zamora — Simancas       | Road
 Zamora — Transduero     | Road
 Simancas — Peñafiel     | Road
@@ -161,7 +162,6 @@ Coria — Talavera        | Road      (to Toledo)
 --- TAIFA OF ZARAGOZA — internal ---
 Tudela — Zaragoza       | Road
 Huesca — Zaragoza       | Road
-Zaragoza — Calatayud    | Road
 Zaragoza — Ibérico      | Road
 Calatayud — Medinaceli  | Road
 Albarracín — Alpuente   | Road
@@ -175,11 +175,9 @@ Alpuente — Valencia     | Road      (to Valencia)
  
  
 --- TAIFA OF LÉRIDA — internal ---
-Lérida — Barbastro      | Road
 Lérida — Tortosa        | Road
 Tortosa — Baniskula     | Road
 Burriana — Baniskula    | Road
-Alicante — Denia        | Road
  
 --- LÉRIDA — borders ---
 Burriana — Valencia     | Road      (to Valencia)
@@ -225,7 +223,6 @@ Mérida — Ardila         | Road      (to Sevilla region)
 Sevilla — Córdoba       | Road
 Sevilla — Jerez         | Road
 Sevilla — Huelva        | Road
-Sevilla — Morón         | Road
 Sevilla — Ardila        | Road
 Córdoba — Jaén          | Road
 Córdoba — Morón         | Road
@@ -241,7 +238,7 @@ Morón — Málaga          | Road      (to Granada)
  
  
 ============================================================
- PART 3 — WAYS (PASSES — 37 total)
+ PART 3 — WAYS (PASSES — 36 total)
 ============================================================
  
 Pyrenees:
@@ -287,7 +284,6 @@ Southeast & Béticas:
   Morón — Granada             (to Granada)
   Granada — Lorca             (to Granada)
   Granada — Almería
-  Lorca — Almería             (to Granada)
   Aledo — Alcaraz
   Murcia — Albacete
   Ardila — Huelva
@@ -392,7 +388,7 @@ and Genoa & Pisa cards):
   Mediterranean: Algeciras, Málaga, Almería, Cartagena,
                  Alicante, Denia, Valencia, Tortosa
   Atlantic:      Jerez, Huelva, Sevilla
-  River:         Zaragoza, Lérida
+  Zaragoza and Lérida have no ship icons and are NOT Ports.
  
 GUADALQUIVIR MOVEMENT (card capability M19) — Taifa Lords
 may March directly between any combination of Ports above
@@ -423,14 +419,14 @@ CHOKEPOINTS:
   Medinaceli (Pass to Zaragoza). Eastern León Fortress
   anchoring the Duero frontier.
  
-- SOUTHERN MOUNTAINS: 10 Passes link Granada Taifa to
-  Sevilla Taifa — heavily connected, but every link
-  is a Pass.
+- SOUTHERN MOUNTAINS: Four Passes link Granada Taifa to
+  Sevilla Taifa (Algeciras—Málaga, Jaén—Granada,
+  Morón—Granada, Lorca—Granada), plus the Morón—Málaga Road.
  
 ISOLATED / DISTINCTIVE:
  
-- ALMERÍA: Three land Ways, all Passes (Málaga, Granada,
-  Lorca). Plus Guadalquivir as a Port.
+- ALMERÍA: Two land Ways, both Passes (Málaga, Granada).
+  Plus Guadalquivir as a Port.
  
 - CARTAGENA: Two land Ways, both Roads (Aledo,
   Alicante). Plus Guadalquivir as a Port.
@@ -444,11 +440,11 @@ HUBS:
   Uclés, Zancara (all Roads). Most connected stronghold
   in central Iberia.
  
-- ZARAGOZA (city): 4 spokes — Tudela, Huesca, Calatayud,
+- ZARAGOZA (city): 4 spokes — Tudela, Huesca, Lérida,
   Ibérico (all Roads).
  
-- SEVILLA (city): 5 spokes — Córdoba, Jerez, Huelva,
-  Morón, Ardila (all Roads). Plus Atlantic port.
+- SEVILLA (city): 4 spokes — Córdoba, Jerez, Huelva,
+  Ardila (all Roads). Plus Atlantic port.
  
 - BURGOS: Christian Seat-of-seats — Alfonso AND Álvar
   Fáñez both have printed pennants here. The most
@@ -494,12 +490,18 @@ LOCALES BY TERRITORY:
   Sevilla:    17 (11 Strongholds + 6 Regions)
   Granada:     3 (3 Strongholds + 0 Regions)
  
-WAYS:           109 total
-  Roads:        72
-  Passes:       37
+WAYS:           105 total
+  Roads:        69
+  Passes:       36
  
 PRINTED LORD SEATS: 16 banners across 14 Strongholds
   (Burgos has 2; Algeciras has 2 effective; one Lord —
    al-Mutamid — has 2 Seats himself at Sevilla and Córdoba.)
  
 TAIFA STATUS BOXES: 9 total (Sevilla 3 + 6 others 1 each)
+
+V14 CORRECTION SOURCE (2026-10-20): Published board artwork,
+Almoravid Vassal module 1.3, images/Almoravid Map on Table 3.png.
+Rule 1.3.1 defines adjacency by printed Ways and Ports by ship icons.
+V13 omitted Palencia—Simancas, invented five Ways, and incorrectly
+classified Zaragoza and Lérida as Ports. See VASSAL_AUDIT.md.

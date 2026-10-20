@@ -144,7 +144,7 @@ def test_march_to_empty_enemy_stronghold_forces_besiege_or_bypass() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _clear_lords(s)
     _keep_both_sides_on_map(s)
-    _activate(s, "alvar_fanez", "calatayud")
+    _activate(s, "alvar_fanez", "tudela")
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "zaragoza", "way_type": "road"})
     assert s.pending is not None
@@ -158,7 +158,7 @@ def test_besiege_empty_enemy_stronghold_places_first_marker() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _clear_lords(s)
     _keep_both_sides_on_map(s)
-    _activate(s, "alvar_fanez", "calatayud")
+    _activate(s, "alvar_fanez", "tudela")
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "zaragoza", "way_type": "road"})
     apply_action(s, {"type": "respond_besiege", "side": "christian"})
@@ -187,7 +187,7 @@ def test_march_joining_own_bypass_sets_no_pending() -> None:
     sancho = s.lords["sancho"]
     sancho.cylinder = Cylinder(kind="locale", locale_id="zaragoza")
     sancho.in_stronghold = False
-    _activate(s, "alvar_fanez", "calatayud")
+    _activate(s, "alvar_fanez", "tudela")
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "zaragoza", "way_type": "road"})
     assert s.pending is None                      # joins the Bypass
@@ -200,7 +200,7 @@ def test_bypassing_lord_cannot_march_away_same_card() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _clear_lords(s)
     _keep_both_sides_on_map(s)
-    _activate(s, "alvar_fanez", "calatayud", actions=3)
+    _activate(s, "alvar_fanez", "tudela", actions=3)
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "zaragoza", "way_type": "road"})
     apply_action(s, {"type": "respond_bypass", "side": "christian"})
@@ -208,7 +208,7 @@ def test_bypassing_lord_cannot_march_away_same_card() -> None:
     assert s.meta.actions_remaining == 2          # card continues
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "cmd_march", "side": "christian",
-                         "target_locale_id": "calatayud",
+                         "target_locale_id": "tudela",
                          "way_type": "road"})
     assert ei.value.code == "bypassed_this_card"
     assert not [m for m in legal_moves(s) if m["type"] == "cmd_march"]

@@ -4,9 +4,9 @@ Used by future Phase 5 code (March, Supply, Forage, Ravage, Tax) to
 reason about how a Locale connects to its neighbors and which Transport
 types can use those connections.
 
-The Almoravid map has two Way types per the Map reference v13:
-  - 'road': open-country routes (72 total)
-  - 'pass': mountain / border crossings (37 total). Carts cannot
+The Almoravid map has two Way types per the Map reference v14:
+  - 'road': open-country routes (69 total)
+  - 'pass': mountain / border crossings (36 total). Carts cannot
     traverse Passes (rule 4.3.2 Laden). Mules can.
 
 Almoravid 1085-1086 has no parallel-Way locale-pairs (Pattern 4 audit
@@ -46,12 +46,10 @@ def has_pass(locale_id: str) -> bool:
 
 
 def is_port(locale_id: str) -> bool:
-    """Locale has a Port (Map reference v13 PORT column).
+    """Whether the printed board has a ship icon at this Locale (1.3.1).
 
-    Ports are not currently a Way type in Almoravid (no Ship transport
-    in 1085-1086 the way Nevsky had Cogs / Lodya), but the flag exists
-    on Locales because Map Part 1 lists them and future variants may
-    care.
+    Used by Invite the Almoravids and the African Fleet/Guadalquivir
+    and Genoa & Pisa cards. Zaragoza and Lérida have no such icons.
     """
     loc = load_locales()["locales"].get(locale_id)
     return bool(loc and loc.get("port"))

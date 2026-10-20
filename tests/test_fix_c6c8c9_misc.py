@@ -77,7 +77,7 @@ def test_c9_withdraw_rejects_splitting_lt_pair() -> None:
     # Pending: only the Lower Lord withdraws (splitting the pair).
     s.pending = PendingDecision(
         kind="march_arrival_response", waiting_on="muslim",
-        payload={"locale_id": "zaragoza", "from_locale_id": "calatayud",
+        payload={"locale_id": "zaragoza", "from_locale_id": "tudela",
                  "via_way_type": "road", "active_lord_id": "alvar_fanez",
                  "active_side": "christian", "defender_lord_ids": [low]})
     s.meta.active_player = "muslim"

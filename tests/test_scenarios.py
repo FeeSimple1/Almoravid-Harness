@@ -39,7 +39,7 @@ def test_all_16_lords_present_with_unique_cylinders(name: str) -> None:
 def test_locales_and_ways_match_static_data(name: str) -> None:
     state = load_scenario(name)
     assert len(state.locales) == 72
-    assert len(state.ways) == 109
+    assert len(state.ways) == 105
 
 
 @pytest.mark.parametrize("name", list_scenarios())

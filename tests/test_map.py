@@ -18,7 +18,7 @@ from almoravid.map import (
 def test_way_classes_covers_every_locale() -> None:
     """Every Locale appears in the classifier, even isolated ones."""
     classes = way_classes_per_locale()
-    # 72 Locales per Map reference v13
+    # 72 Locales per Map reference v14
     assert len(classes) == 72
 
 
@@ -36,9 +36,9 @@ def test_pamplona_jaca_pass() -> None:
     assert "jaca" not in neighbors_via("pamplona", "road")
 
 
-def test_zaragoza_is_a_port() -> None:
-    """Zaragoza has a river port per Map reference."""
-    assert is_port("zaragoza") is True
+def test_zaragoza_is_not_a_port() -> None:
+    """Zaragoza has no ship icon on the printed board (1.3.1)."""
+    assert is_port("zaragoza") is False
 
 
 def test_leon_is_not_a_port() -> None:

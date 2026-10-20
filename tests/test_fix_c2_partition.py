@@ -24,7 +24,7 @@ def _setup(s):
     s.meta.actions_remaining = 2
     s.pending = PendingDecision(
         kind="march_arrival_response", waiting_on="muslim",
-        payload={"locale_id": "zaragoza", "from_locale_id": "calatayud",
+        payload={"locale_id": "zaragoza", "from_locale_id": "tudela",
                  "via_way_type": "road", "active_lord_id": "alvar_fanez",
                  "active_side": "christian", "defender_lord_ids": muslims})
     s.meta.active_player = "muslim"
@@ -36,7 +36,7 @@ def test_partition_avoid_then_withdraw_then_stand() -> None:
     muslims = _setup(s)
     # Pick a road neighbor of zaragoza that isn't the approach origin.
     avoid_to = next(n for n in neighbors_via("zaragoza", "road")
-                    if n != "calatayud")
+                    if n != s.pending.payload["from_locale_id"])
     # 1) al_mustain Avoids.
     r1 = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                           "target_locale_id": avoid_to, "way_type": "road",

@@ -65,12 +65,12 @@ def test_72_locales(locales: dict) -> None:
     assert len(locales["locales"]) == 72
 
 
-def test_109_ways_72_roads_37_passes(ways: dict) -> None:
-    """Map reference: 109 Ways total (72 Roads + 37 Passes)."""
+def test_105_ways_69_roads_36_passes(ways: dict) -> None:
+    """Map reference: 105 Ways total (69 Roads + 36 Passes), verified against board artwork."""
     way_list = ways["ways"]
-    assert len(way_list) == 109
-    assert sum(1 for w in way_list if w["way_type"] == "road") == 72
-    assert sum(1 for w in way_list if w["way_type"] == "pass") == 37
+    assert len(way_list) == 105
+    assert sum(1 for w in way_list if w["way_type"] == "road") == 69
+    assert sum(1 for w in way_list if w["way_type"] == "pass") == 36
 
 
 def test_16_lords_9_muslim_7_christian(lords: dict) -> None:

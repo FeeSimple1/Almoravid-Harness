@@ -25,7 +25,7 @@ def _setup_withdraw_pending(s, seed=1):
     s.locales["zaragoza"].bypass_yellow = False
     s.pending = PendingDecision(
         kind="march_arrival_response", waiting_on="muslim",
-        payload={"locale_id": "zaragoza", "from_locale_id": "calatayud",
+        payload={"locale_id": "zaragoza", "from_locale_id": "tudela",
                  "via_way_type": "road", "active_lord_id": "alvar_fanez",
                  "active_side": "christian",
                  "defender_lord_ids": ["al_mustain"]})
