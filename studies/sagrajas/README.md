@@ -1,5 +1,7 @@
 # Sagrajas harness study — 20 October 2026
 
+**Follow-up:** [Reactive reserve tactics](../sagrajas-reactive/README.md) preserves both African Lords in Reserve and tests informed timing and selected counterstrategies. It strengthens the concern about the historical-reserve scenario; the original fixed-policy rates below are not estimates of optimal play.
+
 The Christians won **98.4%** of default Christians-attack games and **45.9%**
 of default Christians-defend games. These are conditional results for the
 harness's fixed tactics, **not scenario balance under optimal play**.

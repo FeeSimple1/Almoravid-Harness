@@ -1,0 +1,650 @@
+{
+  "christian": {
+    "id": "c0_front_a",
+    "order": [
+      "alfonso",
+      "alvar_fanez",
+      "garcia_ordonez",
+      "pedro_ansurez",
+      "sancho"
+    ],
+    "bow": "front",
+    "absorb": "armored_first"
+  },
+  "muslim": {
+    "id": "m1_yusuf_w",
+    "order": [
+      "abd_allah",
+      "al_mutamid",
+      "al_mutawakkil",
+      "yusuf",
+      "sir"
+    ],
+    "absorb": "weakest_first"
+  },
+  "games": {
+    "christian": {
+      "seed": 40000,
+      "winner": "christian",
+      "rounds": 3,
+      "c_unrouted": 35,
+      "m_unrouted": 0,
+      "dice": 126,
+      "yusuf_entry": 2,
+      "sir_entry": 2,
+      "yusuf_javelins": 2,
+      "sir_javelins": 2,
+      "spear_wall": 2,
+      "decisions": [
+        {
+          "kind": "javelins",
+          "lord": "alfonso",
+          "round": 1,
+          "step": "1.b",
+          "position": "front_center"
+        },
+        {
+          "kind": "javelins",
+          "lord": "yusuf",
+          "round": 2,
+          "step": "1.a",
+          "position": "front_center"
+        },
+        {
+          "kind": "javelins",
+          "lord": "sir",
+          "round": 2,
+          "step": "1.a",
+          "position": "front_left"
+        },
+        {
+          "kind": "spear_wall",
+          "lords": [
+            "yusuf"
+          ],
+          "round": 2,
+          "step": "2.b"
+        }
+      ],
+      "round_details": [
+        {
+          "index": 1,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 7.0,
+              "rounded_hits": 8,
+              "units_routed": 2,
+              "losses": {
+                "knights": 2
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 9.5,
+              "rounded_hits": 10,
+              "units_routed": 9,
+              "losses": {
+                "light_horse": 6,
+                "militia": 3
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 3.5,
+              "rounded_hits": 4,
+              "units_routed": 1,
+              "losses": {
+                "knights": 1
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 31.5,
+              "rounded_hits": 32,
+              "units_routed": 12,
+              "losses": {
+                "militia": 8,
+                "sergeants": 1,
+                "light_horse": 1,
+                "men_at_arms": 2
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 0.0,
+              "rounded_hits": 0,
+              "units_routed": 0,
+              "losses": {}
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 10.5,
+              "rounded_hits": 11,
+              "units_routed": 2,
+              "losses": {
+                "sergeants": 2
+              }
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 17.0,
+              "rounded_hits": 17,
+              "units_routed": 7,
+              "losses": {
+                "knights": 2,
+                "men_at_arms": 2,
+                "sergeants": 3
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 8.0,
+              "rounded_hits": 8,
+              "units_routed": 7,
+              "losses": {
+                "african_horse": 5,
+                "militia": 2
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 4.5,
+              "rounded_hits": 5,
+              "units_routed": 4,
+              "losses": {
+                "knights": 2,
+                "militia": 1,
+                "serfs": 1
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 16.5,
+              "rounded_hits": 17,
+              "units_routed": 7,
+              "losses": {
+                "african_foot": 7
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 9.0,
+              "rounded_hits": 9,
+              "units_routed": 3,
+              "losses": {
+                "knights": 3
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 7.5,
+              "rounded_hits": 8,
+              "units_routed": 3,
+              "losses": {
+                "african_foot": 1,
+                "sergeants": 2
+              }
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 3.0,
+              "rounded_hits": 3,
+              "units_routed": 3,
+              "losses": {
+                "men_at_arms": 2,
+                "sergeants": 1
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 6.0,
+              "rounded_hits": 6,
+              "units_routed": 5,
+              "losses": {
+                "african_horse": 5
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 0.0,
+              "rounded_hits": 0,
+              "units_routed": 0,
+              "losses": {}
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 20.0,
+              "rounded_hits": 20,
+              "units_routed": 9,
+              "losses": {
+                "militia": 4,
+                "african_foot": 5
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 1,
+              "losses": {
+                "sergeants": 1
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 10.5,
+              "rounded_hits": 11,
+              "units_routed": 1,
+              "losses": {
+                "african_foot": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "muslim": {
+      "seed": 40007,
+      "winner": "muslim",
+      "rounds": 5,
+      "c_unrouted": 0,
+      "m_unrouted": 10,
+      "dice": 147,
+      "yusuf_entry": 2,
+      "sir_entry": 2,
+      "yusuf_javelins": 2,
+      "sir_javelins": 2,
+      "spear_wall": 2,
+      "decisions": [
+        {
+          "kind": "javelins",
+          "lord": "alfonso",
+          "round": 1,
+          "step": "1.b",
+          "position": "front_center"
+        },
+        {
+          "kind": "javelins",
+          "lord": "yusuf",
+          "round": 2,
+          "step": "1.a",
+          "position": "front_center"
+        },
+        {
+          "kind": "javelins",
+          "lord": "sir",
+          "round": 2,
+          "step": "1.a",
+          "position": "front_right"
+        },
+        {
+          "kind": "spear_wall",
+          "lords": [
+            "sir",
+            "yusuf"
+          ],
+          "round": 2,
+          "step": "2.b"
+        }
+      ],
+      "round_details": [
+        {
+          "index": 1,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 7.0,
+              "rounded_hits": 8,
+              "units_routed": 2,
+              "losses": {
+                "knights": 2
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 9.5,
+              "rounded_hits": 10,
+              "units_routed": 9,
+              "losses": {
+                "light_horse": 6,
+                "militia": 3
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 3.5,
+              "rounded_hits": 4,
+              "units_routed": 3,
+              "losses": {
+                "knights": 3
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 27.5,
+              "rounded_hits": 28,
+              "units_routed": 7,
+              "losses": {
+                "militia": 5,
+                "sergeants": 1,
+                "light_horse": 1
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 3.5,
+              "rounded_hits": 4,
+              "units_routed": 2,
+              "losses": {
+                "men_at_arms": 2
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 8.5,
+              "rounded_hits": 9,
+              "units_routed": 5,
+              "losses": {
+                "militia": 3,
+                "men_at_arms": 2
+              }
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 17.0,
+              "rounded_hits": 17,
+              "units_routed": 11,
+              "losses": {
+                "knights": 6,
+                "men_at_arms": 2,
+                "sergeants": 3
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 7.0,
+              "rounded_hits": 8,
+              "units_routed": 8,
+              "losses": {
+                "african_horse": 7,
+                "sergeants": 1
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 4.5,
+              "rounded_hits": 5,
+              "units_routed": 3,
+              "losses": {
+                "knights": 1,
+                "men_at_arms": 2
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 6.5,
+              "rounded_hits": 7,
+              "units_routed": 3,
+              "losses": {
+                "african_horse": 2,
+                "militia": 1
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 16.5,
+              "rounded_hits": 17,
+              "units_routed": 12,
+              "losses": {
+                "sergeants": 2,
+                "militia": 5,
+                "serfs": 2,
+                "light_horse": 3
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 1,
+              "losses": {
+                "sergeants": 1
+              }
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 7.0,
+              "rounded_hits": 7,
+              "units_routed": 4,
+              "losses": {
+                "knights": 3,
+                "men_at_arms": 1
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 1,
+              "losses": {
+                "militia": 1
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 2.5,
+              "rounded_hits": 3,
+              "units_routed": 1,
+              "losses": {
+                "serfs": 1
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 9.5,
+              "rounded_hits": 10,
+              "units_routed": 7,
+              "losses": {
+                "african_foot": 7
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 9.0,
+              "rounded_hits": 9,
+              "units_routed": 6,
+              "losses": {
+                "knights": 1,
+                "men_at_arms": 4,
+                "sergeants": 1
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 2.0,
+              "rounded_hits": 2,
+              "units_routed": 2,
+              "losses": {
+                "african_foot": 1,
+                "sergeants": 1
+              }
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 3.0,
+              "rounded_hits": 3,
+              "units_routed": 3,
+              "losses": {
+                "sergeants": 2,
+                "light_horse": 1
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 0,
+              "losses": {}
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 1.5,
+              "rounded_hits": 2,
+              "units_routed": 2,
+              "losses": {
+                "light_horse": 2
+              }
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 3.0,
+              "rounded_hits": 3,
+              "units_routed": 0,
+              "losses": {}
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 8.0,
+              "rounded_hits": 8,
+              "units_routed": 2,
+              "losses": {
+                "militia": 1,
+                "serfs": 1
+              }
+            },
+            {
+              "step": "2.d",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 0,
+              "losses": {}
+            }
+          ]
+        },
+        {
+          "index": 5,
+          "steps": [
+            {
+              "step": "1.a",
+              "actor": "defender",
+              "raw_hits": 3.0,
+              "rounded_hits": 3,
+              "units_routed": 2,
+              "losses": {
+                "sergeants": 2
+              }
+            },
+            {
+              "step": "1.b",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 1,
+              "losses": {
+                "sergeants": 1
+              }
+            },
+            {
+              "step": "2.a",
+              "actor": "defender",
+              "raw_hits": 0.5,
+              "rounded_hits": 1,
+              "units_routed": 0,
+              "losses": {}
+            },
+            {
+              "step": "2.b",
+              "actor": "attacker",
+              "raw_hits": 1.0,
+              "rounded_hits": 1,
+              "units_routed": 1,
+              "losses": {
+                "african_horse": 1
+              }
+            },
+            {
+              "step": "2.c",
+              "actor": "defender",
+              "raw_hits": 8.0,
+              "rounded_hits": 8,
+              "units_routed": 3,
+              "losses": {
+                "sergeants": 1,
+                "militia": 1,
+                "serfs": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

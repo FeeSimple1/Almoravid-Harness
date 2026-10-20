@@ -1,0 +1,289 @@
+{
+  "n": 2000,
+  "seed_start": 40000,
+  "m_response": "m1_yusuf_w",
+  "christian_profiles": [
+    {
+      "id": "c0_default_w",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c0_front_a",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "armored_first"
+    }
+  ],
+  "muslim_profiles": [
+    {
+      "id": "m0_yusuf_w",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m0_yusuf_w_guard",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "wall_guard"
+    },
+    {
+      "id": "m1_yusuf_w",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m1_yusuf_w_guard",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "wall_guard"
+    },
+    {
+      "id": "m3_sir_w",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m3_sir_w_guard",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "wall_guard"
+    }
+  ],
+  "summaries": {
+    "c0_default_w__m0_yusuf_w": {
+      "n": 2000,
+      "muslim_wins": 113,
+      "muslim_rate": 0.0565,
+      "ci95": [
+        0.04720544161779262,
+        0.06749497932067872
+      ],
+      "mean_rounds": 4.1485,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0385
+    },
+    "c0_default_w__m0_yusuf_w_guard": {
+      "n": 2000,
+      "muslim_wins": 122,
+      "muslim_rate": 0.061,
+      "ci95": [
+        0.05132898110812262,
+        0.07235418640481744
+      ],
+      "mean_rounds": 4.2125,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0385
+    },
+    "c0_default_w__m1_yusuf_w": {
+      "n": 2000,
+      "muslim_wins": 213,
+      "muslim_rate": 0.1065,
+      "ci95": [
+        0.09372694290202033,
+        0.12078177330832571
+      ],
+      "mean_rounds": 4.153,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0075
+    },
+    "c0_default_w__m1_yusuf_w_guard": {
+      "n": 2000,
+      "muslim_wins": 224,
+      "muslim_rate": 0.112,
+      "ci95": [
+        0.09891575901603857,
+        0.12657186967421372
+      ],
+      "mean_rounds": 4.2465,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0075
+    },
+    "c0_default_w__m3_sir_w": {
+      "n": 2000,
+      "muslim_wins": 270,
+      "muslim_rate": 0.135,
+      "ci95": [
+        0.1207213108764002,
+        0.1506781336389144
+      ],
+      "mean_rounds": 4.225,
+      "mean_yusuf_javelin_round": 2.004,
+      "mean_sir_javelin_round": 2
+    },
+    "c0_default_w__m3_sir_w_guard": {
+      "n": 2000,
+      "muslim_wins": 252,
+      "muslim_rate": 0.126,
+      "ci95": [
+        0.1121695714841233,
+        0.14126437988225385
+      ],
+      "mean_rounds": 4.2845,
+      "mean_yusuf_javelin_round": 2.004,
+      "mean_sir_javelin_round": 2
+    },
+    "c0_front_a__m0_yusuf_w": {
+      "n": 2000,
+      "muslim_wins": 6,
+      "muslim_rate": 0.003,
+      "ci95": [
+        0.0013756299236301083,
+        0.006529915073935308
+      ],
+      "mean_rounds": 3.2605,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.003
+    },
+    "c0_front_a__m0_yusuf_w_guard": {
+      "n": 2000,
+      "muslim_wins": 5,
+      "muslim_rate": 0.0025,
+      "ci95": [
+        0.0010683087284139143,
+        0.005839153316432755
+      ],
+      "mean_rounds": 3.296,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.003
+    },
+    "c0_front_a__m1_yusuf_w": {
+      "n": 2000,
+      "muslim_wins": 53,
+      "muslim_rate": 0.0265,
+      "ci95": [
+        0.020316920414969065,
+        0.03449852336037745
+      ],
+      "mean_rounds": 3.3425,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0005
+    },
+    "c0_front_a__m1_yusuf_w_guard": {
+      "n": 2000,
+      "muslim_wins": 47,
+      "muslim_rate": 0.0235,
+      "ci95": [
+        0.017718224361690932,
+        0.031108721697343113
+      ],
+      "mean_rounds": 3.349,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0005
+    },
+    "c0_front_a__m3_sir_w": {
+      "n": 2000,
+      "muslim_wins": 40,
+      "muslim_rate": 0.02,
+      "ci95": [
+        0.014721726201265444,
+        0.027118639188737373
+      ],
+      "mean_rounds": 3.258,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2
+    },
+    "c0_front_a__m3_sir_w_guard": {
+      "n": 2000,
+      "muslim_wins": 35,
+      "muslim_rate": 0.0175,
+      "ci95": [
+        0.012609752959581211,
+        0.024240197666827872
+      ],
+      "mean_rounds": 3.293,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2
+    }
+  },
+  "effects": {
+    "c0_default_w__m0_yusuf_w_guard": {
+      "muslim_delta": 0.0045,
+      "paired_ci95": [
+        -0.005251320316960261,
+        0.014251320316960261
+      ]
+    },
+    "c0_default_w__m1_yusuf_w_guard": {
+      "muslim_delta": 0.0055,
+      "paired_ci95": [
+        -0.004824708015135291,
+        0.01582470801513529
+      ]
+    },
+    "c0_default_w__m3_sir_w_guard": {
+      "muslim_delta": -0.009,
+      "paired_ci95": [
+        -0.0206743034002008,
+        0.0026743034002008007
+      ]
+    },
+    "c0_front_a__m0_yusuf_w_guard": {
+      "muslim_delta": -0.0005,
+      "paired_ci95": [
+        -0.002197692810976185,
+        0.0011976928109761846
+      ]
+    },
+    "c0_front_a__m1_yusuf_w_guard": {
+      "muslim_delta": -0.003,
+      "paired_ci95": [
+        -0.008879999999999999,
+        0.0028799999999999997
+      ]
+    },
+    "c0_front_a__m3_sir_w_guard": {
+      "muslim_delta": -0.0025,
+      "paired_ci95": [
+        -0.007777643580318818,
+        0.0027776435803188184
+      ]
+    }
+  }
+}

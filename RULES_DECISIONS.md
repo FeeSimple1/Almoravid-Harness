@@ -462,3 +462,16 @@ round, with None preserving the existing side-wide standing schedule. The
 field round-trips through combat snapshots. This is rules implementation,
 not a house rule or a historical outcome adjustment. The batch study selects
 these existing battle inputs and uses the harness's own combat resolver.
+
+
+## 2026-10-20 — Reactive Sagrajas timing study
+
+Rules 4.4.2 JAVELINS permits each Lord to declare use at the moment of
+use. The Arts of War M7 Spear Wall tips permit activation at any time
+during one Round, affecting the rest of that Round. BattleSide timing
+may therefore remain None (undeclared), and the battle resolver offers an
+opt-in before_strike callback after Reposition and before that Strike's
+dice. A newly selected M7 round is activated immediately before resolving
+the pending step. Fixed schedules and ordinary atomic callers are unchanged.
+The study uses this choice point and existing absorption policies; it does
+not replace the combat engine. No historical outcome is imposed.

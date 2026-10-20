@@ -35,6 +35,7 @@ Bug-pattern preemption:
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
@@ -154,7 +155,7 @@ class BattleSide:
     # (Javelins) fire; `m7_round` is the Round M7 Spear Wall is in effect;
     # `m7_owned` marks that M7 was set up for this side (Muslim) so the
     # Round loop can gate its activation/discard to `m7_round`.
-    oneround_round: int = 1
+    oneround_round: int | None = 1
     # Transient per-Round missile-capability scoping for the pooled
     # Storm path (d4f4ec3 fixed the same this_lord leak on the pooled
     # BATTLE path via side.array; Storm sides carry no array). When
@@ -163,7 +164,8 @@ class BattleSide:
     # pooled union. Recomputed by _storm_run_round each Round; never
     # restored from snapshots.
     cap_groups: list[Any] | None = None
-    m7_round: int = 1
+    # None withholds the effect until the owner declares its use.
+    m7_round: int | None = 1
     m7_owned: bool = False
     # Phase 6e: per-Lord Array slots. None for single-Lord (legacy).
     array: list[LordPosition] | None = None
@@ -1085,6 +1087,7 @@ def _battle_one_round(
     round_idx: int,
     *,
     defender_walls_range: tuple[int, int] | None = None,
+    before_strike: Callable[[BattleSide, BattleSide, int, str], None] | None = None,
 ) -> BattleRound:
     """Resolve a single open-field Battle Round: Reposition (Round 2+),
     the Strike steps (M6 Feigned-Retreat reorder on Round 2), and the
@@ -1104,7 +1107,7 @@ def _battle_one_round(
     _mus = attacker if attacker.side == "muslim" else defender
     if _mus.m7_owned:
         _held = state.decks.this_levy_events.setdefault("muslim", [])
-        if round_idx < _mus.m7_round:
+        if _mus.m7_round is None or round_idx < _mus.m7_round:
             # Suppress (not "Used") before the chosen Round: just remove it
             # from the in-effect set. If the Battle ends before m7_round the
             # card never reaches decks.discard, but that is harmless -- the
@@ -1148,6 +1151,16 @@ def _battle_one_round(
         steps_this_round = _BATTLE_STEPS
     c8_ctx = _build_c8_ctx(state, attacker, defender, round_idx)
     for step_id, actor_role, step_type, unit_class in steps_this_round:
+        # 4.4.2 JAVELINS / Arts of War M7: owners may decide at the
+        # moment of use, after Reposition and earlier Strikes. The hook
+        # receives live armies, but no seed, RNG counter or future dice.
+        # It is opt-in; existing atomic callers retain their schedules.
+        if before_strike is not None:
+            before_strike(attacker, defender, round_idx, step_id)
+            if _mus.m7_owned and _mus.m7_round == round_idx:
+                held = state.decks.this_levy_events.setdefault("muslim", [])
+                if "M7" not in held:
+                    held.append("M7")
         step_res = _resolve_step(state, step_id, actor_role, step_type,
                                   unit_class, attacker, defender,
                                   round_index=round_idx,
@@ -1160,7 +1173,8 @@ def _battle_one_round(
     # M7 Spear Wall after its owner-chosen Round (default 1).
     if round_idx == 1:
         _discard_round1_events(state, ["C8"])
-    if _mus.m7_owned and round_idx >= _mus.m7_round:
+    if (_mus.m7_owned and _mus.m7_round is not None
+            and round_idx >= _mus.m7_round):
         _discard_round1_events(state, ["M7"])
     # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
     if round_idx == 2:
@@ -1177,6 +1191,7 @@ def resolve_battle(
     defender_walls_range: tuple[int, int] | None = None,
     attacker_concede_round: int | None = None,
     defender_concede_round: int | None = None,
+    before_strike: Callable[[BattleSide, BattleSide, int, str], None] | None = None,
 ) -> BattleResult:
     """Full Battle resolution per rule 4.4 (Phase 5e: single-Lord case).
 
@@ -1184,7 +1199,9 @@ def resolve_battle(
     without a round limit. An explicit max_rounds is available only
     for internal bounded probes; game actions must leave it unset.
 
-    Winner = side with unrouted units when battle ends.
+    Winner = side with unrouted units when battle ends. An optional
+    before_strike callback supplies reactive timing decisions using only
+    the armies and the current round/step; combat still resolves here.
     """
     result = BattleResult(
         engagement="battle",
@@ -1215,7 +1232,8 @@ def resolve_battle(
                 and round_idx >= defender_concede_round):
             defender.conceded = True
         rnd = _battle_one_round(state, attacker, defender, round_idx,
-                                defender_walls_range=defender_walls_range)
+                                defender_walls_range=defender_walls_range,
+                                before_strike=before_strike)
         result.rounds.append(rnd)
         if attacker.conceded or defender.conceded:
             result.notes.append(

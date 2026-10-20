@@ -1,0 +1,874 @@
+{
+  "train_n": 100,
+  "test_n": 3000,
+  "training_seed_start": 20000,
+  "testing_seed_start": 30000,
+  "christian_profiles": [
+    {
+      "id": "c0_default_w",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c0_default_a",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "armored_first"
+    },
+    {
+      "id": "c0_front_w",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c0_front_a",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "garcia_ordonez",
+        "pedro_ansurez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "armored_first"
+    },
+    {
+      "id": "c1_default_w",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c1_default_a",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "armored_first"
+    },
+    {
+      "id": "c1_front_w",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c1_front_a",
+      "order": [
+        "alfonso",
+        "alvar_fanez",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "armored_first"
+    },
+    {
+      "id": "c2_default_w",
+      "order": [
+        "alfonso",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "alvar_fanez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c2_default_a",
+      "order": [
+        "alfonso",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "alvar_fanez",
+        "sancho"
+      ],
+      "bow": "default",
+      "absorb": "armored_first"
+    },
+    {
+      "id": "c2_front_w",
+      "order": [
+        "alfonso",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "alvar_fanez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "c2_front_a",
+      "order": [
+        "alfonso",
+        "pedro_ansurez",
+        "garcia_ordonez",
+        "alvar_fanez",
+        "sancho"
+      ],
+      "bow": "front",
+      "absorb": "armored_first"
+    }
+  ],
+  "muslim_profiles": [
+    {
+      "id": "m0_yusuf_w",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m0_yusuf_a",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m0_sir_w",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m0_sir_a",
+      "order": [
+        "abd_allah",
+        "al_mutawakkil",
+        "al_mutamid",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m1_yusuf_w",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m1_yusuf_a",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m1_sir_w",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m1_sir_a",
+      "order": [
+        "abd_allah",
+        "al_mutamid",
+        "al_mutawakkil",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m2_yusuf_w",
+      "order": [
+        "al_mutawakkil",
+        "abd_allah",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m2_yusuf_a",
+      "order": [
+        "al_mutawakkil",
+        "abd_allah",
+        "al_mutamid",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m2_sir_w",
+      "order": [
+        "al_mutawakkil",
+        "abd_allah",
+        "al_mutamid",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m2_sir_a",
+      "order": [
+        "al_mutawakkil",
+        "abd_allah",
+        "al_mutamid",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m3_yusuf_w",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m3_yusuf_a",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m3_sir_w",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m3_sir_a",
+      "order": [
+        "al_mutawakkil",
+        "al_mutamid",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m4_yusuf_w",
+      "order": [
+        "al_mutamid",
+        "abd_allah",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m4_yusuf_a",
+      "order": [
+        "al_mutamid",
+        "abd_allah",
+        "al_mutawakkil",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m4_sir_w",
+      "order": [
+        "al_mutamid",
+        "abd_allah",
+        "al_mutawakkil",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m4_sir_a",
+      "order": [
+        "al_mutamid",
+        "abd_allah",
+        "al_mutawakkil",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m5_yusuf_w",
+      "order": [
+        "al_mutamid",
+        "al_mutawakkil",
+        "abd_allah",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m5_yusuf_a",
+      "order": [
+        "al_mutamid",
+        "al_mutawakkil",
+        "abd_allah",
+        "yusuf",
+        "sir"
+      ],
+      "absorb": "armored_first"
+    },
+    {
+      "id": "m5_sir_w",
+      "order": [
+        "al_mutamid",
+        "al_mutawakkil",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "weakest_first"
+    },
+    {
+      "id": "m5_sir_a",
+      "order": [
+        "al_mutamid",
+        "al_mutawakkil",
+        "abd_allah",
+        "sir",
+        "yusuf"
+      ],
+      "absorb": "armored_first"
+    }
+  ],
+  "selection": {
+    "c_default": "c0_default_w",
+    "m_default": "m0_yusuf_w",
+    "c_robust": "c0_front_a",
+    "m_robust": "m0_yusuf_w",
+    "m_vs_default": "m3_sir_w",
+    "c_response": "c0_front_a"
+  },
+  "training_scores": {
+    "c0_default_w__m0_yusuf_w": 0.03,
+    "c0_default_w__m0_yusuf_a": 0.01,
+    "c0_default_w__m0_sir_w": 0.03,
+    "c0_default_w__m0_sir_a": 0.04,
+    "c0_default_w__m1_yusuf_w": 0.05,
+    "c0_default_w__m1_yusuf_a": 0.04,
+    "c0_default_w__m1_sir_w": 0.1,
+    "c0_default_w__m1_sir_a": 0.03,
+    "c0_default_w__m2_yusuf_w": 0.03,
+    "c0_default_w__m2_yusuf_a": 0.05,
+    "c0_default_w__m2_sir_w": 0.05,
+    "c0_default_w__m2_sir_a": 0.06,
+    "c0_default_w__m3_yusuf_w": 0.09,
+    "c0_default_w__m3_yusuf_a": 0.04,
+    "c0_default_w__m3_sir_w": 0.13,
+    "c0_default_w__m3_sir_a": 0.09,
+    "c0_default_w__m4_yusuf_w": 0.0,
+    "c0_default_w__m4_yusuf_a": 0.01,
+    "c0_default_w__m4_sir_w": 0.01,
+    "c0_default_w__m4_sir_a": 0.0,
+    "c0_default_w__m5_yusuf_w": 0.02,
+    "c0_default_w__m5_yusuf_a": 0.04,
+    "c0_default_w__m5_sir_w": 0.03,
+    "c0_default_w__m5_sir_a": 0.04,
+    "c0_default_a__m0_yusuf_w": 0.14,
+    "c0_default_a__m0_yusuf_a": 0.07,
+    "c0_default_a__m0_sir_w": 0.15,
+    "c0_default_a__m0_sir_a": 0.07,
+    "c0_default_a__m1_yusuf_w": 0.12,
+    "c0_default_a__m1_yusuf_a": 0.04,
+    "c0_default_a__m1_sir_w": 0.13,
+    "c0_default_a__m1_sir_a": 0.04,
+    "c0_default_a__m2_yusuf_w": 0.11,
+    "c0_default_a__m2_yusuf_a": 0.04,
+    "c0_default_a__m2_sir_w": 0.1,
+    "c0_default_a__m2_sir_a": 0.04,
+    "c0_default_a__m3_yusuf_w": 0.09,
+    "c0_default_a__m3_yusuf_a": 0.02,
+    "c0_default_a__m3_sir_w": 0.04,
+    "c0_default_a__m3_sir_a": 0.02,
+    "c0_default_a__m4_yusuf_w": 0.03,
+    "c0_default_a__m4_yusuf_a": 0.05,
+    "c0_default_a__m4_sir_w": 0.04,
+    "c0_default_a__m4_sir_a": 0.04,
+    "c0_default_a__m5_yusuf_w": 0.01,
+    "c0_default_a__m5_yusuf_a": 0.03,
+    "c0_default_a__m5_sir_w": 0.02,
+    "c0_default_a__m5_sir_a": 0.02,
+    "c0_front_w__m0_yusuf_w": 0.01,
+    "c0_front_w__m0_yusuf_a": 0.01,
+    "c0_front_w__m0_sir_w": 0.02,
+    "c0_front_w__m0_sir_a": 0.0,
+    "c0_front_w__m1_yusuf_w": 0.06,
+    "c0_front_w__m1_yusuf_a": 0.07,
+    "c0_front_w__m1_sir_w": 0.05,
+    "c0_front_w__m1_sir_a": 0.04,
+    "c0_front_w__m2_yusuf_w": 0.0,
+    "c0_front_w__m2_yusuf_a": 0.01,
+    "c0_front_w__m2_sir_w": 0.03,
+    "c0_front_w__m2_sir_a": 0.02,
+    "c0_front_w__m3_yusuf_w": 0.09,
+    "c0_front_w__m3_yusuf_a": 0.05,
+    "c0_front_w__m3_sir_w": 0.07,
+    "c0_front_w__m3_sir_a": 0.02,
+    "c0_front_w__m4_yusuf_w": 0.01,
+    "c0_front_w__m4_yusuf_a": 0.0,
+    "c0_front_w__m4_sir_w": 0.0,
+    "c0_front_w__m4_sir_a": 0.0,
+    "c0_front_w__m5_yusuf_w": 0.0,
+    "c0_front_w__m5_yusuf_a": 0.01,
+    "c0_front_w__m5_sir_w": 0.0,
+    "c0_front_w__m5_sir_a": 0.0,
+    "c0_front_a__m0_yusuf_w": 0.0,
+    "c0_front_a__m0_yusuf_a": 0.0,
+    "c0_front_a__m0_sir_w": 0.0,
+    "c0_front_a__m0_sir_a": 0.0,
+    "c0_front_a__m1_yusuf_w": 0.02,
+    "c0_front_a__m1_yusuf_a": 0.0,
+    "c0_front_a__m1_sir_w": 0.01,
+    "c0_front_a__m1_sir_a": 0.0,
+    "c0_front_a__m2_yusuf_w": 0.0,
+    "c0_front_a__m2_yusuf_a": 0.0,
+    "c0_front_a__m2_sir_w": 0.0,
+    "c0_front_a__m2_sir_a": 0.0,
+    "c0_front_a__m3_yusuf_w": 0.01,
+    "c0_front_a__m3_yusuf_a": 0.0,
+    "c0_front_a__m3_sir_w": 0.01,
+    "c0_front_a__m3_sir_a": 0.0,
+    "c0_front_a__m4_yusuf_w": 0.0,
+    "c0_front_a__m4_yusuf_a": 0.0,
+    "c0_front_a__m4_sir_w": 0.0,
+    "c0_front_a__m4_sir_a": 0.0,
+    "c0_front_a__m5_yusuf_w": 0.0,
+    "c0_front_a__m5_yusuf_a": 0.01,
+    "c0_front_a__m5_sir_w": 0.0,
+    "c0_front_a__m5_sir_a": 0.0,
+    "c1_default_w__m0_yusuf_w": 0.04,
+    "c1_default_w__m0_yusuf_a": 0.03,
+    "c1_default_w__m0_sir_w": 0.06,
+    "c1_default_w__m0_sir_a": 0.03,
+    "c1_default_w__m1_yusuf_w": 0.09,
+    "c1_default_w__m1_yusuf_a": 0.06,
+    "c1_default_w__m1_sir_w": 0.1,
+    "c1_default_w__m1_sir_a": 0.02,
+    "c1_default_w__m2_yusuf_w": 0.07,
+    "c1_default_w__m2_yusuf_a": 0.04,
+    "c1_default_w__m2_sir_w": 0.03,
+    "c1_default_w__m2_sir_a": 0.03,
+    "c1_default_w__m3_yusuf_w": 0.05,
+    "c1_default_w__m3_yusuf_a": 0.03,
+    "c1_default_w__m3_sir_w": 0.11,
+    "c1_default_w__m3_sir_a": 0.06,
+    "c1_default_w__m4_yusuf_w": 0.01,
+    "c1_default_w__m4_yusuf_a": 0.0,
+    "c1_default_w__m4_sir_w": 0.02,
+    "c1_default_w__m4_sir_a": 0.02,
+    "c1_default_w__m5_yusuf_w": 0.02,
+    "c1_default_w__m5_yusuf_a": 0.01,
+    "c1_default_w__m5_sir_w": 0.02,
+    "c1_default_w__m5_sir_a": 0.03,
+    "c1_default_a__m0_yusuf_w": 0.13,
+    "c1_default_a__m0_yusuf_a": 0.06,
+    "c1_default_a__m0_sir_w": 0.12,
+    "c1_default_a__m0_sir_a": 0.05,
+    "c1_default_a__m1_yusuf_w": 0.11,
+    "c1_default_a__m1_yusuf_a": 0.04,
+    "c1_default_a__m1_sir_w": 0.11,
+    "c1_default_a__m1_sir_a": 0.04,
+    "c1_default_a__m2_yusuf_w": 0.06,
+    "c1_default_a__m2_yusuf_a": 0.05,
+    "c1_default_a__m2_sir_w": 0.13,
+    "c1_default_a__m2_sir_a": 0.04,
+    "c1_default_a__m3_yusuf_w": 0.05,
+    "c1_default_a__m3_yusuf_a": 0.02,
+    "c1_default_a__m3_sir_w": 0.04,
+    "c1_default_a__m3_sir_a": 0.03,
+    "c1_default_a__m4_yusuf_w": 0.03,
+    "c1_default_a__m4_yusuf_a": 0.03,
+    "c1_default_a__m4_sir_w": 0.01,
+    "c1_default_a__m4_sir_a": 0.02,
+    "c1_default_a__m5_yusuf_w": 0.01,
+    "c1_default_a__m5_yusuf_a": 0.03,
+    "c1_default_a__m5_sir_w": 0.02,
+    "c1_default_a__m5_sir_a": 0.01,
+    "c1_front_w__m0_yusuf_w": 0.0,
+    "c1_front_w__m0_yusuf_a": 0.01,
+    "c1_front_w__m0_sir_w": 0.0,
+    "c1_front_w__m0_sir_a": 0.0,
+    "c1_front_w__m1_yusuf_w": 0.03,
+    "c1_front_w__m1_yusuf_a": 0.04,
+    "c1_front_w__m1_sir_w": 0.03,
+    "c1_front_w__m1_sir_a": 0.03,
+    "c1_front_w__m2_yusuf_w": 0.01,
+    "c1_front_w__m2_yusuf_a": 0.01,
+    "c1_front_w__m2_sir_w": 0.0,
+    "c1_front_w__m2_sir_a": 0.01,
+    "c1_front_w__m3_yusuf_w": 0.05,
+    "c1_front_w__m3_yusuf_a": 0.01,
+    "c1_front_w__m3_sir_w": 0.05,
+    "c1_front_w__m3_sir_a": 0.01,
+    "c1_front_w__m4_yusuf_w": 0.0,
+    "c1_front_w__m4_yusuf_a": 0.0,
+    "c1_front_w__m4_sir_w": 0.0,
+    "c1_front_w__m4_sir_a": 0.0,
+    "c1_front_w__m5_yusuf_w": 0.0,
+    "c1_front_w__m5_yusuf_a": 0.01,
+    "c1_front_w__m5_sir_w": 0.0,
+    "c1_front_w__m5_sir_a": 0.01,
+    "c1_front_a__m0_yusuf_w": 0.0,
+    "c1_front_a__m0_yusuf_a": 0.0,
+    "c1_front_a__m0_sir_w": 0.0,
+    "c1_front_a__m0_sir_a": 0.0,
+    "c1_front_a__m1_yusuf_w": 0.01,
+    "c1_front_a__m1_yusuf_a": 0.01,
+    "c1_front_a__m1_sir_w": 0.0,
+    "c1_front_a__m1_sir_a": 0.01,
+    "c1_front_a__m2_yusuf_w": 0.0,
+    "c1_front_a__m2_yusuf_a": 0.0,
+    "c1_front_a__m2_sir_w": 0.0,
+    "c1_front_a__m2_sir_a": 0.0,
+    "c1_front_a__m3_yusuf_w": 0.02,
+    "c1_front_a__m3_yusuf_a": 0.0,
+    "c1_front_a__m3_sir_w": 0.02,
+    "c1_front_a__m3_sir_a": 0.0,
+    "c1_front_a__m4_yusuf_w": 0.0,
+    "c1_front_a__m4_yusuf_a": 0.0,
+    "c1_front_a__m4_sir_w": 0.0,
+    "c1_front_a__m4_sir_a": 0.0,
+    "c1_front_a__m5_yusuf_w": 0.0,
+    "c1_front_a__m5_yusuf_a": 0.01,
+    "c1_front_a__m5_sir_w": 0.0,
+    "c1_front_a__m5_sir_a": 0.01,
+    "c2_default_w__m0_yusuf_w": 0.02,
+    "c2_default_w__m0_yusuf_a": 0.04,
+    "c2_default_w__m0_sir_w": 0.04,
+    "c2_default_w__m0_sir_a": 0.04,
+    "c2_default_w__m1_yusuf_w": 0.01,
+    "c2_default_w__m1_yusuf_a": 0.0,
+    "c2_default_w__m1_sir_w": 0.01,
+    "c2_default_w__m1_sir_a": 0.02,
+    "c2_default_w__m2_yusuf_w": 0.05,
+    "c2_default_w__m2_yusuf_a": 0.03,
+    "c2_default_w__m2_sir_w": 0.08,
+    "c2_default_w__m2_sir_a": 0.04,
+    "c2_default_w__m3_yusuf_w": 0.03,
+    "c2_default_w__m3_yusuf_a": 0.02,
+    "c2_default_w__m3_sir_w": 0.01,
+    "c2_default_w__m3_sir_a": 0.03,
+    "c2_default_w__m4_yusuf_w": 0.01,
+    "c2_default_w__m4_yusuf_a": 0.01,
+    "c2_default_w__m4_sir_w": 0.02,
+    "c2_default_w__m4_sir_a": 0.02,
+    "c2_default_w__m5_yusuf_w": 0.02,
+    "c2_default_w__m5_yusuf_a": 0.01,
+    "c2_default_w__m5_sir_w": 0.01,
+    "c2_default_w__m5_sir_a": 0.0,
+    "c2_default_a__m0_yusuf_w": 0.12,
+    "c2_default_a__m0_yusuf_a": 0.04,
+    "c2_default_a__m0_sir_w": 0.14,
+    "c2_default_a__m0_sir_a": 0.08,
+    "c2_default_a__m1_yusuf_w": 0.07,
+    "c2_default_a__m1_yusuf_a": 0.03,
+    "c2_default_a__m1_sir_w": 0.1,
+    "c2_default_a__m1_sir_a": 0.05,
+    "c2_default_a__m2_yusuf_w": 0.1,
+    "c2_default_a__m2_yusuf_a": 0.02,
+    "c2_default_a__m2_sir_w": 0.11,
+    "c2_default_a__m2_sir_a": 0.05,
+    "c2_default_a__m3_yusuf_w": 0.08,
+    "c2_default_a__m3_yusuf_a": 0.02,
+    "c2_default_a__m3_sir_w": 0.06,
+    "c2_default_a__m3_sir_a": 0.01,
+    "c2_default_a__m4_yusuf_w": 0.03,
+    "c2_default_a__m4_yusuf_a": 0.04,
+    "c2_default_a__m4_sir_w": 0.07,
+    "c2_default_a__m4_sir_a": 0.04,
+    "c2_default_a__m5_yusuf_w": 0.01,
+    "c2_default_a__m5_yusuf_a": 0.02,
+    "c2_default_a__m5_sir_w": 0.01,
+    "c2_default_a__m5_sir_a": 0.02,
+    "c2_front_w__m0_yusuf_w": 0.03,
+    "c2_front_w__m0_yusuf_a": 0.02,
+    "c2_front_w__m0_sir_w": 0.02,
+    "c2_front_w__m0_sir_a": 0.0,
+    "c2_front_w__m1_yusuf_w": 0.0,
+    "c2_front_w__m1_yusuf_a": 0.0,
+    "c2_front_w__m1_sir_w": 0.01,
+    "c2_front_w__m1_sir_a": 0.0,
+    "c2_front_w__m2_yusuf_w": 0.02,
+    "c2_front_w__m2_yusuf_a": 0.03,
+    "c2_front_w__m2_sir_w": 0.02,
+    "c2_front_w__m2_sir_a": 0.01,
+    "c2_front_w__m3_yusuf_w": 0.01,
+    "c2_front_w__m3_yusuf_a": 0.01,
+    "c2_front_w__m3_sir_w": 0.01,
+    "c2_front_w__m3_sir_a": 0.0,
+    "c2_front_w__m4_yusuf_w": 0.04,
+    "c2_front_w__m4_yusuf_a": 0.01,
+    "c2_front_w__m4_sir_w": 0.03,
+    "c2_front_w__m4_sir_a": 0.01,
+    "c2_front_w__m5_yusuf_w": 0.0,
+    "c2_front_w__m5_yusuf_a": 0.0,
+    "c2_front_w__m5_sir_w": 0.0,
+    "c2_front_w__m5_sir_a": 0.0,
+    "c2_front_a__m0_yusuf_w": 0.04,
+    "c2_front_a__m0_yusuf_a": 0.0,
+    "c2_front_a__m0_sir_w": 0.0,
+    "c2_front_a__m0_sir_a": 0.0,
+    "c2_front_a__m1_yusuf_w": 0.01,
+    "c2_front_a__m1_yusuf_a": 0.0,
+    "c2_front_a__m1_sir_w": 0.0,
+    "c2_front_a__m1_sir_a": 0.0,
+    "c2_front_a__m2_yusuf_w": 0.0,
+    "c2_front_a__m2_yusuf_a": 0.0,
+    "c2_front_a__m2_sir_w": 0.0,
+    "c2_front_a__m2_sir_a": 0.0,
+    "c2_front_a__m3_yusuf_w": 0.0,
+    "c2_front_a__m3_yusuf_a": 0.0,
+    "c2_front_a__m3_sir_w": 0.0,
+    "c2_front_a__m3_sir_a": 0.0,
+    "c2_front_a__m4_yusuf_w": 0.01,
+    "c2_front_a__m4_yusuf_a": 0.02,
+    "c2_front_a__m4_sir_w": 0.02,
+    "c2_front_a__m4_sir_a": 0.01,
+    "c2_front_a__m5_yusuf_w": 0.0,
+    "c2_front_a__m5_yusuf_a": 0.0,
+    "c2_front_a__m5_sir_w": 0.0,
+    "c2_front_a__m5_sir_a": 0.0
+  },
+  "controls": {
+    "timing_none": {
+      "n": 3000,
+      "muslim_wins": 42,
+      "muslim_rate": 0.014,
+      "ci95": [
+        0.010374225398683868,
+        0.01886881556233297
+      ],
+      "mean_rounds": 3.7496666666666667,
+      "mean_yusuf_javelin_round": null,
+      "mean_sir_javelin_round": null
+    },
+    "timing_javelins": {
+      "n": 3000,
+      "muslim_wins": 144,
+      "muslim_rate": 0.048,
+      "ci95": [
+        0.04091172361423537,
+        0.05624435563345931
+      ],
+      "mean_rounds": 4.033333333333333,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0363333333333333
+    },
+    "timing_wall": {
+      "n": 3000,
+      "muslim_wins": 45,
+      "muslim_rate": 0.015,
+      "ci95": [
+        0.011229377297908946,
+        0.02001110596565724
+      ],
+      "mean_rounds": 3.8866666666666667,
+      "mean_yusuf_javelin_round": null,
+      "mean_sir_javelin_round": null
+    },
+    "timing_both": {
+      "n": 3000,
+      "muslim_wins": 147,
+      "muslim_rate": 0.049,
+      "ci95": [
+        0.041835590014624356,
+        0.05731793153561967
+      ],
+      "mean_rounds": 4.146,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0363333333333333
+    }
+  },
+  "heldout": {
+    "c0_default_w__m0_yusuf_w": {
+      "n": 3000,
+      "muslim_wins": 147,
+      "muslim_rate": 0.049,
+      "ci95": [
+        0.041835590014624356,
+        0.05731793153561967
+      ],
+      "mean_rounds": 4.146,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0363333333333333
+    },
+    "c0_default_w__m3_sir_w": {
+      "n": 3000,
+      "muslim_wins": 441,
+      "muslim_rate": 0.147,
+      "ci95": [
+        0.13478020979124428,
+        0.16012265740883586
+      ],
+      "mean_rounds": 4.202333333333334,
+      "mean_yusuf_javelin_round": 2.006,
+      "mean_sir_javelin_round": 2
+    },
+    "c0_front_a__m0_yusuf_w": {
+      "n": 3000,
+      "muslim_wins": 6,
+      "muslim_rate": 0.002,
+      "ci95": [
+        0.000916930269583324,
+        0.004356803060841335
+      ],
+      "mean_rounds": 3.2596666666666665,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2.0036666666666667
+    },
+    "c0_front_a__m3_sir_w": {
+      "n": 3000,
+      "muslim_wins": 52,
+      "muslim_rate": 0.017333333333333333,
+      "ci95": [
+        0.013242778833405518,
+        0.022658403136109142
+      ],
+      "mean_rounds": 3.2403333333333335,
+      "mean_yusuf_javelin_round": 2,
+      "mean_sir_javelin_round": 2
+    }
+  },
+  "effects": {
+    "timing_none": {
+      "muslim_delta": 0,
+      "paired_ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "timing_javelins": {
+      "muslim_delta": 0.034,
+      "paired_ci95": [
+        0.026036257197646982,
+        0.04196374280235302
+      ]
+    },
+    "timing_wall": {
+      "muslim_delta": 0.001,
+      "paired_ci95": [
+        -0.0001312291367298649,
+        0.002131229136729865
+      ]
+    },
+    "timing_both": {
+      "muslim_delta": 0.035,
+      "paired_ci95": [
+        0.027015026616618497,
+        0.04298497338338151
+      ]
+    },
+    "c0_default_w__m0_yusuf_w": {
+      "muslim_delta": 0.035,
+      "paired_ci95": [
+        0.027015026616618497,
+        0.04298497338338151
+      ]
+    },
+    "c0_default_w__m3_sir_w": {
+      "muslim_delta": 0.133,
+      "paired_ci95": [
+        0.11989961547203738,
+        0.14610038452796262
+      ]
+    },
+    "c0_front_a__m0_yusuf_w": {
+      "muslim_delta": -0.012,
+      "paired_ci95": [
+        -0.016506762345144445,
+        -0.007493237654855554
+      ]
+    },
+    "c0_front_a__m3_sir_w": {
+      "muslim_delta": 0.0033333333333333335,
+      "paired_ci95": [
+        -0.0029331290065753037,
+        0.00959979567324197
+      ]
+    }
+  }
+}
