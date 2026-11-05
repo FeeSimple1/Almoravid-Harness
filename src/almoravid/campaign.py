@@ -4426,7 +4426,8 @@ def _resolve_or_repend_approach(state: GameState, payload: dict[str, Any],
     return False
 
 
-def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_respond_avoid_battle(state: GameState, action: dict[str, Any], *,
+                           reaction_resolved: bool = False) -> dict[str, Any]:
     """4.3.4 Avoid Battle. Defender Lords move together to an adjacent
     Locale that:
       - is not the Locale the Active side came from (way_not_used_by_enemy_approach)
@@ -4448,22 +4449,6 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     locale_id = payload["locale_id"]
     from_locale = payload["from_locale_id"]
     active_side = payload["active_side"]
-
-    # C3/M3 Swollen River: the Approaching side may play it (Held) to block
-    # this Defender's Avoid Battle -> forced Stand/Battle, with no Asset
-    # discard for the cancelled Avoid (Arts of War ref C3/M3). Offer the
-    # decision to the Approaching side before the Avoid executes.
-    from almoravid.state import PendingDecision as _PD_sr
-    if not action.get("_resolved_block"):
-        _blk = "C3" if side == "muslim" else "M3"
-        if _blk in held_event_ids(state, active_side):
-            state.pending = _PD_sr(
-                kind="swollen_river_block", waiting_on=active_side,
-                payload={"march_payload": dict(payload),
-                         "avoid_action": dict(action),
-                         "defender_side": side, "blocker_card": _blk})
-            return {"pending": "swollen_river_block",
-                    "waiting_on": active_side, "blocker_card": _blk}
 
     target = action.get("target_locale_id")
     target = cast(str, target)
@@ -4501,6 +4486,17 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
     # Provender go to the Approaching Enemy Lords as Spoils (4.4.3),
     # divided among them.
     avoiding = _approach_subset(payload, action)   # C2 partition subset
+    # Always offer the Approaching side a reaction window, even with no
+    # Swollen River Held. The window itself must not disclose a private card.
+    # Validate the declared Avoid first, before parking its continuation.
+    if not reaction_resolved:
+        state.pending = PendingDecision(
+            kind="swollen_river_block", waiting_on=active_side,
+            payload={"march_payload": dict(payload), "avoid_action": dict(action),
+                     "defender_side": side,
+                     "blocker_card": "C3" if side == "muslim" else "M3"})
+        state.meta.active_player = active_side
+        return {"pending": "swollen_river_block", "waiting_on": active_side}
     discarded = {"loot": 0, "prov": 0}
     # E7 / 4.3.4 + 1.5.2 SHARED TRANSPORT: avoiding Lords move together
     # and Share Transport, so Provender capacity is the GROUP total —
@@ -4890,19 +4886,25 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
     p = pd.payload
     defender_side = p["defender_side"]
     blocker_card = p["blocker_card"]
+    play = action.get("play", False)
+    _require(isinstance(play, bool), "play must be true or false", code="bad_arg")
+    if play:
+        _require(blocker_card in held_event_ids(state, side),
+                 "Swollen River is not Held by the responding side", code="not_held")
     # Restore the Defender's march_arrival_response pending either way.
     state.pending = _PD_b(kind="march_arrival_response",
                           waiting_on=defender_side,
                           payload=p["march_payload"])
-    if action.get("play"):
-        if blocker_card in held_event_ids(state, side):
-            consume_held_event(state, side, blocker_card)
+    state.meta.active_player = defender_side
+    if play:
+        consume_held_event(state, side, blocker_card)
         state.decks.discard.append(blocker_card)
-        return _h_respond_stand_battle(
+        result = _h_respond_stand_battle(
             state, {"type": "respond_stand_battle", "side": defender_side})
+        result["swollen_river_played"] = blocker_card
+        return result
     avoid = dict(p["avoid_action"])
-    avoid["_resolved_block"] = True
-    return _h_respond_avoid_battle(state, avoid)
+    return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
 
 
 def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:

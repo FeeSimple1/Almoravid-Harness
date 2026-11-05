@@ -271,3 +271,19 @@ completed results remain in `grow_harvest_repairs` across interactive Wastage
 and saved-game continuations. The Calendar stays in the concluding Campaign's
 box until those decisions finish; Reset then unstacks Lords and advances it.
 The final Campaign ends in its existing box without those cleanup steps.
+
+## Avoid reaction and player visibility
+
+A legal `respond_avoid_battle` declaration always returns a
+`swollen_river_block` pending decision owned by the Approaching side. No
+Lords move or discard Assets yet. That player submits
+`respond_swollen_river_block` with `play: false` to complete the Avoid, or
+`play: true` to use a Held C3/M3 and force Battle. The menu offers Play only
+when available. This response step occurs with or without the card, keeping
+an unplayed Hold private. A played card is reported as `swollen_river_played`.
+
+With Hidden Mats enabled, Approach and this reaction window keep enemy mats
+concealed. Committed combat decisions and synchronous combat inspection reveal
+the actual participants. Other Lords remain concealed, including uninvolved
+garrisons in the same Locale. Saved reaction and combat decisions retain the
+same visibility rules.

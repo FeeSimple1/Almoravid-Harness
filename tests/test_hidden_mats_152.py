@@ -43,7 +43,7 @@ def test_lord_in_battle_is_revealed() -> None:
               if l.side == "muslim" and l.cylinder.kind == "locale")
     loc = ml.cylinder.locale_id
     s.pending = PendingDecision(
-        kind="march_arrival_response", waiting_on="muslim",
+        kind="battle_concede", waiting_on="muslim",
         payload={"locale_id": loc, "active_side": "christian",
                  "defender_lord_ids": [ml.id]})
     v = redacted_view(s, "christian")

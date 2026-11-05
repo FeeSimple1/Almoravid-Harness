@@ -46,14 +46,16 @@ def test_m13_severed_heads_ravaging_shift() -> None:
 
 
 def test_swollen_river_blocks_avoid_into_battle() -> None:
-    # Build an Approach where the Muslim defender wants to Avoid and the
-    # Christian approacher holds C3 to block it.
-    s = load_scenario("scenario_a_toledo_beset", seed=4)
-    # Drive into a march_arrival_response by constructing it directly is
-    # complex; instead assert the handler wiring + enumeration exist.
-    from almoravid.campaign import (_h_respond_swollen_river_block,
-                                    _h_respond_avoid_battle)
-    import inspect
-    src = inspect.getsource(_h_respond_avoid_battle)
-    assert "swollen_river_block" in src and "_resolved_block" in src
-    assert _h_respond_swollen_river_block is not None
+    from tests.test_interactive_approach_battle import _march_into_battle
+    state = _march_into_battle()
+    state.decks.draw = [cid for cid in state.decks.draw if cid != "C3"]
+    state.decks.held["christian"] = ["C3"]
+    result = apply_action(state, {"type": "respond_avoid_battle", "side": "muslim",
+                                 "target_locale_id": "palencia", "way_type": "road"})
+    assert result == {"pending": "swollen_river_block", "waiting_on": "christian"}
+    assert state.lords["al_mutamid"].cylinder.locale_id == "sahagun"
+    result = apply_action(state, {"type": "respond_swollen_river_block", "side": "christian",
+                                 "play": True})
+    assert result["swollen_river_played"] == "C3"
+    assert "C3" not in state.decks.held["christian"]
+    assert state.decks.discard.count("C3") == 1

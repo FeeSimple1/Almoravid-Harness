@@ -70,8 +70,11 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     if (state.pending is not None
             and state.pending.kind == "swollen_river_block"):
         w = state.pending.waiting_on
-        return [{"type": "respond_swollen_river_block", "side": w, "play": True},
-                {"type": "respond_swollen_river_block", "side": w, "play": False}]
+        from almoravid.events import held_event_ids
+        options = [{"type": "respond_swollen_river_block", "side": w, "play": False}]
+        if state.pending.payload["blocker_card"] in held_event_ids(state, w):
+            options.insert(0, {"type": "respond_swollen_river_block", "side": w, "play": True})
+        return options
 
     # C1 (4.3.5): after a Withdraw, the Active side must choose Besiege
     # or Bypass before any other action.

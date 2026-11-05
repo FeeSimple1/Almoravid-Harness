@@ -26,19 +26,29 @@ def _other(side: Side) -> Side:
     return "muslim" if side == "christian" else "christian"
 
 
-def _combat_revealed_locales(state: GameState) -> set[str]:
-    """Locales whose Lords are currently in Battle/Storm (mats face-up,
-    1.5.2), including the pauses between interactive combat rounds."""
+def _combat_revealed_lords(state: GameState) -> set[str]:
+    """Actual participants during combat or its interactive decisions."""
+    from almoravid.visibility import combat_visible_lords
+    revealed = set(combat_visible_lords(state))
     pd = state.pending
-    out: set[str] = set()
-    if pd is not None and pd.kind in {
-        "march_arrival_response", "battle_concede", "storm_concede",
-        "relief_concede",
-    }:
-        loc = pd.payload.get("locale_id", pd.payload.get("here"))
-        if isinstance(loc, str):
-            out.add(loc)
-    return out
+    if pd is None or pd.kind not in {
+            "battle_concede", "storm_concede", "relief_concede", "oneround_timing"}:
+        return revealed
+    payload = pd.payload
+    snapshots = [payload.get("attacker"), payload.get("defender")]
+    relief = payload.get("rs", {})
+    snapshots.extend(relief.get(key) for key in (
+        "marchers", "sallyers", "def_front", "def_rear"))
+    participants = {lid for snap in snapshots if isinstance(snap, dict)
+                    for lid in snap.get("lord_ids", [])}
+    if participants:
+        revealed.update(participants)
+    else:
+        # Compatibility for older pending saves that only name the Locale.
+        locale = payload.get("locale_id", payload.get("here"))
+        revealed.update(lid for lid, lord in state.lords.items()
+                        if lord.cylinder.kind == "locale" and lord.cylinder.locale_id == locale)
+    return revealed
 
 
 def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
@@ -53,12 +63,14 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     if dump.get("pending") is not None:
         for key in ("_wastage_resume", "_end_campaign_resume"):
             dump["pending"]["payload"].pop(key, None)
+        if dump["pending"]["waiting_on"] != viewer_side:
+            dump["pending"]["payload"].pop("blocker_card", None)
     # Controller saves retain RNG inputs; player snapshots must not expose
     # enough information to reconstruct future dice or shuffles.
     dump["meta"].pop("seed", None)
     dump["meta"].pop("rng_state", None)
     opp = _other(viewer_side)
-    revealed = _combat_revealed_locales(state)
+    revealed = _combat_revealed_lords(state)
     for _lid, lord in dump["lords"].items():
         if not state.meta.hidden_mats or lord.get("side") != opp:
             continue
@@ -66,7 +78,7 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         on_map = cyl.get("kind") == "locale"
         if not on_map:
             continue
-        if cyl.get("locale_id") in revealed:
+        if _lid in revealed:
             continue  # in Battle/Storm -> mat is face-up
         for f in _HIDDEN_LORD_FIELDS:
             if f in lord:

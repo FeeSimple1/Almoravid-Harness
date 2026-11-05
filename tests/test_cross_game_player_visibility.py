@@ -58,7 +58,7 @@ def test_hidden_capability_is_masked_in_registry_and_deployment_history():
     assert own["history"][-1]["args"]["card_id"] == "C3"
 
 
-@pytest.mark.parametrize("kind", ["march_arrival_response", "battle_concede", "storm_concede"])
+@pytest.mark.parametrize("kind", ["battle_concede", "storm_concede", "relief_concede", "oneround_timing"])
 def test_combat_reveals_registry_and_hides_it_again_afterward(kind):
     state = capability_state()
     state.pending = PendingDecision(kind=kind, waiting_on="muslim",

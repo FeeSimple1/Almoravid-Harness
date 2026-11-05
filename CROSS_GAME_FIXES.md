@@ -143,3 +143,41 @@ reaches the 400-step bound in two.
 
 Second-audit progress: **1 of 6 Almoravid groups fixed**. A2-01, A2-02, A2-03,
 IF2-2 and IF2-3 remain open. The original nine groups remain fixed.
+
+## Second audit, batch 3 — IF2-2 and IF2-3
+
+- **IF2-2 — Hidden Mats timing:** Approach no longer reveals enemy mats
+  while Avoid/Withdraw/Stand remains undecided. Committed interactive Battle,
+  Storm, Relief Sally and one-Round timing choices reveal their participants.
+  Synchronous combat uses transient visibility for its participants, with
+  cleanup on return or exception. Uninvolved same-Locale and remote Lords
+  remain concealed. Controller saves and unrelated copied states are unchanged.
+- **IF2-3 — Unplayed Hold secrecy:** every declared Avoid now waits for the
+  Approaching player's reaction, whether or not Swollen River is Held. The
+  declaration result and defender's view are identical for both hand states;
+  private card IDs are omitted. The owner's menu offers Play only if Held,
+  or Decline; Decline resumes the declared Avoid and retains any unplayed
+  card. Actual Play consumes and publicly identifies the card exactly once.
+  Missing cards, wrong actors and malformed choices reject atomically.
+
+The Avoid declaration is validated before the reaction window is created.
+Control passes to its reacting owner, then returns to the pending response or
+normal activation. An action-supplied internal flag cannot skip the window.
+Saved reaction decisions resume through the same handlers.
+
+Twenty-four new regressions cover both players, open/Hidden Mats, identical
+opponent views with/without the Hold, Play/Decline, empty hands, invalid
+requests, save/load, interactive timing, bystanders, synchronous combat and
+exception cleanup. Twenty-two fail on the preceding main; two preservation
+cases pass. Existing Avoid outcome tests now explicitly decline the reaction.
+One old Bypass fixture now includes a bypassing Lord so its marker remains
+valid across that extra step. The old Swollen River source-inspection test
+now checks real public declarations and card play.
+
+Validation: 1,726 tests passed and source/new-test Ruff checks passed. Both
+configured invariant stress sweeps passed. All three Toledo profiles completed;
+Reconquista completed one profile and reached the 400-step bound in two.
+
+Second-audit progress: **3 of 6 Almoravid groups fixed**. A2-01 (Lost Spoils),
+A2-02 (M13) and A2-03 (voluntary Reset discards) remain open. The original
+nine groups remain fixed.

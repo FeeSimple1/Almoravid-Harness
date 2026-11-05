@@ -42,6 +42,7 @@ from typing import Any, Literal
 from almoravid.rng import roll_d6
 from almoravid.state import AssetType, GameState, Lord, Side, UnitType
 from almoravid.static_data import load_forces
+from almoravid.visibility import reveal_combat_mats
 
 Role = Literal["attacker", "defender"]
 StrikeKind = Literal["melee", "missiles", "javelins", "crossbows", "bowmen", "slingers"]
@@ -1182,6 +1183,7 @@ def _battle_one_round(
     return rnd
 
 
+@reveal_combat_mats
 def resolve_battle(
     state: GameState,
     attacker: BattleSide,
@@ -2199,6 +2201,7 @@ def _storm_finalize(ss: dict[str, Any], attacker: BattleSide,
         for lid in defender.lord_ids}
 
 
+@reveal_combat_mats
 def resolve_storm(
     state: GameState,
     attacker: BattleSide,
@@ -2770,6 +2773,7 @@ def _relief_from_snapshot(state: GameState,
         max_rounds=snap["max_rounds"], locale_id=snap["locale_id"])
 
 
+@reveal_combat_mats
 def resolve_relief_sally(
     state: GameState,
     marcher_ids: list[str],

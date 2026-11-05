@@ -188,6 +188,8 @@ def test_respond_avoid_battle_succeeds_to_other_neighbor() -> None:
     assert target is not None, "expected a clean Avoid Battle target on this seed"
     res = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                            "target_locale_id": target, "way_type": "road"})
+    res = apply_action(s, {"type": "respond_swollen_river_block",
+                       "side": s.pending.waiting_on, "play": False})
     assert res["avoided_to"] == target
     assert s.lords["al_mutamid"].cylinder.locale_id == target
     assert s.pending is None

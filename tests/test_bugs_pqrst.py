@@ -164,6 +164,8 @@ def test_bug_q_laden_defender_avoids_by_discarding_C5() -> None:
               if n != "cordoba"][0]
     r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": target, "way_type": "road"})
+    r = apply_action(s, {"type": "respond_swollen_river_block",
+                     "side": s.pending.waiting_on, "play": False})
     # Avoid succeeded; all 10 Provender discarded (no Transport -> max 0).
     assert s.lords["al_mutamid"].cylinder.locale_id == target
     assert s.lords["al_mutamid"].assets.get("prov", 0) == 0
@@ -242,6 +244,9 @@ def test_bug_s_avoid_destination_allows_bypassed_enemy() -> None:
     s.lords[christian_at_target].in_stronghold = True
     # bypass_green is the Muslim-Bypassed-Christian flag in our scheme.
     s.locales[target].bypass_green = True
+    # Keep the marker live across the reaction window with a real bypasser.
+    s.lords["yusuf"].cylinder = Cylinder(kind="locale", locale_id=target)
+    s.lords["yusuf"].in_stronghold = False
     s.pending = PendingDecision(
         kind="march_arrival_response", waiting_on="muslim",
         payload={
@@ -258,6 +263,8 @@ def test_bug_s_avoid_destination_allows_bypassed_enemy() -> None:
     s.lords["al_mutamid"].assets = {}  # Unladen
     res = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                            "target_locale_id": target, "way_type": "road"})
+    res = apply_action(s, {"type": "respond_swollen_river_block",
+                       "side": s.pending.waiting_on, "play": False})
     assert res["avoided_to"] == target
 
 

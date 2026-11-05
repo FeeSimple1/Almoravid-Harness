@@ -160,6 +160,8 @@ def test_bgbook_alvar_march_ravage_feed_chain() -> None:
     r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": "burriana",
                          "way_type": "road"})
+    r = apply_action(s, {"type": "respond_swollen_river_block",
+                     "side": s.pending.waiting_on, "play": False})
     assert r["avoided_to"] == "burriana"
     # Álvar alone at the still-Neutral City: no Besiege/Bypass.
     assert s.pending is None
@@ -173,6 +175,8 @@ def test_bgbook_alvar_march_ravage_feed_chain() -> None:
     r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": "baniskula",
                          "way_type": "road"})
+    r = apply_action(s, {"type": "respond_swollen_river_block",
+                     "side": s.pending.waiting_on, "play": False})
     assert r["avoided_to"] == "baniskula"
     assert s.pending is not None
     assert s.pending.kind == "besiege_or_bypass"

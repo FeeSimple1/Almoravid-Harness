@@ -41,6 +41,8 @@ def test_partition_avoid_then_withdraw_then_stand() -> None:
     r1 = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                           "target_locale_id": avoid_to, "way_type": "road",
                           "lord_ids": ["al_mustain"]})
+    r1 = apply_action(s, {"type": "respond_swollen_river_block",
+                      "side": s.pending.waiting_on, "play": False})
     assert s.lords["al_mustain"].cylinder.locale_id == avoid_to
     assert s.pending is not None
     assert s.pending.kind == "march_arrival_response"

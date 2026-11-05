@@ -153,6 +153,8 @@ def test_public_avoid_retains_camels_capacity_and_sends_only_excess_to_enemy(
         "defender_lord_ids": [lid]})
     result = apply_action(state, {"type": "respond_avoid_battle", "side": "muslim",
                                  "target_locale_id": target, "way_type": way})
+    result = apply_action(state, {"type": "respond_swollen_river_block",
+                          "side": state.pending.waiting_on, "play": False})
     assert loser.cylinder.locale_id == target and loser.moved_fought
     assert loser.assets.get("prov", 0) == kept
     assert result["discarded_as_spoils"].get("prov", 0) == 2 - kept

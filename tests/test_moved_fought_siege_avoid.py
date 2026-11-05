@@ -63,6 +63,8 @@ def test_avoid_battle_marks_moved_fought() -> None:
               if n != "cordoba"][0]
     apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                      "target_locale_id": target, "way_type": "road"})
+    apply_action(s, {"type": "respond_swollen_river_block",
+                 "side": s.pending.waiting_on, "play": False})
     assert s.lords["al_mutamid"].moved_fought is True
 
 
@@ -102,4 +104,6 @@ def test_avoid_into_enemy_stronghold_marks_bypassing() -> None:
     assert target is not None, "no enemy-Stronghold road neighbour of sevilla"
     apply_action(s, {"type": "respond_avoid_battle", "side": "christian",
                      "target_locale_id": target, "way_type": "road"})
+    apply_action(s, {"type": "respond_swollen_river_block",
+                 "side": s.pending.waiting_on, "play": False})
     assert s.locales[target].bypass_yellow is True

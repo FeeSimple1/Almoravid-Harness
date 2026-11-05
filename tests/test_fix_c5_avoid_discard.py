@@ -34,6 +34,8 @@ def test_avoid_discards_all_loot_as_spoils() -> None:
               if n != "cordoba"][0]
     r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": target, "way_type": "road"})
+    r = apply_action(s, {"type": "respond_swollen_river_block",
+                     "side": s.pending.waiting_on, "play": False})
     assert r["discarded_as_spoils"].get("loot") == 2
     assert s.lords["al_mutamid"].assets.get("loot", 0) == 0
     assert s.lords["al_mutamid"].assets.get("prov", 0) == 1   # kept (<=transport)
@@ -69,6 +71,8 @@ def test_avoid_over_pass_only_mules_carry_provender() -> None:
     s.meta.active_player = "muslim"
     r = apply_action(s, {"type": "respond_avoid_battle", "side": "muslim",
                          "target_locale_id": pass_target, "way_type": "pass"})
+    r = apply_action(s, {"type": "respond_swollen_river_block",
+                     "side": s.pending.waiting_on, "play": False})
     # max_prov over Pass = mules (1) -> discard 1.
     assert r["discarded_as_spoils"].get("prov") == 1
     assert s.lords["al_mutamid"].assets.get("prov", 0) == 1
@@ -101,6 +105,8 @@ def test_avoid_shared_transport_group_capacity() -> None:
                   if n != "cordoba")
     r = _aa(s, {"type": "respond_avoid_battle", "side": "muslim",
                 "target_locale_id": target, "way_type": "road"})
+    r = _aa(s, {"type": "respond_swollen_river_block",
+            "side": s.pending.waiting_on, "play": False})
     assert r["discarded_as_spoils"].get("prov") == 1   # 3 - capacity(2)
     total_prov = (s.lords[d1].assets.get("prov", 0)
                   + s.lords[d2].assets.get("prov", 0))
