@@ -3002,11 +3002,17 @@ def _h_cmd_ravage(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 
     res = _apply_ravage_effect(state, lord, side, here)
     state.meta.actions_remaining -= 1
+    if res.get("no_effect"):
+        _record(state, action, f"{side} {lord_id} Ravage at {here} has no effect "
+                f"(Caballería Villana: rolled {res['caballeria_roll']}, needs 1-3)")
+        return {"locale": here, **res,
+                "actions_remaining": state.meta.actions_remaining}
     _record(state, action,
             f"{side} {lord_id} Ravages {here}: {res['rustling']}, "
             f"+0.5 VP{', Enforcing Parias triggered' if res['enforcing_parias'] else ''}"
             f"{f' (Ribat Monks roll {ribat_roll})' if ribat_roll else ''}")
     return {"locale": here, "color": res["color"], "rustling": res["rustling"],
+            "caballeria_roll": res.get("caballeria_roll"),
             "enforcing_parias": res["enforcing_parias"],
             "ribat_monks_roll": ribat_roll,
             "actions_remaining": state.meta.actions_remaining}
@@ -3020,24 +3026,34 @@ def _apply_ravage_effect(state: GameState, lord: Lord, side: Side,
     Drums M22 bonus), +1/2 VP, and the Enforcing-Parias odd-marker Taifa
     Service shift. Does NOT spend actions/Provender (the caller does)."""
     loc = state.locales[target_id]
+    from almoravid.capabilities import side_has_capability
+    caballeria_roll = None
+    if (side == "muslim" and loc.territory in ("leon", "aragon")
+            and side_has_capability(state, "christian", "C19")):
+        from almoravid.rng import roll_d6
+        caballeria_roll = roll_d6(state)
+        if caballeria_roll > 3:
+            return {"color": None, "rustling": None, "enforcing_parias": False,
+                    "no_effect": True, "caballeria_roll": caballeria_roll}
     color = "yellow" if side == "christian" else "green"
     loc.ravaged = color  # type: ignore[assignment]
-    from almoravid.capabilities import side_has_capability
+    if side == "muslim":
+        state.meta.severed_heads_trigger = "ravage"
     war_drums_bonus = 0
     if (side == "muslim" and side_has_capability(state, "muslim", "M22")
             and (lord.id in ("yusuf", "sir") or lord.is_lieutenant)):
         war_drums_bonus = 1
     if loc.base_type == "region":
-        new_loot = min(8, lord.assets.get("loot", 0) + 1)
+        new_loot = lord.assets.get("loot", 0) + 1
         lord.assets["loot"] = new_loot
         rustling_note = f"+1 Loot -> {new_loot} (Region)"
         if war_drums_bonus:
-            new_prov = min(8, lord.assets.get("prov", 0) + war_drums_bonus)
+            new_prov = lord.assets.get("prov", 0) + war_drums_bonus
             lord.assets["prov"] = new_prov
             rustling_note += f", +{war_drums_bonus} Prov (War Drums) -> {new_prov}"
     else:
-        new_loot = min(8, lord.assets.get("loot", 0) + 1)
-        new_prov = min(8, lord.assets.get("prov", 0) + 1 + war_drums_bonus)
+        new_loot = lord.assets.get("loot", 0) + 1
+        new_prov = lord.assets.get("prov", 0) + 1 + war_drums_bonus
         lord.assets["loot"] = new_loot
         lord.assets["prov"] = new_prov
         rustling_note = (f"+1 Loot -> {new_loot}, +{1 + war_drums_bonus} "
@@ -3061,6 +3077,7 @@ def _apply_ravage_effect(state: GameState, lord: Lord, side: Side,
                                          "rodrigo_al_sayyid")):
                     _shift_service_left(state, tlid, 1)
     return {"color": color, "rustling": rustling_note,
+            "caballeria_roll": caballeria_roll,
             "enforcing_parias": enforcing_parias}
 
 
@@ -4027,6 +4044,8 @@ def _finish_storm(
         sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
                 "recipients": besiegers_here,
                 "removal_politics": removal_politics}
+        if dfd.side == "christian":
+            state.meta.severed_heads_trigger = "combat"
 
     # 4.5.2 -> 4.4.4 Losses: both sides roll for Routed units. The
     # Storm Attacker's Routed units always need a 1; the Defender
@@ -5136,36 +5155,102 @@ def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, 
     return result
 
 
+def _open_severed_heads_window(state: GameState) -> bool:
+    """Public trigger timing must not disclose whether the Hold is owned.
+
+    Suspend any post-combat response, retaining its full controller state
+    for save/load. Views strip this continuation for both players.
+    """
+    trigger = state.meta.severed_heads_trigger
+    state.meta.severed_heads_trigger = None
+    if trigger is None or state.meta.phase != "campaign":
+        return False
+    resume = {"active_player": state.meta.active_player,
+              "pending": state.pending.model_dump() if state.pending else None}
+    state.pending = PendingDecision(
+        kind="severed_heads", waiting_on="muslim",
+        payload={"trigger": trigger, "jihad_count": 2 if trigger == "ravage" else 4,
+                 "lord_count": 1 if trigger == "ravage" else 2,
+                 "_severed_heads_resume": resume})
+    state.meta.active_player = "muslim"
+    return True
+
+
+def _resume_after_severed_heads(state: GameState, pd: PendingDecision) -> None:
+    resume = pd.payload["_severed_heads_resume"]
+    state.pending = (PendingDecision.model_validate(resume["pending"])
+                     if resume["pending"] is not None else None)
+    state.meta.active_player = resume["active_player"]
+
+
+def _severed_heads_lords(state: GameState) -> list[str]:
+    return sorted(lid for lid, lord in state.lords.items()
+                  if lord.is_taifa and lord.side == "muslim"
+                  and lord.cylinder.kind in ("locale", "calendar"))
+
+
+def _h_decline_severed_heads(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "severed_heads", side)
+    _resume_after_severed_heads(state, pd)
+    _record(state, action, "Muslim declines Severed Heads")
+    return {"declined": "severed_heads"}
+
+
 def _h_play_severed_heads(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """Play held M13 Severed Heads in its 'as Ravaging' mode (Arts of War
-    ref): shift one Taifa Lord's Service 2 boxes left, OR add 2 Jihad.
-    (The 'Christians Retreat/Sacked' trigger auto-resolves +4 Jihad in
-    apply_retreat_aftermath.) action: mode ('shift'|'jihad'), target_lord
-    (for shift)."""
-    from almoravid.actions import _shift_service_left
+    """Optional M13 after successful Ravage, Christian Retreat, or Sack.
+
+    Choose 1/2 Taifa cylinders LEFT or their Service RIGHT by 2 boxes,
+    OR 2/4 Jihad with optional explicit placement.
+    """
+    from almoravid.actions import _shift_service_right
     from almoravid.events import _add_jihad
     side = _require_side(action)
     _require(side == "muslim", "M13 is a Muslim event", code="wrong_side")
+    pd = _require_pending(state, "severed_heads", side)
     _require("M13" in held_event_ids(state, "muslim"),
              "M13 not held", code="card_not_held")
-    _require_campaign_step(state, "activation")
-    _require_active(state, side)
     mode = action.get("mode", "jihad")
+    _require(mode in ("shift", "jihad"), "mode must be shift or jihad", code="bad_arg")
     if mode == "shift":
-        tgt = action.get("target_lord")
-        _require(tgt in state.lords and state.lords[tgt].is_taifa,
-                 "target_lord must be a Taifa Lord", code="bad_target")
-        tgt = cast(str, tgt)
-        _shift_service_left(state, tgt, 2)
-        result = {"mode": "shift", "target_lord": tgt, "boxes": 2}
+        targets = action.get("target_lords", [action.get("target_lord")])
+        _require(isinstance(targets, list) and 1 <= len(targets) <= pd.payload["lord_count"]
+                 and all(isinstance(t, str) for t in targets)
+                 and len(set(targets)) == len(targets),
+                 "choose distinct Taifa Lords within this trigger's limit", code="bad_target")
+        _require(all(t in _severed_heads_lords(state) for t in targets),
+                 "targets must be Taifa Lords on the Calendar or map", code="bad_target")
+        shifted = []
+        for target in targets:
+            lord = state.lords[target]
+            if lord.cylinder.kind == "calendar":
+                lord.cylinder.box = max(0, (lord.cylinder.box or 0) - 2)
+                shifted.append({"lord_id": target, "shifted": "cylinder_left",
+                                "box": lord.cylinder.box})
+            else:
+                box = _shift_service_right(state, target, 2)
+                shifted.append({"lord_id": target, "shifted": "service_right", "box": box})
+        result = {"mode": "shift", "target_lords": targets, "boxes": 2, "shifted": shifted}
     else:
-        placement = _add_jihad(state, 2, action.get("payload") or {})
+        from almoravid.events import _jihad_eligible_locales
+        payload = action.get("payload") or {}
+        _require(isinstance(payload, dict), "payload must be an object", code="bad_arg")
+        targets = payload.get("jihad_targets", action.get("jihad_targets"))
+        count = pd.payload["jihad_count"]
+        if targets is not None:
+            eligible = _jihad_eligible_locales(state)
+            _require(isinstance(targets, list) and 1 <= len(targets) <= count
+                     and all(isinstance(t, str) and t in eligible for t in targets),
+                     "choose eligible Jihad locales within this trigger's limit", code="bad_target")
+            payload = {**payload, "jihad_targets": targets}
+        placement = _add_jihad(state, count, payload)
         if placement is None:
             return {"no_op": True, "reason": "no eligible Jihad locale"}
-        result = {"mode": "jihad", "jihad_added": 2, "placement": placement}
+        result = {"mode": "jihad", "jihad_added": count, "placement": placement}
     consume_held_event(state, "muslim", "M13")
     state.decks.discard.append("M13")
-    _record(state, action, f"Muslim plays M13 Severed Heads (Ravaging): {result}")
+    _resume_after_severed_heads(state, pd)
+    _record(state, action, f"Muslim plays M13 Severed Heads ({pd.payload['trigger']}): {result}")
     return {"card_id": "M13", "side": side, **result}
 
 
@@ -6612,11 +6697,13 @@ def _h_cmd_cabalgadas(state: GameState, action: dict[str, Any]) -> dict[str, Any
     state.meta.actions_remaining = 0   # uses ALL actions on the card
     _record(state, action,
             f"{side} {lord_id} Cabalgadas-Ravages {target} (prov from {payer}): "
-            f"{res['rustling']}"
+            f"{res['rustling'] if not res.get('no_effect') else 'no effect (Caballería Villana)'}"
             f"{', Enforcing Parias' if res['enforcing_parias'] else ''}")
     return {"target": target, "color": res["color"], "prov_payer": payer,
             "rustling": res["rustling"],
             "enforcing_parias": res["enforcing_parias"],
+            "no_effect": res.get("no_effect", False),
+            "caballeria_roll": res.get("caballeria_roll"),
             "actions_consumed": consumed}
 
 # ---------------------------------------------------------------------------
@@ -7307,6 +7394,7 @@ CAMPAIGN_HANDLERS = {
     "cap_play_event_from_deck": _h_cap_play_event_from_deck,
     "cap_al_faraj": _h_cap_al_faraj,
     "play_severed_heads": _h_play_severed_heads,
+    "decline_severed_heads": _h_decline_severed_heads,
     "begin_campaign": _h_begin_campaign,
     "discard_capabilities": _h_discard_capabilities,
     "plan_add_card": _h_plan_add_card,

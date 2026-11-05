@@ -181,3 +181,49 @@ Reconquista completed one profile and reached the 400-step bound in two.
 Second-audit progress: **3 of 6 Almoravid groups fixed**. A2-01 (Lost Spoils),
 A2-02 (M13) and A2-03 (voluntary Reset discards) remain open. The original
 nine groups remain fixed.
+
+## Second audit, batch 4 — A2-01 and A2-02
+
+- **A2-01 — Lost Spoils:** a losing Lord permanently removed by Losses now
+  transfers all remaining Assets before mat cleanup, including those kept
+  after Withdrawal, Concede or a Retreat exemption. Already transferred Spoils
+  are not duplicated. Both sides finish Losses before the remaining captured
+  pile is distributed among surviving winning Lords. The Retreat report
+  records the additional capture and removal. Parias Coin remains a separate
+  award; removed winning Lords do not donate their Assets to the losing side.
+- **A2-02 — M13 Severed Heads:** successful Muslim Ravage, actual Christian
+  Retreat/no-Retreat elimination and Christian Stronghold Sack now offer
+  optional Muslim card play. Pure Withdrawal never triggers M13, including
+  Withdrawal followed by Losses removal. Choose 2/4 Jihad, with explicit
+  eligible placement, or shift 1/2 distinct Taifa Lords. Calendar cylinders
+  shift left and on-map Service right by two boxes, including advanced Vassal
+  markers. Every eligible single/pair appears in the menu. Decline preserves
+  the Hold; Play consumes it once. Invalid timing/choices reject atomically.
+
+The public reaction appears with or without M13, preserving Hold secrecy.
+It suspends any post-combat response and restores it and the previous actor
+after Play/Decline, including after save/load. Internal continuations are
+absent from both player views. Immediate Campaign victory takes precedence.
+
+Checking M13's Ravage prerequisite exposed missing C19 Caballería Villana
+rolls. Muslim Ravage in León/Aragón now requires 1–3, including long-range
+Al-Garada. Failure spends the Command/Provender but yields no marker, Rustling,
+War Drums, VP or M13 opportunity. Event-placed Ravage remains separate.
+The same review removed an unsupported eight-Asset ceiling from successful
+Rustling/War Drums rewards: Assets are unlimited under 1.7.1.
+
+Fifty-one new regressions cover both losing sides, prior Spoils, surviving and
+removed Withdrawers, multiple winners, unlimited Assets, all M13 rewards,
+timing, card secrecy, invalid requests, saved off-turn reactions, suspended
+responses, Sack, failed Retreat, normal/long-range Ravage and C19 boundaries.
+Existing M13 tests now use actual Ravage timing and assert optionality. The
+political-removal test now expects captured Assets in addition to Parias Coin.
+
+Validation: **1,777 tests passed**, with source/new-test Ruff checks passing.
+Forty of the new regressions fail against the preceding main revision; eleven
+preservation cases pass. Both configured invariant stress sweeps passed:
+Toledo Beset completed all three profiles; Reconquista completed one and
+reached the configured 400-step bound in the other two, without violations.
+
+Second-audit progress: **5 of 6 Almoravid groups fixed**. A2-03 (voluntary
+Reset discards) remains open. The original nine groups remain fixed.

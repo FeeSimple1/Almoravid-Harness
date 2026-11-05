@@ -2106,6 +2106,10 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
+    if state.pending is not None and state.pending.kind == "severed_heads":
+        _require(action_type in {"play_severed_heads", "decline_severed_heads",
+                                 "cap_bishoprics"},
+                 "resolve Severed Heads before continuing", code="pending_decision")
     if action_type not in _HANDLERS:
         raise IllegalAction(
             f"unknown action type {action_type!r}. "
@@ -2128,4 +2132,8 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         if check_campaign_victory(state) is not None:
             compute_victory(state)
             state.meta.phase = "ended"
+    from almoravid.campaign import _open_severed_heads_window
+    if _open_severed_heads_window(state):
+        result["pending"] = "severed_heads"
+        result["waiting_on"] = "muslim"
     return result

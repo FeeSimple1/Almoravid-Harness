@@ -22,6 +22,7 @@ def test_losses_zero_forces_removal_flips_taifa_to_parias() -> None:
     lord.cylinder = Cylinder(kind="locale", locale_id="toledo")
     lord.forces = {}
     lord.routed_units = {"militia": 1}
+    captured_coin = lord.assets.get("coin", 0)
     s.lords["alfonso"].assets = {}
     coin0 = s.lords["alfonso"].assets.get("coin", 0)
     vp0 = s.score.christian
@@ -34,8 +35,8 @@ def test_losses_zero_forces_removal_flips_taifa_to_parias() -> None:
     out = apply_battle_losses(s, res, {"losers": []})
     assert out["al_mutamid"].get("permanently_removed")
     assert s.taifas["sevilla"].status == "parias"
-    # Parias Coin = 6 (al-Mutamid) to the first Unbesieged Christian.
-    assert s.lords["alfonso"].assets.get("coin", 0) == coin0 + 6
+    # Parias Coin = 6, in addition to all Assets captured on Losses removal.
+    assert s.lords["alfonso"].assets.get("coin", 0) == coin0 + 6 + captured_coin
     # +1 Christian VP for the Parias marker (5.1).
     assert s.score.christian == vp0 + 1.0
 

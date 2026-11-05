@@ -163,7 +163,7 @@ def test_c9_betrayal_doubles_spoils_and_adds_jihad() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_m13_adds_4_jihad_when_christian_retreats() -> None:
+def test_m13_waits_for_choice_when_christian_retreats() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=7)
     s.decks.this_levy_events["muslim"] = ["M13"]
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="transduero")
@@ -183,9 +183,10 @@ def test_m13_adds_4_jihad_when_christian_retreats() -> None:
                           winner="muslim")
     summary = apply_retreat_aftermath(s, result)
     jihad_after = sum(loc.jihad_markers for loc in s.locales.values())
-    if "m13_severed_heads_jihad" in summary:
-        assert jihad_after >= jihad_before + 4
-        assert "M13" in s.decks.discard
+    assert summary["losers"][0]["fate"] == "retreat"
+    assert s.meta.severed_heads_trigger == "combat"
+    assert jihad_after == jihad_before
+    assert "M13" not in s.decks.discard
 
 
 # ---------------------------------------------------------------------------

@@ -287,3 +287,41 @@ concealed. Committed combat decisions and synchronous combat inspection reveal
 the actual participants. Other Lords remain concealed, including uninvolved
 garrisons in the same Locale. Saved reaction and combat decisions retain the
 same visibility rules.
+
+## Severed Heads (M13)
+
+A successful Muslim Ravage, Christian Retreat (including removal for lack
+of a Retreat), or Sack of a Christian Stronghold opens a `severed_heads`
+decision for the Muslim player. Withdrawal into a Stronghold does not qualify,
+even if subsequent Losses remove the withdrawing Lord. Event-placed Ravage
+and a Ravage blocked by Caballería Villana do not qualify. A final-Lord
+Campaign victory ends play immediately, before optional card reactions.
+
+The public response step occurs whether or not M13 is Held. Decline retains
+the card and resumes any suspended response or the previous player's turn:
+
+```json
+{"type":"decline_severed_heads","side":"muslim"}
+```
+
+If M13 is Held, choose Jihad or Taifa Lord shifts. Ravage grants two Jihad
+or one Lord; Retreat/Sack grants four Jihad or up to two distinct Lords:
+
+```json
+{"type":"play_severed_heads","side":"muslim","mode":"jihad","payload":{"jihad_targets":["toledo","toledo"]}}
+{"type":"play_severed_heads","side":"muslim","mode":"shift","target_lords":["al_mutamid"]}
+```
+
+Explicit `jihad_targets` may repeat eligible Locales, up to the reward count;
+omitting them uses the existing automatic placement, and a shorter list
+automatically places the remainder. All eligible one-/two-Lord combinations
+are in the menu. `target_lord` remains accepted for a single Lord. Shift each
+chosen cylinder two boxes left if on the Calendar, or Service two boxes right
+if on the map, including advanced Vassal Service. Play consumes M13 once;
+unrelated commands cannot bypass the response. Save/load preserves the window.
+
+Caballería Villana requires Muslim Ravage in León/Aragón to roll 1–3 for
+effect, including Al-Garada long-range Ravage. A failed roll still spends the
+action/card and any long-range Provender, but grants no Rustling, War Drums,
+Ravaged marker, VP or M13 opportunity. Successful Rustling and War Drums
+rewards have no eight-Asset ceiling (rule 1.7.1).

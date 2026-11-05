@@ -29,7 +29,7 @@ Bug-pattern preemption:
     resolver only adds a row if all required cards are in play.
     Card effects can't drift from card metadata.
   - Pattern 12 (cap/floor): no asset mutations during Battle itself;
-    Spoils transfers in Aftermath use min(8, ...) per rule 1.7.3.
+    Spoils transfers occur in Aftermath (Assets are unlimited, 1.7.1).
 """
 
 from __future__ import annotations
@@ -1362,6 +1362,7 @@ def apply_battle_losses(
     # [P-2 playtest] -- combat is the elimination path the F7 Disband/March
     # cleanup did not cover; doing it here covers Storm, Sally, Battle, relief.
     _removed_locales: list[str] = []
+    losses_spoils: dict[AssetType, int] = {}
     if result.winner is None:
         # Stalemate — both sides simply roll vs Protection.
         loser_side = None
@@ -1403,6 +1404,19 @@ def apply_battle_losses(
                 from almoravid.actions import _shift_service_left as _ssl
                 from almoravid.capabilities import discard_capability
                 _gone_locale = lord.cylinder.locale_id
+                if side_obj.side == loser_side:
+                    # 4.4.3: Losses removal forfeits ALL remaining Assets,
+                    # including those retained after Withdraw/Concede/C7.
+                    take = {k: n for k, n in lord.assets.items() if n > 0}
+                    out[lid]["spoils_lost"] = take
+                    for key, count in take.items():
+                        losses_spoils[key] = losses_spoils.get(key, 0) + count
+                    for entry in retreat_summary.get("losers", []):
+                        if entry["lord_id"] == lid:
+                            entry["removed_by_losses"] = True
+                            prior = entry.setdefault("spoils_lost", {})
+                            for key, count in take.items():
+                                prior[key] = prior.get(key, 0) + count
                 lord.cylinder = Cylinder(kind="removed")
                 for cid in list(lord.capabilities):
                     discard_capability(state, cid)
@@ -1421,6 +1435,16 @@ def apply_battle_losses(
                     out[lid]["removal_politics"] = pol
                 if _gone_locale is not None:
                     _removed_locales.append(_gone_locale)
+    # Resolve both sides' Losses first: a permanently removed winner has
+    # no mat on which to receive these captured Assets.
+    if losses_spoils and result.winner is not None:
+        winners = (result.attacker if result.attacker.side == result.winner
+                   else result.defender)
+        recipients = [lid for lid in winners.lord_ids
+                      if lid in state.lords
+                      and state.lords[lid].cylinder.kind == "locale"]
+        if recipients:
+            distribute_spoils_round_robin(state, recipients, losses_spoils)
     # 4.5.4: clear Siege/Bypass markers at any Locale whose besieging side
     # has just lost its last Lord there to combat (becomes "free of Enemy
     # Lords"). _remove_orphaned_siege_bypass is per-side, so it leaves the
@@ -3088,22 +3112,6 @@ def apply_retreat_aftermath(
     if result.winner is None:
         return summary
 
-    # Phase 6i: M13 Severed Heads — when Christians lose (Retreat
-    # branch fires), Muslim side may add 4 Jihad. Auto-fire greedy.
-    loser_side_obj = (result.attacker if result.winner == result.defender.side
-                      else result.defender)
-    from almoravid.events import consume_held_event, has_held_event
-    if (loser_side_obj.side == "christian"
-            and has_held_event(state, "muslim", "M13")):
-        from almoravid.events import _add_jihad
-        placement = _add_jihad(state, 4, {})
-        if placement is not None:
-            consume_held_event(state, "muslim", "M13")
-            state.decks.discard.append("M13")
-            summary["m13_severed_heads_jihad"] = {
-                "placement": placement, "added": 4,
-            }
-
     loser_side_obj = (result.attacker if result.winner == result.defender.side
                       else result.defender)
     if result.engagement == "sally" and loser_side_obj is result.attacker:
@@ -3320,6 +3328,12 @@ def apply_retreat_aftermath(
                     state, lord, "retreat", True, winner_lord_ids,
                     retreat_way_type=way, prov_to_keep=own + borrowed)
 
+    # M13 is optional and excludes Withdrawal, even if Losses later
+    # remove that Lord. No-Retreat elimination does qualify (card Tips).
+    if (loser_side_obj.side == "christian"
+            and any(e["fate"] in ("retreat", "removed")
+                    for e in summary["losers"])):
+        state.meta.severed_heads_trigger = "combat"
     return summary
 
 

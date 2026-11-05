@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from almoravid.events import held_event_ids
+from almoravid.events import held_event_ids, held_event_moves
 from almoravid.state import GameState, Lord, Side
 
 
@@ -40,6 +40,22 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
 def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
+
+    if state.pending is not None and state.pending.kind == "severed_heads":
+        options = [{"type": "decline_severed_heads", "side": "muslim"}]
+        if "M13" in held_event_ids(state, "muslim"):
+            from itertools import combinations
+
+            from almoravid.campaign import _severed_heads_lords
+            from almoravid.events import _jihad_eligible_locales
+            if _jihad_eligible_locales(state):
+                options.insert(0, {"type": "play_severed_heads", "side": "muslim",
+                                   "mode": "jihad"})
+            for count in range(1, state.pending.payload["lord_count"] + 1):
+                for targets in combinations(_severed_heads_lords(state), count):
+                    options.insert(0, {"type": "play_severed_heads", "side": "muslim",
+                                       "mode": "shift", "target_lords": list(targets)})
+        return options
 
     if state.pending is not None and state.pending.kind == "capability_discard":
         side = state.pending.waiting_on
@@ -70,7 +86,6 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     if (state.pending is not None
             and state.pending.kind == "swollen_river_block"):
         w = state.pending.waiting_on
-        from almoravid.events import held_event_ids
         options = [{"type": "respond_swollen_river_block", "side": w, "play": False}]
         if state.pending.payload["blocker_card"] in held_event_ids(state, w):
             options.insert(0, {"type": "respond_swollen_river_block", "side": w, "play": True})
@@ -336,7 +351,6 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "winter_siege_pay", "side": side, "done": True})
         return moves
 
-    from almoravid.events import held_event_ids, held_event_moves
     moves.extend(held_event_moves(state, state.meta.active_player))
 
     # M11 "Al-Qadir balks at payment" is a discretionary HOLD event: the
@@ -1139,17 +1153,6 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             out.append({"type": "cap_play_event_from_deck",
                                         "side": "muslim", "source": "dawud",
                                         "card_id": _cid})
-                # M13 Severed Heads (Ravaging mode): shift a Taifa Lord 2
-                # boxes OR +2 Jihad (Arts of War ref).
-                if (active == "muslim"
-                        and "M13" in held_event_ids(state, "muslim")):
-                    out.append({"type": "play_severed_heads",
-                                "side": "muslim", "mode": "jihad"})
-                    for _tl, _tlo in state.lords.items():
-                        if _tlo.is_taifa and _tlo.cylinder.kind == "calendar":
-                            out.append({"type": "play_severed_heads",
-                                        "side": "muslim", "mode": "shift",
-                                        "target_lord": _tl})
             # An active Lord has actions_remaining > 0.
             if state.meta.actions_remaining > 0:
                 lord_id = state.meta.active_lord_id

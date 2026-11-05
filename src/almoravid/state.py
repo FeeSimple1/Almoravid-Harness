@@ -120,6 +120,9 @@ class Meta(StrictModel):
     active_lord_id: str | None = None
     # Actions remaining on the active Lord's Command card.
     actions_remaining: int = 0
+    # Public M13 trigger, staged by Ravage/Retreat/Sack and opened by the
+    # action dispatcher after the complete action and immediate victory.
+    severed_heads_trigger: Literal["ravage", "combat"] | None = None
     # Index into the plan of the next card to reveal for each side.
     plan_index_christian: int = 0
     plan_index_muslim: int = 0

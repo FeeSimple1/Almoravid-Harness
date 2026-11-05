@@ -888,6 +888,22 @@
           "title": "Actions Remaining",
           "type": "integer"
         },
+        "severed_heads_trigger": {
+          "anyOf": [
+            {
+              "enum": [
+                "ravage",
+                "combat"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severed Heads Trigger"
+        },
         "plan_index_christian": {
           "default": 0,
           "title": "Plan Index Christian",
