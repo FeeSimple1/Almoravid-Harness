@@ -6,10 +6,10 @@ Disband. Boxes 7 then 8, ending in the box-9 Spring Levy.
 """
 from __future__ import annotations
 
-from almoravid.actions import apply_action
-from almoravid.scenarios import load_scenario
 from almoravid.campaign import _enter_winter_box, _siege_locale_lords
+from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 
 def _clear_all_lords_off_map(s):
@@ -162,6 +162,13 @@ def test_end_campaign_into_box7_enters_winter_siege() -> None:
     al.in_stronghold = False
     al.forces = {"knights": 1}
     al.assets = {"prov": 2}
+    # Both sides must still have a Mustered Lord during the preceding
+    # Campaign's Reset; losing the final one would end the game (5.2).
+    defender = s.lords["al_mustain"]
+    defender.cylinder = Cylinder(kind="locale", locale_id="calatayud")
+    defender.in_stronghold = True
+    defender.forces = {"men_at_arms": 1}
+    defender.assets = {"prov": 2}
     s.locales["calatayud"].siege_yellow = 1
     s.meta.phase = "campaign"
     s.meta.campaign_step = "end_campaign"

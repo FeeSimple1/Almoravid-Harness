@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from almoravid.actions import IllegalAction, apply_action
+from almoravid.actions import IllegalAction
 from almoravid.capabilities import discard_capability
 from almoravid.state import CardInPlay, GameState, ServiceMarker
 from almoravid.views import redacted_view
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 from tests.test_cross_game_logistics import place, position
 
 CARDS = [("M15", "men_at_arms"), ("M20", "knights")]

@@ -6,10 +6,11 @@ import math
 
 import pytest
 
-from almoravid.actions import IllegalAction, apply_action
+from almoravid.actions import IllegalAction
 from almoravid.campaign import compute_victory
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, GameState
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 from tests.test_cross_game_empty_lord import attach
 
 

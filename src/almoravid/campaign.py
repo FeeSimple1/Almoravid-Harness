@@ -1055,7 +1055,90 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             else:
                 state.decks.discard.append(event_card)
     state.decks.this_campaign_events = {}
-    # 4.9.5: advance only after the preceding steps have completed.
+    # 4.9.5: both players elect discards before the Calendar advances.
+    state.pending = PendingDecision(kind="reset_discard", waiting_on="christian",
+                                    payload={"grow_harvest_repairs": ghr})
+    state.meta.active_player = "christian"
+    return {"pending": "reset_discard", "side": "christian",
+            "grow_harvest_repairs": ghr}
+
+
+def reset_discard_candidates(state: GameState, side: Side) -> list[str]:
+    """4.9.5: any owned Hold or Capability, independently of Wastage."""
+    cards = set(held_event_ids(state, side))
+    cards.update(state.decks.board_edge.get(side, []))
+    cards.update(c.card_id for c in state.decks.capabilities_in_play if c.owner_side == side)
+    cards.update(cid for lord in state.lords.values() if lord.side == side
+                 for cid in lord.capabilities)
+    return sorted(cards)
+
+
+def _h_reset_discard(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Return any selected cards; done=False permits further choices."""
+    side = _require_side(action)
+    pd = _require_pending(state, "reset_discard", side)
+    cards = action.get("card_ids", [])
+    done = action.get("done", True)
+    _require(isinstance(cards, list) and all(isinstance(cid, str) for cid in cards)
+             and len(set(cards)) == len(cards),
+             "card_ids must list distinct card IDs", code="bad_arg")
+    _require(isinstance(done, bool), "done must be a boolean", code="bad_arg")
+    _require(done or bool(cards), "choose a card or finish Reset", code="bad_arg")
+    candidates = reset_discard_candidates(state, side)
+    _require(all(cid in candidates for cid in cards),
+             "select only this side's Held Events or Capabilities", code="bad_card")
+    return _resolve_reset_discards(state, side, cards, done, pd.payload)
+
+
+def _resolve_reset_discards(state: GameState, side: Side, cards: list[str],
+                            done: bool, payload: dict[str, Any]) -> dict[str, Any]:
+    """Resume validated selections after their political consequences."""
+    from almoravid.capabilities import discard_capability
+    applied = []
+    for index, cid in enumerate(cards):
+        # Another selected Capability may Disband a Lord and already discard
+        # the rest of his mat. Do not repeat those printed discard effects.
+        if cid in held_event_ids(state, side):
+            consume_held_event(state, side, cid)
+            state.decks.draw = [c for c in state.decks.draw if c != cid]
+            if cid not in state.decks.discard:
+                state.decks.discard.append(cid)
+        elif cid in reset_discard_candidates(state, side):
+            discard_capability(state, cid)
+        applied.append(cid)
+        if check_campaign_victory(state) is not None:
+            verdict = compute_victory(state)
+            state.meta.phase = "ended"
+            state.pending = None
+            _record(state, {"type": "reset_discard", "side": side, "card_ids": applied},
+                    f"{side} Reset discards cause Campaign victory: {applied}")
+            return {"discarded": applied, "victory": verdict}
+        if state.pending is not None and state.pending.kind == "neutrality_choice":
+            state.pending.payload["_reset_discard_resume"] = {
+                "side": side, "cards": cards[index + 1:], "done": done,
+                "payload": payload}
+            _record(state, {"type": "reset_discard", "side": side, "card_ids": applied},
+                    f"{side} Reset discards pause for Recognition of Neutrality: {applied}")
+            return {"discarded": applied, "pending": "neutrality_choice"}
+    _record(state, {"type": "reset_discard", "side": side,
+                    "card_ids": applied, "done": done},
+            f"{side} Reset discards: {applied}; done={done}")
+    if not done or side == "christian":
+        next_side: Side = "muslim" if done else side
+        state.pending = PendingDecision(kind="reset_discard", waiting_on=next_side,
+                                        payload=payload)
+        state.meta.active_player = next_side
+        return {"discarded": applied, "pending": "reset_discard", "side": next_side}
+    state.pending = None
+    return {"discarded": applied, "advance": _finish_end_campaign_reset(
+        state, {"type": "reset_discard", "side": side}, payload["grow_harvest_repairs"])}
+
+
+def _finish_end_campaign_reset(state: GameState, action: dict[str, Any],
+                               ghr: dict[str, Any]) -> dict[str, Any]:
+    """Advance only once Wastage, Reset and political choices have finished."""
+    prev_box = state.calendar.current_box
+    new_box = prev_box + 1
     state.calendar.current_box = new_box
     # Otherwise return to Levy
     _return_to_levy(state)
@@ -6494,7 +6577,8 @@ def _h_respond_neutrality_choice(state: GameState, action: dict[str, Any]) -> di
         next_pending = False
     _record(state, action,
             f"{side} resolves RECOGNITION OF NEUTRALITY: {applied}")
-    continuations = {key: pd.payload[key] for key in ("_wastage_resume", "_end_campaign_resume")
+    continuations = {key: pd.payload[key] for key in (
+        "_wastage_resume", "_end_campaign_resume", "_reset_discard_resume")
                      if key in pd.payload}
     if next_pending:
         assert state.pending is not None
@@ -6510,6 +6594,11 @@ def _h_respond_neutrality_choice(state: GameState, action: dict[str, Any]) -> di
     elif "_end_campaign_resume" in continuations:
         return {"applied": applied,
                 "advance": _h_end_campaign(state, continuations["_end_campaign_resume"])}
+    elif "_reset_discard_resume" in continuations:
+        continuation = continuations["_reset_discard_resume"]
+        return {"applied": applied, "advance": _resolve_reset_discards(
+            state, continuation["side"], continuation["cards"],
+            continuation["done"], continuation["payload"])}
     return {"applied": applied, "more_pending": next_pending}
 
 
@@ -7416,6 +7505,7 @@ CAMPAIGN_HANDLERS = {
     "cmd_storm": _h_cmd_storm,
     "cmd_sally": _h_cmd_sally,
     "end_campaign": _h_end_campaign,
+    "reset_discard": _h_reset_discard,
     "respond_avoid_battle": _h_respond_avoid_battle,
     "respond_swollen_river_block": _h_respond_swollen_river_block,
     "respond_withdraw": _h_respond_withdraw,

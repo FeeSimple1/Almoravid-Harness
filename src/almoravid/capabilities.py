@@ -186,7 +186,8 @@ def discard_capability(state: GameState, card_id: str) -> None:
     """Remove a Capability and its printed discard effects exactly once.
 
     Called for Campaign excess (4.0), Winter (6.3.1), Disband/removal
-    (3.3), and Wastage (4.9.4). This is not an Event-discard operation:
+    (3.3), Wastage (4.9.4), and voluntary Reset discards (4.9.5).
+    This is not an Event-discard operation:
     C18's permanent removal applies to *Milites*, not Runaway Slaves.
     M15/M20 and the Count lose their tracked contingent and once-per-card
     usage, while Milites explicitly leaves its recruited units in place.

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from almoravid.actions import IllegalAction, apply_action
+from almoravid.actions import IllegalAction
 from almoravid.campaign import PLAN_SIZE_BY_SEASON, _plan_target_size
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import list_scenarios, load_scenario
 from tests._plan_helpers import legal_pad, step_levy
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 
 def _drive_to_campaign(s) -> None:

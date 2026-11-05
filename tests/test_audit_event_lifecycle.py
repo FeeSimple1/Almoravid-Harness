@@ -1,13 +1,14 @@
 """Audit 06-08/22-24: paid, tracked and correctly scoped Event effects."""
 import pytest
 
-from almoravid.actions import IllegalAction, apply_action
+from almoravid.actions import IllegalAction
 from almoravid.capabilities import side_has_capability
 from almoravid.effective import effective_lordship
 from almoravid.events import resolve_event
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
 from almoravid.static_data import load_lords
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 
 def _state(side="christian"):

@@ -12,10 +12,13 @@ from pathlib import Path
 import pytest
 
 from almoravid.actions import (  # noqa: E402
-    IllegalAction, _rebuild_aow_deck, _unused_capability_cards, apply_action,
+    IllegalAction,
+    _rebuild_aow_deck,
+    _unused_capability_cards,
 )
 from almoravid.legal_moves import legal_moves  # noqa: E402
 from almoravid.state import GameState  # noqa: E402
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 HERE = Path(__file__).parent / "fixtures" / "scenario_f_seed137"
 ACTIONS = {int(k): v for k, v in json.loads((HERE / "actions.json").read_text()).items()}

@@ -272,6 +272,31 @@ and saved-game continuations. The Calendar stays in the concluding Campaign's
 box until those decisions finish; Reset then unstacks Lords and advances it.
 The final Campaign ends in its existing box without those cleanup steps.
 
+After unstacking, Reset now pauses for Christians and then Muslims to elect
+voluntary Arts of War discards (4.9.5). The pending kind is `reset_discard`.
+Each side may keep everything, discard any Held Events, or discard either
+scope of Capability, even if none of its Lords qualified for Wastage.
+
+```json
+{"type":"reset_discard","side":"christian","card_ids":["C14","C3"]}
+{"type":"reset_discard","side":"muslim","card_ids":[]}
+```
+
+By default a selection finishes that side's Reset election. Use `done:false`
+to discard some cards and continue choosing. The menu lists each available
+card with `done:false` plus an empty selection to finish, so every subset is
+reachable without listing all combinations. Explicit batches are also accepted.
+Only the owner sees Held-card choices. Both sides receive the public prompt
+even with no cards, so the prompt does not disclose Hold ownership.
+
+Discarding a Hold does not play its Event. Capability discards apply their
+printed cleanup: temporary troops return, an empty Lord Disbands, and Milites
+leaves the game while its recruited units remain. Political decisions pause
+the remaining selections, which survive save/load. Immediate Campaign victory
+ends play before further selections or Calendar advance. Otherwise, after the
+Muslim election finishes, the Calendar advances once and the existing
+Levy/Curias/Winter sequence resumes. No other action may bypass Reset.
+
 ## Avoid reaction and player visibility
 
 A legal `respond_avoid_battle` declaration always returns a

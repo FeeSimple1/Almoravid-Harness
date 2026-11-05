@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 
 import pytest
-from almoravid.actions import apply_action
+
 from almoravid.state import GameState
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 HERE = Path(__file__).resolve().parent / "fixtures" / "scenario_f_seed73"
 

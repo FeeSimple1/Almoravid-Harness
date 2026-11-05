@@ -4,11 +4,11 @@ and voluntary Pay before the mandatory at-limit Disband (4.8.2). With
 PendingDecisions; without it, the deterministic default runs."""
 from __future__ import annotations
 
-from almoravid.actions import apply_action
 from almoravid.campaign import _greed_eligible_lords, _plan_target_size
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from tests._plan_helpers import legal_pad, step_levy
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 
 def _drive_to_campaign(s) -> None:

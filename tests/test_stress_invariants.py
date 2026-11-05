@@ -36,7 +36,8 @@ def test_scenario_f_playthrough_is_invariant_clean(profile: str,
     # These seeds reach deep into the campaign; a legitimate early
     # campaign victory (5.2) can end sooner, which is still a clean
     # completion (asserted above).
-    if r["status"] == "completed" and r["steps"] > 800:
+    if (r["status"] == "completed" and r["steps"] > 800
+            and not (r["victory_reason"] or "").startswith("Campaign victory")):
         assert r["max_box"] >= 7, f"only reached box {r['max_box']}"
 
 

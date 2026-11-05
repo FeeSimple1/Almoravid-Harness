@@ -227,3 +227,46 @@ reached the configured 400-step bound in the other two, without violations.
 
 Second-audit progress: **5 of 6 Almoravid groups fixed**. A2-03 (voluntary
 Reset discards) remains open. The original nine groups remain fixed.
+
+## Second audit, batch 5 — A2-03
+
+Reset now offers Christians and then Muslims their printed 4.9.5 election
+to discard any owned Held Events, This-Lord Capabilities or board-edge
+Capabilities. This right is independent of Wastage eligibility. Either
+player may keep everything. The menu offers single-card choices that keep
+the election open plus a finish choice, making every subset reachable;
+the public action also accepts batches. Both sides receive the prompt even
+with empty hands, and only the owner sees private-card choices.
+
+Holds return unused; Capabilities go through the existing printed cleanup.
+Troop contingents return, final-Force loss immediately Disbands the Lord,
+and Milites leaves the game while its units stay. Cascade-discarded cards
+do not apply their effects twice. A final-Lord Campaign victory stops the
+remaining selections and Calendar advance. Political decisions suspend the
+remaining authorized choices and restore the correct actor after resolution,
+including save/load. Continuation choices remain absent from both player
+views and from history until the cards are actually discarded.
+
+Game End still precedes all cleanup. Wastage/Repairs finish before Reset,
+then Lieutenants unstack before the first discard election. The Calendar
+advances only after both players finish; Grow, Harvest, Repairs, Wastage and
+Calendar advance are not repeated by card choices or saved continuations.
+
+Thirty-six new regressions cover both sides, all three card locations,
+arbitrary subsets, legacy Holds, Milites, troop loss and Disband, cascades,
+Campaign victory, political pauses, privacy, invalid requests, save/load,
+timing and final scoring. Twenty fail on the preceding main; sixteen
+rejection/preservation cases pass. Older Wastage/Winter playthrough fixtures
+now explicitly keep their cards through a shared Reset-response helper.
+One Winter fixture now retains an opposing Mustered Lord through Reset so
+it does not already satisfy Campaign victory. Stress reports include the
+victory reason, allowing the depth assertion's documented early-Campaign
+victory exception to work after the additional decisions change play order.
+
+Validation: **1,813 tests passed**; source/new-test Ruff checks passed. Both
+configured invariant stress sweeps passed. Toledo Beset completed all three
+profiles; Reconquista completed one and reached the configured 400-step
+bound in the other two, without violations.
+
+Second-audit progress: **all 6 Almoravid groups fixed**. All nine findings
+from the original audit remain fixed.

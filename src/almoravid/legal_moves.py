@@ -41,6 +41,13 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
+    if state.pending is not None and state.pending.kind == "reset_discard":
+        from almoravid.campaign import reset_discard_candidates
+        side = state.pending.waiting_on
+        return [{"type": "reset_discard", "side": side, "card_ids": [cid], "done": False}
+                for cid in reset_discard_candidates(state, side)] + [
+                    {"type": "reset_discard", "side": side, "card_ids": []}]
+
     if state.pending is not None and state.pending.kind == "severed_heads":
         options = [{"type": "decline_severed_heads", "side": "muslim"}]
         if "M13" in held_event_ids(state, "muslim"):

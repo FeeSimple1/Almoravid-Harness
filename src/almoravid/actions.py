@@ -2106,6 +2106,14 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
+    reset_pending = (state.pending is not None and (
+        state.pending.kind == "reset_discard"
+        or "_reset_discard_resume" in state.pending.payload))
+    if reset_pending:
+        allowed = {"cap_bishoprics"}
+        allowed.add("reset_discard" if state.pending.kind == "reset_discard"
+                    else "respond_neutrality_choice")
+        _require(action_type in allowed, "resolve Reset before continuing", code="pending_decision")
     if state.pending is not None and state.pending.kind == "severed_heads":
         _require(action_type in {"play_severed_heads", "decline_severed_heads",
                                  "cap_bishoprics"},

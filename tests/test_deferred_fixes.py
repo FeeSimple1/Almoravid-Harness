@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from almoravid.actions import _shift_service_left, apply_action
+from almoravid.actions import _shift_service_left
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
 from tests._plan_helpers import legal_pad, step_levy
+from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
 
 def _replace_service(s, lord_id: str, box: int) -> None:
