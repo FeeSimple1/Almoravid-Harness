@@ -59,6 +59,11 @@ def test_feed_lord_unfed_shifts_service_left() -> None:
     alf.moved_fought = True
     alf.assets["prov"] = 0
     alf.assets["loot"] = 0
+    # Unfed requires exhausting shareable food as well as the Lord's own.
+    for other in s.lords.values():
+        if other.side == alf.side and other.cylinder == alf.cylinder:
+            other.assets.pop("prov", None)
+            other.assets.pop("loot", None)
     s.calendar.service_markers.append(
         ServiceMarker(lord_id="alfonso", box=4))
     r = _feed_lord(s, "alfonso")

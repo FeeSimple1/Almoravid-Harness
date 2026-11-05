@@ -967,19 +967,9 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _free_seats_for(state: GameState, lord_id: str) -> list[str]:
-    """Mirror of the Phase 2b helper. Kept private to avoid coupling."""
-    lord = state.lords[lord_id]
-    out = []
-    for seat in lord.seats:
-        enemy_present = any(
-            other.cylinder.kind == "locale"
-            and other.cylinder.locale_id == seat
-            and other.side != lord.side
-            for other in state.lords.values()
-        )
-        if not enemy_present:
-            out.append(seat)
-    return out
+    """Use the execution gate, including Enemy control of an empty Seat."""
+    from almoravid.actions import _free_seats_for as free_seats
+    return free_seats(state, lord_id)
 
 
 
@@ -1103,15 +1093,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
             if active == "muslim" and _al is not None and _al.is_taifa:
                 from almoravid.campaign import (
                     _guadalquivir_targets,
-                    _march_load,
+                    _march_variants,
                     _marching_lords,
                 )
                 _moving = _marching_lords(state, _alid)
-                _gcost = 2 if _march_load(state, _moving)[0] else 1
-                if state.meta.actions_remaining >= _gcost:
-                    for _gd in _guadalquivir_targets(state, _alid):
-                        out.append({"type": "cmd_guadalquivir",
-                                    "side": "muslim", "target_locale_id": _gd})
+                for _extra, _gcost in _march_variants(state, _moving):
+                    if state.meta.actions_remaining >= _gcost:
+                        for _gd in _guadalquivir_targets(state, _alid):
+                            out.append({"type": "cmd_guadalquivir",
+                                        "side": "muslim", "target_locale_id": _gd, **_extra})
             # C25/M25 El Cid + M8 Dawud(b): play a named Event from deck.
             from almoravid.campaign import _DAWUD_PLAYABLE, _ELCID_PLAYABLE, _card_available_in_deck
             from almoravid.capabilities import lord_has_capability as _lhc_deck
@@ -1217,7 +1207,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.campaign import (
                         _african_fleet_targets,
                         _is_marshal,
-                        _march_load,
+                        _march_variants,
                         _marching_lords,
                     )
                     from almoravid.effective import is_besieged as _isb_m19
@@ -1236,15 +1226,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             _fleet_groups.append(_fleet_companions)
                     for _group in _fleet_groups:
                         _moving = _marching_lords(state, lord_id, _group)
-                        _cost = 2 if _march_load(state, _moving)[0] else 1
-                        if state.meta.actions_remaining >= _cost:
-                            for _pid in _african_fleet_targets(state, lord_id):
-                                _move: dict[str, Any] = {
-                                    "type": "cmd_march_port_to_port",
-                                    "side": active, "target_locale_id": _pid}
-                                if _group:
-                                    _move["group_lord_ids"] = _group
-                                out.append(_move)
+                        for _extra, _cost in _march_variants(state, _moving):
+                            if state.meta.actions_remaining >= _cost:
+                                for _pid in _african_fleet_targets(state, lord_id):
+                                    _move: dict[str, Any] = {
+                                        "type": "cmd_march_port_to_port", "side": active,
+                                        "target_locale_id": _pid, **_extra}
+                                    if _group:
+                                        _move["group_lord_ids"] = _group
+                                    out.append(_move)
                 # March destinations (rule 4.3) — one option per
                 # adjacent locale per way_type. Pattern 4: keep way_type
                 # explicit so the agent's intent is honored.
@@ -1258,7 +1248,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     from almoravid.campaign import (
                         _counts_as_marshal_for_march,
                         _is_marshal,
-                        _march_load,
+                        _march_variants,
                         _marching_lords,
                     )
                     from almoravid.effective import is_besieged
@@ -1295,16 +1285,15 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             # Cart-over-Pass (or 2-Provender / Loot) March is
                             # Laden and costs 2 actions — NOT suppressed.
                             moving = _marching_lords(state, lord_id)
-                            cost = 2 if _march_load(state, moving, way_type)[0] else 1
-                            can_single = state.meta.actions_remaining >= cost
+                            variants = _march_variants(state, moving, way_type)
                             for nbr in neighbors_via(from_loc, way_type):
-                                if can_single:
-                                    out.append({
-                                        "type": "cmd_march",
-                                        "side": active,
-                                        "target_locale_id": nbr,
-                                        "way_type": way_type,
-                                    })
+                                for extra, cost in variants:
+                                    if state.meta.actions_remaining >= cost:
+                                        out.append({
+                                            "type": "cmd_march", "side": active,
+                                            "target_locale_id": nbr,
+                                            "way_type": way_type, **extra,
+                                        })
                                 if (companions
                                         and _counts_as_marshal_for_march(
                                             state, lord_id, active,
@@ -1317,16 +1306,14 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                                if g != "alfonso"]
                                     if grp:
                                         moving = _marching_lords(state, lord_id, grp)
-                                        gcost = (2 if _march_load(
-                                            state, moving, way_type)[0] else 1)
-                                        if state.meta.actions_remaining >= gcost:
-                                            out.append({
-                                                "type": "cmd_march",
-                                                "side": active,
-                                                "target_locale_id": nbr,
-                                                "way_type": way_type,
-                                                "group_lord_ids": list(grp),
-                                            })
+                                        for extra, gcost in _march_variants(
+                                                state, moving, way_type):
+                                            if state.meta.actions_remaining >= gcost:
+                                                out.append({
+                                                    "type": "cmd_march", "side": active,
+                                                    "target_locale_id": nbr, "way_type": way_type,
+                                                    "group_lord_ids": list(grp), **extra,
+                                                })
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     # Safe: omit March moves; the agent can still
                     # cmd_pass / end_card. CROSS_PROJECT_LESSONS.md §1.

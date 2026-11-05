@@ -299,7 +299,7 @@ def _drought(state: GameState, side: Side, card_id: str,
     immediately Feed 2"). C5 drawn by Christian targets Muslims;
     M5 drawn by Muslim targets Christians.
     """
-    from almoravid.campaign import _feed_lord
+    from almoravid.campaign import _forced_feed_lords
     from almoravid.effective import has_gardens, is_friendly_locale
     target_side: Side = "muslim" if card_id == "C5" else "christian"
     # M16 Camels: if the Muslims are the target and hold Camels, they may
@@ -334,10 +334,7 @@ def _drought(state: GameState, side: Side, card_id: str,
     if not candidates:
         return _no_op_with_note(state, card_id, side,
                                 f"no eligible {target_side} Lord to Feed")
-    fed = []
-    for lid in sorted(candidates)[:2]:
-        r = _feed_lord(state, lid, force=True)
-        fed.append({"lord_id": lid, **r})
+    fed = _forced_feed_lords(state, sorted(candidates)[:2])
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "target_side": target_side, "fed_lords": fed}

@@ -60,6 +60,37 @@ Toledo Beset's three sessions completed, while Reconquista's three sessions
 reached the configured 400-step smoke limit. No full Reconquista completion
 claim is made by that bounded sweep.
 
-Six of nine Almoravid findings are fixed. **ALM-03** (forced-Feed sharing),
-**ALM-04** (discarding Assets to March Unladen), and **ALM-05** (empty-Lord
-cleanup after Capability troop removal) remain open.
+## Logistics repair batch — ALM-03 and ALM-04
+
+- **ALM-03 — Forced Feed:** Drought and Arid Terrain now use the same 4.8.1
+  own-Feed, mandatory sharing, then Unfed sequence as the end-card step. All
+  affected Lords consume their own food before sharing. Other same-side Lords
+  at the Locale can donate without themselves owing Feed. Partial food is
+  consumed before any remaining shortfall causes a Service penalty. Event
+  results include shared food and the final consumption/shortfall per Lord.
+- **ALM-04 — March Unladen:** `discard_to_unladen: true` discards all moving
+  Lords' Loot and only the Provender beyond their shared usable Unladen
+  capacity. The handler and menu support ordinary March, chosen groups,
+  mandatory Lower Lords, Guadalquivir and African Fleet. The ordinary Laden
+  move remains available when affordable. African Fleet still spends the
+  entire fresh Command card. Interrupted Marches keep the proposed discards,
+  and successful moves report exactly which Assets each Lord discarded.
+
+The newly reachable random-play path also exposed a pre-existing Muster menu
+error outside the original audit: it offered empty Seats under Enemy control,
+which execution correctly rejected. The menu now uses the executor's shared
+Seat validator, preserving legal Friendly and Neutral Seats while excluding
+Enemy Seats and Seats with Enemy Lords.
+
+Thirty-one regressions cover both findings and the Seat mismatch. Twenty-eight
+fail against the preceding main revision; three preservation cases pass. Two
+older tests now set up actual food exhaustion (including allies) and expect
+the new discard option when a mandatory Lower Lord's Loot makes March Laden.
+
+Validation: 1,654 tests passed and the source Ruff check passed. The configured
+CI stress sweeps reported no invariant failures: all three Toledo Beset profiles
+completed; Reconquista completed one profile and reached the 400-step smoke
+bound in two profiles.
+
+Eight of nine original Almoravid findings are fixed. **ALM-05**, empty-Lord
+cleanup after Capability troop removal, remains open.

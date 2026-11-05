@@ -164,7 +164,8 @@ def test_normal_march_menu_includes_mandatory_lower_lord_load():
     sir.cylinder = Cylinder(kind="locale", locale_id="sevilla")
     sir.lieutenant_of = "al_mutamid"
     sir.assets = {"loot": 1}
-    assert not [m for m in legal_moves(state) if m["type"] == "cmd_march"]
+    moves = [m for m in legal_moves(state) if m["type"] == "cmd_march"]
+    assert moves and all(m.get("discard_to_unladen") is True for m in moves)
 
 
 @pytest.mark.parametrize("move_type", ["cmd_guadalquivir", "cmd_march_port_to_port"])

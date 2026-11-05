@@ -415,19 +415,9 @@ def _feed_lord(state: GameState, lord_id: str, *,
     lord = state.lords[lord_id]
     if not force and not lord.moved_fought:
         return {"skipped": "did_not_move_fight", "consumed": 0}
-    res = _feed_consume_own(state, lord_id,
-                            discard_excess_mules=discard_excess_mules)
-    # Single-Lord (event-forced) Feed applies the Unfed penalty
-    # immediately; the comprehensive end-card Feed defers it until after
-    # Sharing (4.8.1 SHARING).
-    unfed = False
-    if res["short"] > 0:
-        _apply_unfed_penalty(state, lord_id)
-        unfed = True
-    return {"consumed": res["consumed"], "needed": res["needed"],
-            "short": res["short"], "unfed_penalty": unfed,
-            "use_prov": res["use_prov"], "use_loot": res["use_loot"],
-            "mules_discarded": res["mules_discarded"]}
+    res = _forced_feed_lords(state, [lord_id],
+                              discard_excess_mules=discard_excess_mules)[0]
+    return {key: value for key, value in res.items() if key != "lord_id"}
 
 
 def _apply_unfed_penalty(state: GameState, lord_id: str) -> None:
@@ -486,11 +476,38 @@ def _feed_all_moved_fought(state: GameState, *,
                            discard_excess_mules: bool = False,
                            discard_mules_lords: set[str] | None = None,
                            ) -> dict[str, Any]:
-    """4.8.1 Feed for the per-card Feed/Pay/Disband step (4.8).
+    """End-card Feed for all on-map Lords marked Moved/Fought, on both sides."""
+    return _feed_lords(
+        state, [lid for lid, lord in state.lords.items() if lord.moved_fought],
+        discard_excess_mules=discard_excess_mules,
+        discard_mules_lords=discard_mules_lords)
 
-    E4: ALL Lords marked Moved/Fought on BOTH sides Feed (Christians
-    then Muslims), not only the active Lord (a Battle/Storm or Group
-    March marks several Lords).
+
+def _forced_feed_lords(state: GameState, lord_ids: list[str], *,
+                       discard_excess_mules: bool = False) -> list[dict[str, Any]]:
+    """Event Feed uses the same own-first/sharing/Unfed sequence as 4.8.1."""
+    summary = _feed_lords(state, lord_ids, discard_excess_mules=discard_excess_mules)
+    fed: list[dict[str, Any]] = summary["fed"]
+    for res in fed:
+        shared = [s for s in summary["shared"] if s["to"] == res["lord_id"]]
+        for transfer in shared:
+            amount = transfer["amount"]
+            res["consumed"] += amount
+            res["short"] -= amount
+            res["use_prov" if transfer["asset"] == "prov" else "use_loot"] += amount
+        res["unfed_penalty"] = res["lord_id"] in summary["unfed"]
+        if shared:
+            res["shared"] = shared
+    return fed
+
+
+def _feed_lords(state: GameState, lord_ids: list[str], *,
+                discard_excess_mules: bool = False,
+                discard_mules_lords: set[str] | None = None) -> dict[str, Any]:
+    """4.8.1 Feed for an explicit set of Lords, Christians then Muslims.
+
+    The end-card caller selects Moved/Fought Lords; Events select their
+    affected Lords. Unselected allies may donate without owing Feed.
     E5 SHARING: after every Lord Feeds his own Forces + Mules, each
     side's other Lords in the SAME Locale must expend their remaining
     Provender and Loot to Feed same-side Lords there who came up short
@@ -499,11 +516,12 @@ def _feed_all_moved_fought(state: GameState, *,
     """
     summary: dict[str, Any] = {"fed": [], "shared": [], "unfed": []}
     shortfall: dict[str, int] = {}
+    feeding = set(lord_ids)
 
     # Phase A: own-Feed, Christians then Muslims.
     for side in ("christian", "muslim"):
         for lid, lord in state.lords.items():
-            if lord.side != side or not lord.moved_fought:
+            if lord.side != side or lid not in feeding:
                 continue
             if lord.cylinder.kind != "locale":
                 continue
@@ -2152,7 +2170,8 @@ def _marching_lords(state: GameState, lord_id: str,
 
 
 def _march_load(state: GameState, lord_ids: list[str],
-                way_type: str | None = None) -> tuple[bool, int]:
+                way_type: str | None = None, *,
+                discard_to_unladen: bool = False) -> tuple[bool, int]:
     """Return post-discard Laden status and excess Provender (4.3.2).
 
     The handler and menu use the same calculation, including M16 and
@@ -2161,11 +2180,20 @@ def _march_load(state: GameState, lord_ids: list[str],
     cart, mule = _transport_for_lords(state, lord_ids)
     prov = sum(state.lords[lid].assets.get("prov", 0) for lid in lord_ids)
     loot = sum(state.lords[lid].assets.get("loot", 0) for lid in lord_ids)
+    if discard_to_unladen:
+        return False, max(0, prov - _unladen_prov_capacity(state, lord_ids, way_type))
     transport = cart + mule
     excess = max(0, prov - 2 * transport)
     carried = prov - excess
     laden = loot >= 1 or carried > _unladen_prov_capacity(state, lord_ids, way_type)
     return laden, excess
+
+
+def _march_variants(state: GameState, lord_ids: list[str],
+                     way_type: str | None = None) -> list[tuple[dict[str, Any], int]]:
+    """Keep the Laden move and expose the optional 1.7.2 Unladen discard."""
+    laden, _ = _march_load(state, lord_ids, way_type)
+    return [({}, 2), ({"discard_to_unladen": True}, 1)] if laden else [({}, 1)]
 
 
 def _group_laden(state: GameState, lord_ids: list[str],
@@ -2182,6 +2210,8 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
       side (Side): the acting side.
       target_locale_id (str): destination locale_id.
       way_type ('road' | 'pass'): which Way to march along.
+      discard_to_unladen (bool): discard Loot and only the Provender beyond
+        the group's usable Unladen capacity before executing the move.
 
     Cost: 1 action Unladen, 2 actions if Laden (rule 4.3, 4.3.2).
     Besieged Lord may only Sally / Forage (Gardens) / Pass (rule 4.5.3).
@@ -2289,7 +2319,11 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     # 2 x (Carts + Mules); any excess must be discarded to March. (The
     # Pass affects only Laden status for a March, not capacity — a Cart
     # may carry Provender over a Pass, it just makes the Lord Laden.)
-    laden, prov_excess = _march_load(state, moving_lords, way_type)
+    discard_to_unladen = action.get("discard_to_unladen", False)
+    _require(isinstance(discard_to_unladen, bool),
+             "discard_to_unladen must be true or false", code="bad_arg")
+    laden, prov_excess = _march_load(
+        state, moving_lords, way_type, discard_to_unladen=discard_to_unladen)
     cost = 2 if laden else 1
     _require(state.meta.actions_remaining >= cost,
              f"March costs {cost} actions ({'Laden' if laden else 'Unladen'}), "
@@ -2371,7 +2405,14 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
                     f"christian Surprise (C6) at {target}: placed 2 Siege, "
                     f"forced Storm with Walls -1 pending")
 
-    # 1.7.2: discard Provender the group cannot carry (beyond capacity).
+    # 1.7.2: discard beyond loaded capacity, or the player's chosen
+    # Unladen limit. Discards occur only after a March is not interrupted.
+    discarded_for_march: dict[str, dict[str, int]] = {}
+    if discard_to_unladen:
+        for mid in moving_lords:
+            loot = state.lords[mid].assets.pop("loot", 0)
+            if loot:
+                discarded_for_march[mid] = {"loot": loot}
     to_discard = prov_excess
     for mid in moving_lords:
         if to_discard <= 0:
@@ -2380,6 +2421,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
         have = m.assets.get("prov", 0)
         drop = min(have, to_discard)
         if drop > 0:
+            discarded_for_march.setdefault(mid, {})["prov"] = drop
             m.assets["prov"] = have - drop
             if m.assets["prov"] == 0:
                 m.assets.pop("prov", None)
@@ -2413,6 +2455,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     # valid if M16 is discarded to cancel Arid Terrain. Both cards are then
     # absent for any subsequent March. Discards regardless of Feed outcome.
     arid_id = "C4" if enemy == "christian" else "M4"
+    forced_feed: list[dict[str, Any]] = []
     if arid_id in enemy_hold:
         consume_held_event(state, enemy, arid_id)
         state.decks.discard.append(arid_id)
@@ -2440,10 +2483,8 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
             # Lord OR any two Lords Marching as a group immediately Feed."
             # Feed the active Lord plus any group-March members, capped at 2.
             marching = [lord_id] + [g for g in moving_lords if g != lord_id]
-            fed_lords = []
-            for fed in marching[:2]:
-                _feed_lord(state, fed, force=True)
-                fed_lords.append(fed)
+            fed_lords = marching[:2]
+            forced_feed = _forced_feed_lords(state, fed_lords)
             _record(state, action,
                     f"{enemy} Arid Terrain ({arid_id}) forces "
                     f"{', '.join(fed_lords)} to Feed after March")
@@ -2457,6 +2498,10 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     base = {"from": from_loc, "to": target, "way_type": way_type,
             "laden": laden, "cost": cost,
             "actions_remaining": state.meta.actions_remaining}
+    if forced_feed:
+        base["forced_feed"] = forced_feed
+    if discarded_for_march:
+        base["discarded_for_march"] = discarded_for_march
     if march_mode == "african_fleet":
         base["actions_consumed"] = cost
     if trigger is not None:
