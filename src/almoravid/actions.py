@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from almoravid.checkpoint import ActionCheckpoint
 from almoravid.effective import effective_lordship
 from almoravid.rng import roll_d6, shuffle
 from almoravid.state import (
@@ -1478,6 +1479,8 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "target_lord_id required (str)", code="bad_arg")
     target_lord_id = cast(str, target_lord_id)
     target = state.lords[target_lord_id]
+    _require(target.side == side, "Pay may only target a Lord on your side (3.2)",
+             code="wrong_side")
 
     if resource == "taifa_coin":
         _require(side == "muslim", "Taifa-box Coin is Muslim only",
@@ -2089,8 +2092,17 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Single entry point for state mutation.
 
     Routes by `action["type"]` to a handler. Returns the handler's
-    result dict. Raises IllegalAction on validation failure.
+    result dict. Rejected actions restore board, RNG and history in place.
     """
+    checkpoint = ActionCheckpoint(state)
+    try:
+        return _apply_action(state, action)
+    except Exception:
+        checkpoint.restore()
+        raise
+
+
+def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
     if action_type not in _HANDLERS:
