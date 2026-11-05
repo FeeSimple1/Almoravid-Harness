@@ -18,4 +18,17 @@ object references, and a failure after dice and history changes. The
 checkpoint excludes old history entries from traversal so its cost depends
 on the current board rather than the length of a campaign transcript.
 
-The other seven Almoravid findings remain open.
+## Batch 2 — player visibility
+
+- **IF-1 — Predictable dice:** player snapshots omit the seed and RNG counter.
+  Controller saves retain both, so save/load and deterministic replay still work.
+- **IF-2 — Hidden This-Lord cards:** the global Capability registry now follows
+  the same ownership and combat-visibility mask as the Lord mat. Deployment
+  history also conceals those private selections. Own cards and side-wide
+  Capabilities remain visible; combat reveals the participating mats and cards.
+
+Regression tests exercise both player perspectives with and without Hidden Mats,
+unchanged future rolls after viewing, real Capability Levy actions, public
+side-wide cards, and visibility before, during, and after combat.
+
+Four of nine Almoravid findings are fixed; the other five remain open.
