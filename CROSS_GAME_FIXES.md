@@ -92,5 +92,30 @@ CI stress sweeps reported no invariant failures: all three Toledo Beset profiles
 completed; Reconquista completed one profile and reached the 400-step smoke
 bound in two profiles.
 
-Eight of nine original Almoravid findings are fixed. **ALM-05**, empty-Lord
-cleanup after Capability troop removal, remains open.
+## Empty-Lord repair batch — ALM-05
+
+Returning Capability troops now immediately Disbands a Mustered Lord when
+his final Force leaves under 1.6/3.3.2. M15/M20 and Count/Bishop contingents
+share this cleanup. Surviving regular or Routed Forces keep the Lord on map;
+Milites retains its printed exception. Calendar placement uses the current
+Levy or next Levy as appropriate, including expired Service and box 17.
+
+Disband clears the mat and applies Taifa status, Parias Coin and VP through
+the existing rules path. Lords already being removed leave the map before
+Capability cleanup, preventing recursive Disband or accidental Calendar
+placement. Wastage pauses for Recognition of Neutrality and resumes its
+remaining authorized discards exactly once, including after save/load.
+Internal continuation choices remain hidden in player views. A final-Lord
+Campaign victory resolves before the Calendar advances.
+
+Twenty-eight regressions cover interactive and automatic Wastage, Calendar
+timing, surviving Forces, permanent removal, political choices, save/load,
+rejected selections, hidden continuations and immediate victory. Eighteen
+fail against the preceding main revision; ten preservation cases pass.
+
+Validation: 1,682 tests passed and the source/new-test Ruff check passed.
+Both configured CI stress sweeps passed invariant checks. All three Toledo
+Beset profiles completed; Reconquista completed one profile and reached the
+configured 400-step bound in two profiles.
+
+All nine original Almoravid audit findings are fixed.

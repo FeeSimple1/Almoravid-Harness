@@ -600,17 +600,9 @@ def _remove_count_units(state: GameState, card: str) -> dict[str, Any] | None:
 
 def _discard_count_capability(state: GameState, card: str) -> dict[str, Any] | None:
     """C13/M23: discard the opposing Count card and its recorded contingent."""
-    removed = _remove_count_units(state, card)
-    for lord in state.lords.values():
-        if card in lord.capabilities:
-            lord.capabilities.remove(card)
-    for edge in state.decks.board_edge.values():
-        if card in edge:
-            edge.remove(card)
-    state.decks.capabilities_in_play = [
-        c for c in state.decks.capabilities_in_play if c.card_id != card]
-    if card not in state.decks.discard:
-        state.decks.discard.append(card)
+    removed = state.meta.aow_cap_state.get(f"{card}_units")
+    from almoravid.capabilities import discard_capability
+    discard_capability(state, card)
     state.meta.count_of_barcelona_side = None
     return removed
 

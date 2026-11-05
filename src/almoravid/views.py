@@ -50,6 +50,9 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     regardless of the Hidden Mats option (1.9, 3.1.3, 4.1). The engine's
     full state remains available through GameState.model_dump()."""
     dump = state.model_dump()
+    if dump.get("pending") is not None:
+        for key in ("_wastage_resume", "_end_campaign_resume"):
+            dump["pending"]["payload"].pop(key, None)
     # Controller saves retain RNG inputs; player snapshots must not expose
     # enough information to reconstruct future dice or shuffles.
     dump["meta"].pop("seed", None)

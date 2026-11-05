@@ -191,6 +191,9 @@ def discard_capability(state: GameState, card_id: str) -> None:
     M15/M20 and the Count lose their tracked contingent and once-per-card
     usage, while Milites explicitly leaves its recruited units in place.
     """
+    occupied = {lid for lid, lord in state.lords.items()
+                if lord.cylinder.kind == "locale"
+                and sum(lord.forces.values()) + sum(lord.routed_units.values()) > 0}
     if card_id in ("M15", "M20"):
         rec = state.meta.aow_cap_state.pop(f"{card_id}_units", {})
         state.meta.aow_cap_state.pop(f"{card_id}_used", None)
@@ -223,6 +226,17 @@ def discard_capability(state: GameState, card_id: str) -> None:
         state.decks.discard = [c for c in state.decks.discard if c != card_id]
     elif card_id not in state.decks.discard:
         state.decks.discard.append(card_id)
+
+    # Detach the card before Disband clears the rest of the mat. A returning
+    # contingent can be a Lord's final Force, including Count/Bishop troops.
+    from almoravid.actions import _h_disband_lord
+    for lid in sorted(occupied):
+        lord = state.lords[lid]
+        if (lord.cylinder.kind == "locale"
+                and sum(lord.forces.values()) + sum(lord.routed_units.values()) == 0):
+            _h_disband_lord(state, {"type": "disband_lord", "side": lord.side,
+                                    "lord_id": lid, "auto_service_disband": True,
+                                    "force_at_service_limit": True})
 
 
 # ---------------------------------------------------------------------------

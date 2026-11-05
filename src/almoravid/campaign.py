@@ -1010,7 +1010,19 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         if started is not None:
             return started
     if not action.get("_wastage_done"):
-        _apply_wastage(state)
+        wasted = _apply_wastage(state, skip_lords=action.get("_wastage_skip_lords", []))
+        if (any(rec.get("disbanded") for rec in wasted)
+                and check_campaign_victory(state) is not None):
+            verdict = compute_victory(state)
+            state.meta.phase = "ended"
+            state.pending = None
+            return {"wastage": wasted, "victory": verdict}
+        if state.pending is not None and state.pending.kind == "neutrality_choice":
+            state.pending.payload["_end_campaign_resume"] = {
+                "type": "end_campaign", "_wastage_skip_lords": [
+                    *action.get("_wastage_skip_lords", []),
+                    *(rec["lord_id"] for rec in wasted)]}
+            return {"wastage": wasted, "pending": "neutrality_choice"}
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -3993,6 +4005,7 @@ def _finish_storm(
             for atype, n in list(elord.assets.items()):
                 if n > 0:
                     sack_spoils[atype] = sack_spoils.get(atype, 0) + n
+            elord.cylinder = Cylinder(kind="removed")
             from almoravid.capabilities import discard_capability
             for cid in list(elord.capabilities):
                 discard_capability(state, cid)
@@ -4001,7 +4014,6 @@ def _finish_storm(
                     setattr(elord, fld, type(getattr(elord, fld))())
                 except Exception:
                     pass
-            elord.cylinder = Cylinder(kind="removed")
             _ssl(state, eid, boxes=20)
             removed_lords.append(eid)
         # (b) Conquer the Stronghold as per Surrender (4.5.1).
@@ -5775,7 +5787,8 @@ def _unstack_all_lieutenants(state: GameState) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
+def _apply_wastage(state: GameState, *,
+                    skip_lords: list[str] | None = None) -> list[dict[str, Any]]:
     """Rule 4.9.4: each Mustered Lord (on the map) with MORE THAN ONE
     of any Asset type, or more than one This-Lord Capability card,
     discards one excess. Greedy/deterministic: drop one unit of the
@@ -5784,7 +5797,7 @@ def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for lid in sorted(state.lords):
         lord = state.lords[lid]
-        if lord.cylinder.kind != "locale":
+        if lid in (skip_lords or []) or lord.cylinder.kind != "locale":
             continue
         # Largest Asset stack with count > 1.
         over = [(n, a) for a, n in lord.assets.items() if n > 1]
@@ -5801,7 +5814,12 @@ def _apply_wastage(state: GameState) -> list[dict[str, Any]]:
             drop = sorted(caps)[-1]
             from almoravid.capabilities import discard_capability
             discard_capability(state, drop)
-            out.append({"lord_id": lid, "discarded_capability": drop})
+            out.append({"lord_id": lid, "discarded_capability": drop,
+                        **({"disbanded": True} if lord.cylinder.kind != "locale" else {})})
+            if (state.pending is not None and state.pending.kind == "neutrality_choice"
+                    or (state.meta.phase == "campaign"
+                        and check_campaign_victory(state) is not None)):
+                break
     return out
 
 def _wastage_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
@@ -5863,7 +5881,8 @@ def _apply_one_wastage(state: GameState, lid: str,
              f"{lid} does not hold capability {cid} (Wastage)", code="bad_arg")
     from almoravid.capabilities import discard_capability
     discard_capability(state, cid)
-    return {"lord_id": lid, "discarded_capability": cid}
+    return {"lord_id": lid, "discarded_capability": cid,
+            **({"disbanded": True} if lord.cylinder.kind != "locale" else {})}
 
 
 def _wastage_begin(state: GameState,
@@ -5913,11 +5932,14 @@ def _h_wastage_choice(state: GameState,
     side = _require_side(action)
     pd = _require_pending(state, "wastage_choice", side)
     payload = pd.payload
-    eligible = _wastage_eligible_lords(state, side)
+    eligible = [rec for rec in _wastage_eligible_lords(state, side)
+                if rec["lord_id"] not in payload.get("_wasted_lords", [])]
     chosen: dict[str, Any] = action.get("discards", {}) or {}
     _require(isinstance(chosen, dict),
              "discards must be a dict lord_id -> item", code="bad_arg")
-    applied: list[dict[str, Any]] = []
+    # Validate the whole side's selection before a political consequence can
+    # pause resolution. Its remaining authorized selections survive that pause.
+    selections = {}
     for rec in eligible:
         lid = rec["lord_id"]
         item = chosen.get(lid)
@@ -5928,7 +5950,26 @@ def _h_wastage_choice(state: GameState,
         _require(item in rec["options"],
                  f"{item} is not a legal Wastage discard for {lid}",
                  code="bad_arg")
+        selections[lid] = item
+    applied: list[dict[str, Any]] = []
+    for lid, item in selections.items():
         applied.append(_apply_one_wastage(state, lid, item))
+        if applied[-1].get("disbanded") and check_campaign_victory(state) is not None:
+            verdict = compute_victory(state)
+            state.meta.phase = "ended"
+            state.pending = None
+            _record(state, action, f"{side} Wastage causes Campaign victory")
+            return {"wastage_choice": {"side": side, "applied": applied}, "victory": verdict}
+        if state.pending is not None and state.pending.kind == "neutrality_choice":
+            state.pending.payload["_wastage_resume"] = {
+                "side": side, "discards": selections,
+                "payload": {**payload, "_wasted_lords": [
+                    *payload.get("_wasted_lords", []), *(rec["lord_id"] for rec in applied)]}}
+            completed = {rec["lord_id"]: selections[rec["lord_id"]] for rec in applied}
+            _record(state, {**action, "discards": completed},
+                    f"{side} Wastage pauses for Recognition of Neutrality")
+            return {"wastage_choice": {"side": side, "applied": applied},
+                    "pending": "neutrality_choice"}
     payload["prompted"].append(side)
     state.pending = None
     _record(state, action, f"{side} Wastage discards: {applied}")
@@ -6372,6 +6413,22 @@ def _h_respond_neutrality_choice(state: GameState, action: dict[str, Any]) -> di
         next_pending = False
     _record(state, action,
             f"{side} resolves RECOGNITION OF NEUTRALITY: {applied}")
+    continuations = {key: pd.payload[key] for key in ("_wastage_resume", "_end_campaign_resume")
+                     if key in pd.payload}
+    if next_pending:
+        assert state.pending is not None
+        state.pending.payload.update(continuations)
+    elif "_wastage_resume" in continuations:
+        continuation = continuations["_wastage_resume"]
+        state.pending = PendingDecision(kind="wastage_choice", waiting_on=continuation["side"],
+                                        payload=continuation["payload"])
+        state.meta.active_player = continuation["side"]
+        return {"applied": applied, "advance": _h_wastage_choice(state, {
+            "type": "wastage_choice", "side": continuation["side"],
+            "discards": continuation["discards"]})}
+    elif "_end_campaign_resume" in continuations:
+        return {"applied": applied,
+                "advance": _h_end_campaign(state, continuations["_end_campaign_resume"])}
     return {"applied": applied, "more_pending": next_pending}
 
 

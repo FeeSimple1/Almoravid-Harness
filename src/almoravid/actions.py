@@ -1663,6 +1663,12 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      code="not_at_limit")
         beyond = sm.box < cur
 
+    # The Lord leaves the map before mat cleanup. Capability removal can
+    # itself empty a mat, so this also prevents a recursive second Disband.
+    left_locale = lord.cylinder.locale_id
+    lord.cylinder = Cylinder(kind="mat")
+    lord.in_stronghold = False
+
     # 3.3.2 Important / 1.4.3: Independent Taifa Lord -> Parias + Coin + VP.
     taifa_adjust = None
     parias_coin = None
@@ -1678,9 +1684,6 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         # would otherwise force-Conquer his own Stronghold with Jihad
         # markers on the way out). The final Calendar placement below
         # overwrites this temporary off-map state.
-        from almoravid.state import Cylinder as _Cyl
-        lord.cylinder = _Cyl(kind="mat")
-        lord.in_stronghold = False
         # T5: the Disband path awards Parias Coin with the Christian
         # player's explicit distribution, so suppress adjust_taifa_status'
         # own auto-award to avoid double-paying (1.4.3 / L7).
@@ -1762,8 +1765,6 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.lieutenant_of = None
 
     # Locale being vacated, for the 4.3.5 Siege/Bypass-marker cleanup.
-    left_locale = (lord.cylinder.locale_id
-                   if lord.cylinder.kind == "locale" else None)
     if beyond:
         # 3.3.1 permanent removal.
         lord.cylinder = Cylinder(kind="removed")

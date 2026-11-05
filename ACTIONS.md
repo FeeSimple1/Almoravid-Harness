@@ -241,6 +241,13 @@ tracked contingent and clears that acquisition's usage record. A new
 acquisition may recruit again. A Lord staying at a Winter Siege keeps the
 card and its existing usage status.
 
+Returning the contingent immediately Disbands a Mustered Lord if no regular
+or Routed Forces remain. Calendar placement counts from the current Levy
+or the next Levy during Campaign. Normal mat cleanup and Taifa politics
+apply. Wastage pauses for any Recognition of Neutrality decision, then
+resumes its remaining discards. A final-Lord Campaign victory resolves
+before advancing the Calendar.
+
 ## Fueros (C20)
 
 Only Alfonso may Levy Fueros. It deploys at the board edge, not his mat.

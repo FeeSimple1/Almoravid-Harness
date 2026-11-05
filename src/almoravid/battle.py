@@ -1400,6 +1400,8 @@ def apply_battle_losses(
                     and lord.cylinder.kind == "locale"):
                 from almoravid.actions import _shift_service_left as _ssl
                 from almoravid.capabilities import discard_capability
+                _gone_locale = lord.cylinder.locale_id
+                lord.cylinder = Cylinder(kind="removed")
                 for cid in list(lord.capabilities):
                     discard_capability(state, cid)
                 for fld in lord.cleanup_on_removal_fields:
@@ -1407,8 +1409,6 @@ def apply_battle_losses(
                         setattr(lord, fld, type(getattr(lord, fld))())
                     except Exception:
                         pass
-                _gone_locale = lord.cylinder.locale_id
-                lord.cylinder = Cylinder(kind="removed")
                 _ssl(state, lid, boxes=20)
                 out[lid]["permanently_removed"] = True
                 # 1.4.3: removal of a Taifa Lord adjusts his Taifa;
@@ -3267,6 +3267,7 @@ def apply_retreat_aftermath(
         # a permanently-removed Lord hands all Assets to the winner.
         entry["spoils_lost"] = _transfer_retreat_spoils(
             state, lord, "removed", loser_conceded, winner_lord_ids)
+        lord.cylinder = Cylinder(kind="removed")
         from almoravid.capabilities import discard_capability
         for cid in list(lord.capabilities):
             discard_capability(state, cid)
@@ -3276,7 +3277,6 @@ def apply_retreat_aftermath(
                         type(getattr(lord, field_name))())
             except Exception:
                 pass
-        lord.cylinder = Cylinder(kind="removed")
         _shift_service_left(state, lid, boxes=20)  # force off-left
         entry["fate"] = "removed"
         # 1.4.3: removal of a Taifa Lord adjusts his Taifa; 1.3.1:
