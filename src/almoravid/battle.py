@@ -2995,6 +2995,9 @@ def _transfer_retreat_spoils(
     fate: str,
     conceded: bool,
     winner_lord_ids: list[str],
+    *,
+    retreat_way_type: str | None = None,
+    prov_to_keep: int | None = None,
 ) -> dict[AssetType, int]:
     """Rule 4.4.3 Spoils-on-Retreat. Move the losing Lord's Assets to
     the winning Lords (round-robin), per fate:
@@ -3020,7 +3023,9 @@ def _transfer_retreat_spoils(
         if loot > 0:
             take["loot"] = loot
             lord.assets.pop("loot", None)
-        transport = lord.assets.get("cart", 0) + lord.assets.get("mule", 0)
+        from almoravid.campaign import _unladen_prov_capacity
+        transport = (_unladen_prov_capacity(state, [lord.id], retreat_way_type)
+                     if prov_to_keep is None else prov_to_keep)
         prov = lord.assets.get("prov", 0)
         excess = max(0, prov - transport)
         if excess > 0:
@@ -3243,8 +3248,11 @@ def apply_retreat_aftermath(
                 entry["service_shift_boxes"] = shift
                 entry["new_service_box"] = new_box
             # Arts of War C7: the paid opt-out skips BOTH penalties.
-            entry["spoils_lost"] = {} if opt_out_used else _transfer_retreat_spoils(
-                state, lord, "retreat", loser_conceded, winner_lord_ids)
+            # Conceding co-retreaters share Transport. Wait until their
+            # destinations and any C7 payments are known before taking food.
+            entry["spoils_lost"] = (
+                {} if opt_out_used or loser_conceded else _transfer_retreat_spoils(
+                    state, lord, "retreat", False, winner_lord_ids))
             summary["losers"].append(entry)
             continue
 
@@ -3278,6 +3286,35 @@ def apply_retreat_aftermath(
         if pol:
             entry["removal_politics"] = pol
         summary["losers"].append(entry)
+
+    if loser_conceded:
+        from almoravid.campaign import _unladen_prov_capacity
+        groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for entry in summary["losers"]:
+            if entry["fate"] == "retreat":
+                key = (entry["retreat_to"], entry["retreat_way"])
+                groups.setdefault(key, []).append(entry)
+        for (_, way), entries in groups.items():
+            # Each Lord keeps food carried by his own usable Transport
+            # first, then borrows spare capacity from his co-retreaters.
+            # C7 exempts that Lord's Spoils but does not hide spare Transport.
+            capacities = {
+                e["lord_id"]: _unladen_prov_capacity(state, [e["lord_id"]], way)
+                for e in entries
+            }
+            spare = sum(max(0, capacities[e["lord_id"]]
+                            - state.lords[e["lord_id"]].assets.get("prov", 0))
+                        for e in entries)
+            for entry in entries:
+                if entry.get("c7_opt_out"):
+                    continue
+                lord = state.lords[entry["lord_id"]]
+                own = capacities[lord.id]
+                borrowed = min(spare, max(0, lord.assets.get("prov", 0) - own))
+                spare -= borrowed
+                entry["spoils_lost"] = _transfer_retreat_spoils(
+                    state, lord, "retreat", True, winner_lord_ids,
+                    retreat_way_type=way, prov_to_keep=own + borrowed)
 
     return summary
 

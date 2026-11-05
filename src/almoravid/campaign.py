@@ -2092,8 +2092,8 @@ def _is_laden(lord: Lord, way_type: str | None = None) -> bool:
         number of Transport units, so at least one unit must double up);
       - a Cart carries any Provender over a Pass (only Carts are hindered
         on Passes — Mules carry Provender over a Pass freely; the Cart
-        must carry Provender only when Provender exceeds Mule capacity,
-        2 per Mule); or
+        must carry Provender or a Mule must double-load when Provender
+        exceeds the number of Mules); or
       - the Lord is moving any Loot.
 
     C4 (4.3.2): transport-carrying is now accounted for — Provender that
@@ -2110,14 +2110,14 @@ def _is_laden(lord: Lord, way_type: str | None = None) -> bool:
         return True
     if prov > transport:           # some Transport unit carries two
         return True
-    if way_type == "pass" and cart > 0 and prov > 2 * mule:
-        # Provender beyond Mule capacity must ride a Cart -> Laden on a Pass.
+    if way_type == "pass" and prov > mule:
+        # An Unladen Pass uses no Carts and only one Provender per Mule.
         return True
     return False
 
 
 def _transport_for_lords(state: GameState, lord_ids: list[str]) -> tuple[int, int]:
-    """Transport capacity for March/Supply (4.3.2/4.6.1; M16 Camels).
+    """Effective Transport for movement/Supply (4.3.2/4.6.1; M16 Camels).
 
     Camels doubles only Mules on Yusuf's and Sir's mats, including when
     they Share those Mules with another Lord (Arts of War Reference M16).
@@ -2130,6 +2130,13 @@ def _transport_for_lords(state: GameState, lord_ids: list[str]) -> tuple[int, in
         cart += lord.assets.get("cart", 0)
         mule += lord.assets.get("mule", 0) * (2 if camels and lid in ("yusuf", "sir") else 1)
     return cart, mule
+
+
+def _unladen_prov_capacity(state: GameState, lord_ids: list[str],
+                           way_type: str | None = None) -> int:
+    """One Provender per effective Transport; no Cart-borne food on Passes."""
+    cart, mule = _transport_for_lords(state, lord_ids)
+    return mule if way_type == "pass" else cart + mule
 
 
 def _marching_lords(state: GameState, lord_id: str,
@@ -2157,8 +2164,7 @@ def _march_load(state: GameState, lord_ids: list[str],
     transport = cart + mule
     excess = max(0, prov - 2 * transport)
     carried = prov - excess
-    laden = (loot >= 1 or carried > transport
-             or (way_type == "pass" and cart > 0 and carried > 2 * mule))
+    laden = loot >= 1 or carried > _unladen_prov_capacity(state, lord_ids, way_type)
     return laden, excess
 
 
@@ -4460,11 +4466,7 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any]) -> dict[st
         if loot > 0:
             discarded["loot"] += loot
             lord.assets.pop("loot", None)
-    group_cap = sum(
-        (state.lords[lid].assets.get("mule", 0) if way_type == "pass"
-         else state.lords[lid].assets.get("cart", 0)
-         + state.lords[lid].assets.get("mule", 0))
-        for lid in avoiders)
+    group_cap = _unladen_prov_capacity(state, avoiders, way_type)
     group_prov = sum(state.lords[lid].assets.get("prov", 0)
                      for lid in avoiders)
     excess = max(0, group_prov - group_cap)
