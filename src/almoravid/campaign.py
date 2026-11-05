@@ -987,17 +987,30 @@ def _apply_grow_harvest_repairs(state: GameState, prev_box: int,
 
 
 def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """Resolve end-of-Campaign bookkeeping and advance the Calendar.
-
-    Phase 3a: minimal — clear Plans (Pattern 13), advance current_box
-    by 1, transition back to Levy (or to ended if scenario_end reached).
-    Real Feed/Pay/Disband / Wastage / Plow / Grow land in Phase 3+.
-    """
+    """Resolve Game End, Grow/Harvest, Repairs, Wastage, then Reset (4.9)."""
     _require_campaign_step(state, "end_campaign")
-    # Clear plans (per-Campaign window — Pattern 13)
-    state.decks.plan = {"christian": [], "muslim": []}
-    # Phase 7c: unstack all Lieutenants / Lower Lords (4.1.3).
-    _unstack_all_lieutenants(state)
+    _require(state.pending is None,
+             "resolve the pending decision before ending the Campaign",
+             code="pending_decision")
+    prev_box = state.calendar.current_box
+    new_box = prev_box + 1
+    # 4.9.1 ends the final Campaign before any mat, map or Reset cleanup.
+    if (new_box > len(state.calendar.boxes)
+            or "scenario_end" in state.calendar.boxes[new_box - 1].decorations):
+        state.meta.phase = "ended"
+        verdict = compute_victory(state)
+        _record(state, action,
+                f"Final Campaign end at box {prev_box}; winner={verdict['winner']}")
+        return {"phase": "ended", "current_box": prev_box, "victory": verdict}
+    # Wastage may pause for player choices or their political consequences.
+    # Carry the completed 4.9.2/.3 result through those continuations so they
+    # run once, with the Campaign marker still in the just-concluded box.
+    ghr = action.get("_grow_harvest_repairs")
+    if ghr is None:
+        ghr = _apply_grow_harvest_repairs(
+            state, prev_box, grow_choices=action.get("grow_choices"))
+    continuation = {"type": "end_campaign", "_grow_harvest_repairs": ghr}
+    action = {**action, **continuation}
     # Phase 7g: Wastage (4.9.4) — each Mustered Lord with more than one
     # of any Asset type, or more than one This-Lord Capability card,
     # discards one excess. With `interactive_wastage` the owning player
@@ -1008,6 +1021,7 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             and not action.get("_wastage_done")):
         started = _wastage_begin(state, action)
         if started is not None:
+            started.setdefault("grow_harvest_repairs", ghr)
             return started
     if not action.get("_wastage_done"):
         wasted = _apply_wastage(state, skip_lords=action.get("_wastage_skip_lords", []))
@@ -1019,10 +1033,13 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             return {"wastage": wasted, "victory": verdict}
         if state.pending is not None and state.pending.kind == "neutrality_choice":
             state.pending.payload["_end_campaign_resume"] = {
-                "type": "end_campaign", "_wastage_skip_lords": [
+                **continuation, "_wastage_skip_lords": [
                     *action.get("_wastage_skip_lords", []),
                     *(rec["lord_id"] for rec in wasted)]}
             return {"wastage": wasted, "pending": "neutrality_choice"}
+    # 4.9.5 Reset only begins after all Wastage and political choices.
+    state.decks.plan = {"christian": [], "muslim": []}
+    _unstack_all_lieutenants(state)
     state.meta.plan_finalized_christian = False
     state.meta.plan_finalized_muslim = False
     state.meta.plan_index_christian = 0
@@ -1038,34 +1055,8 @@ def _h_end_campaign(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             else:
                 state.decks.discard.append(event_card)
     state.decks.this_campaign_events = {}
-    # Advance Calendar
-    prev_box = state.calendar.current_box
-    new_box = prev_box + 1
-    # Check Scenario End marker
-    if new_box > len(state.calendar.boxes):
-        state.meta.phase = "ended"
-        verdict = compute_victory(state)
-        _record(state, action,
-                f"Campaign end at box {prev_box}; scenario ended "
-                f"(off calendar); winner={verdict['winner']}")
-        return {"phase": "ended", "current_box": prev_box,
-                "victory": verdict}
+    # 4.9.5: advance only after the preceding steps have completed.
     state.calendar.current_box = new_box
-    # If new box has scenario_end marker, end the game
-    new_box_obj = state.calendar.boxes[new_box - 1]
-    if "scenario_end" in new_box_obj.decorations:
-        state.meta.phase = "ended"
-        verdict = compute_victory(state)
-        _record(state, action,
-                f"Campaign end; advanced box {prev_box} -> {new_box} "
-                f"(Scenario End); winner={verdict['winner']}")
-        return {"phase": "ended", "current_box": new_box,
-                "victory": verdict}
-    # 4.9.2 Grow/Harvest + 4.9.3 Repairs for the just-concluded Campaign
-    # (only reached when the game continues, i.e. 4.9.1 Game End did not
-    # fire above). `prev_box` is the box whose Campaign just ended.
-    ghr = _apply_grow_harvest_repairs(
-        state, prev_box, grow_choices=action.get("grow_choices"))
     # Otherwise return to Levy
     _return_to_levy(state)
 
@@ -5893,7 +5884,10 @@ def _wastage_begin(state: GameState,
     if not (_wastage_eligible_lords(state, "christian")
             or _wastage_eligible_lords(state, "muslim")):
         return None
-    payload: dict[str, Any] = {"cursor_side": "christian", "prompted": []}
+    payload: dict[str, Any] = {
+        "cursor_side": "christian", "prompted": [],
+        "_end_campaign_action": {
+            "type": "end_campaign", "_grow_harvest_repairs": action["_grow_harvest_repairs"]}}
     return _wastage_advance(state, action, payload)
 
 
@@ -5920,8 +5914,8 @@ def _wastage_advance(state: GameState, action: dict[str, Any],
     # Both sides done -> resume the rest of end-Campaign (skip re-applying
     # Wastage, which was applied incrementally per choice).
     state.pending = None
-    return _h_end_campaign(state, {"type": "end_campaign",
-                                   "_wastage_done": True})
+    return _h_end_campaign(state, {**payload.get("_end_campaign_action", {}),
+                                   "type": "end_campaign", "_wastage_done": True})
 
 
 def _h_wastage_choice(state: GameState,

@@ -119,3 +119,27 @@ Beset profiles completed; Reconquista completed one profile and reached the
 configured 400-step bound in two profiles.
 
 All nine original Almoravid audit findings are fixed.
+
+## Second audit, batch 1 — A2-04
+
+End Campaign now follows 4.9 in order: Game End, Grow/Harvest, Repairs,
+Wastage, then Reset. Final scoring happens before any mat or map cleanup,
+with the Campaign marker left in its final box. The reproduced final-Campaign
+M15 discard can no longer reverse a Muslim points victory into a Christian
+Campaign victory. Harvest changes the mat before Wastage eligibility is checked.
+
+Completed Grow/Harvest and Repairs travel through the Wastage continuation,
+including political choices and saved games, so they run once. Explicit Grow
+selections survive both sides' Wastage prompts. Reset unstacking waits until
+those choices finish, and unrelated End Campaign calls reject while pending.
+
+Nineteen new regressions cover final scoring, Calendar overflow, automatic and
+interactive Harvest/Wastage, both Transport types, explicit Grow, Repairs,
+save/load, invalid selections and Reset timing. Eighteen fail on the preceding
+main revision; one preservation case passes. The full suite passes 1,701 tests,
+and source/new-test Ruff checks pass. Both configured invariant stress sweeps
+pass: Toledo's three profiles complete; Reconquista completes one profile and
+reaches the 400-step bound in two.
+
+Second-audit progress: **1 of 6 Almoravid groups fixed**. A2-01, A2-02, A2-03,
+IF2-2 and IF2-3 remain open. The original nine groups remain fixed.

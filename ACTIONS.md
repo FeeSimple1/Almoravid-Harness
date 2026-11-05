@@ -262,3 +262,12 @@ than to every Muslim Lord. Choose one or two eligible markers:
 `count` may be one or two, within the number present; omitting it retains
 the existing maximum-up-to-two payload behavior. Decline by not invoking
 the action. The menu includes both counts when available.
+
+## End Campaign sequence
+
+`end_campaign` checks final scoring before applying Grow/Harvest, Repairs or
+Wastage. If play continues, Grow/Harvest and Repairs precede Wastage. Their
+completed results remain in `grow_harvest_repairs` across interactive Wastage
+and saved-game continuations. The Calendar stays in the concluding Campaign's
+box until those decisions finish; Reset then unstacks Lords and advances it.
+The final Campaign ends in its existing box without those cleanup steps.
