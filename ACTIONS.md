@@ -67,6 +67,13 @@ assigned. Once the last choice is made, the engine applies all fates,
 Losses, Spoils, and Service and resumes the Command sequence.
 Mandatory fates resolve automatically.
 
+If co-retreating Lords Conceded and surviving shared Transport cannot
+carry all their Provender, the losing player chooses how much each
+eligible Lord keeps. The `retreat_provender` menu gives the legal
+`amount` values for the named `lord_id`. Once only one mat remains on
+that route, the engine assigns it the remaining capacity. Captured
+Provender joins the winner's Spoils.
+
 With Baggage Parapet in play, each retreating Christian Lord can add
 `c7_pay` to the chosen Retreat. Set it to an Asset on that Lord's mat
 to spend one and skip his Retreat Spoils and Service shift. Select the
@@ -75,7 +82,7 @@ Retreat without `c7_pay` to take the normal penalties.
 Scripted callers that omit `interactive_retreat` use the automatic
 resolution policy.
 
-## Allocating combat Spoils
+## Allocating Spoils
 
 After Losses, the winning player allocates captured Assets when more
 than one Lord can receive them. Use the `battle_spoils` action with
@@ -86,8 +93,25 @@ pool is empty, and a partially allocated pool can be saved and loaded.
 
 Battle and Sally actions with `interactive_retreat` enable this choice.
 Storm actions in the legal menu set `interactive_spoils` for a Sack.
+A successful Avoid offers the same allocation to the Approaching side
+before any remaining defenders respond. Betrayal of Terms Spoils use
+the same allocation.
 A single recipient receives the full pool automatically. Scripted and
 campaign-ending combats use automatic allocation after Losses.
+
+## Surrender Holds
+
+The normal Siege roll keeps any unplayed Held cards. The Siege menu
+offers `mozarabes: true` when the Christian player can spend C21 to
+succeed automatically in a Reconquista Taifa. A successful Christian
+Surrender using the menu opens `betrayal_of_terms`. Decline to keep C9
+or play it for `single` or `double` Spoils. A scripted Siege can set
+`interactive_surrender: true` for the same response or predeclare
+`c9_mode` as `single` or `double`.
+
+After double Spoils are allocated, the Muslim player chooses an
+eligible `target_locale_id` with `betrayal_jihad` if a Jihad marker
+can be placed. The Christian Command sequence then resumes.
 
 ## Lifecycle
 

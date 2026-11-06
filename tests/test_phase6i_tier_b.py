@@ -145,7 +145,7 @@ def test_c9_betrayal_doubles_spoils_and_adds_jihad() -> None:
     from almoravid.capabilities import effective_command
     s.meta.actions_remaining = effective_command(s, "alfonso")  # fresh card
     jihad_before = sum(loc.jihad_markers for loc in s.locales.values())
-    result = apply_action(s, {"type": "cmd_siege", "side": "christian"})
+    result = apply_action(s, {"type": "cmd_siege", "side": "christian", "c9_mode": "double"})
     assert result["surrender"] is not None, "expected a Surrender roll"
     assert result["surrender"]["succeeded"] is True, "Surrender should succeed"
     base = load_strongholds()["strongholds"]["town"]["spoils"]
@@ -154,6 +154,9 @@ def test_c9_betrayal_doubles_spoils_and_adds_jihad() -> None:
     assert spoils["prov"] == base["prov"] * 2
     assert result["surrender"]["c9_betrayal_used"] is True
     assert "C9" in s.decks.discard
+    from almoravid.legal_moves import legal_moves
+    jihad = next(move for move in legal_moves(s) if move["type"] == "betrayal_jihad")
+    apply_action(s, jihad)
     jihad_after = sum(loc.jihad_markers for loc in s.locales.values())
     assert jihad_after >= jihad_before + 1        # Muslims add 1 Jihad
 

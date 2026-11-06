@@ -18,6 +18,7 @@ Architectural choices driven by FUTURE_PROJECTS_LESSONS.md:
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, cast
 
 from almoravid.actions import (
@@ -2579,7 +2580,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     # enemy Lord (not inside a Stronghold) is at `target`, the defender
     # owes a response: Avoid Battle, Withdraw, or Stand & Fight.
     trigger = _check_approach_trigger(
-        state, target, side, from_loc, way_type, lord_id,
+        state, target, side, from_loc, way_type, lord_id, moving_lords,
     )
     base = {"from": from_loc, "to": target, "way_type": way_type,
             "laden": laden, "cost": cost,
@@ -3372,19 +3373,32 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     # <= (Siege markers there, max 4) + (Ravaged marker there, max 1).
     surrender_result = None
     surrendered = False
-    do_surrender = action.get("surrender", True) and not enemy_inside
+    roll_surrender = action.get("surrender", True)
+    mozarabes = action.get("mozarabes", False)
+    interactive_surrender = action.get("interactive_surrender", False)
+    c9_mode = action.get("c9_mode")
+    _require(all(isinstance(flag, bool) for flag in
+                 (roll_surrender, mozarabes, interactive_surrender)),
+             "Surrender options must be booleans", code="bad_arg")
+    do_surrender = roll_surrender and not enemy_inside
+    target_taifa = state.taifas.get(loc.territory)
+    if mozarabes:
+        _require(do_surrender and side == "christian"
+                 and "C21" in held_event_ids(state, side)
+                 and target_taifa is not None and target_taifa.status == "reconquista",
+                 "Mozárabes requires C21 Held and a Reconquista Taifa Surrender roll",
+                 code="bad_arg")
+    if c9_mode is not None:
+        _require(c9_mode in ("single", "double") and do_surrender and side == "christian"
+                 and "C9" in held_event_ids(state, side),
+                 "Betrayal of Terms requires C9 Held and single or double Spoils",
+                 code="bad_arg")
     if do_surrender:
-        # C21 Mozarabes auto-success in a Reconquista Taifa.
-        c21_held = (side == "christian" and "C21" in
-                    held_event_ids(state, "christian"))
-        target_taifa = state.taifas.get(loc.territory)
-        c21_eligible = (c21_held and target_taifa is not None
-                        and target_taifa.status == "reconquista")
         # Ravaged marker THERE (at the Locale), of the besieging side,
         # capped at 1 (rule 4.5.1).
         ravaged_here = 1 if loc.ravaged == color else 0
         threshold = min(4, current) + ravaged_here
-        if c21_eligible:
+        if mozarabes:
             consume_held_event(state, "christian", "C21")
             state.decks.discard.append("C21")
             dice = []
@@ -3403,38 +3417,9 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         if cancellations == sh_value:
             surrendered = True
             conq_result = _conquer_stronghold(state, here, side)
-            # Surrender provides NO Spoils (4.5.1 Terms). C9 Betrayal of
-            # Terms (Christian) overrides: take Spoils as if Sack, OR
-            # double + Muslims add 1 Jihad.
-            from almoravid.battle import distribute_spoils_round_robin
-            sh = load_strongholds()["strongholds"][loc.base_type]
-            base_spoils = {k: v for k, v in sh.get("spoils", {}).items()
-                           if k in ("coin", "loot", "prov")}
-            c9_held = (side == "christian" and "C9" in
-                       held_event_ids(state, "christian"))
-            spoils = {}
-            if c9_held:
-                # C9 OR-choice (Arts of War ref): "single" = take Spoils as
-                # if Sack (x1, no Jihad); "double" (default) = twice the
-                # Spoils and the Muslims add 1 Jihad.
-                c9_mode = action.get("c9_mode", "double")
-                multiplier = 1 if c9_mode == "single" else 2
-                spoils = {k: v * multiplier for k, v in base_spoils.items()}
-                friendly_here = [
-                    lord_obj.id for lord_obj in state.lords.values()
-                    if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
-                    and lord_obj.cylinder.locale_id == here
-                ]
-                if friendly_here and spoils:
-                    distribute_spoils_round_robin(state, friendly_here, spoils)
-                consume_held_event(state, "christian", "C9")
-                state.decks.discard.append("C9")
-                if c9_mode != "single":
-                    from almoravid.events import _add_jihad
-                    _add_jihad(state, 1, {})
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": True, "conquest": conq_result,
-                                "spoils": spoils, "c9_betrayal_used": c9_held}
+                                "spoils": {}, "c9_betrayal_used": False}
         else:
             surrender_result = {"dice": dice, "threshold": threshold,
                                 "succeeded": False}
@@ -3480,11 +3465,76 @@ def _h_cmd_siege(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             + (f"; Surrender check: {surrender_result}"
                if surrender_result else "")
             + f"; card spent ({consumed} actions)")
-    return {"locale": here, "color": color, "placed": placed,
-            "total_markers": getattr(loc, marker_field),
-            "siegeworks": siegeworks, "surrender": surrender_result,
-            "fought_marked": fought_marked,
-            "actions_consumed": consumed}
+    receipt = {"locale": here, "color": color, "placed": placed,
+               "total_markers": getattr(loc, marker_field),
+               "siegeworks": siegeworks, "surrender": surrender_result,
+               "fought_marked": fought_marked,
+               "actions_consumed": consumed}
+    if surrendered and c9_mode is not None:
+        reward = _play_betrayal_of_terms(state, here, c9_mode)
+        assert surrender_result is not None
+        surrender_result.update(spoils=reward.get("spoils", {}), c9_betrayal_used=True)
+        receipt.update(reward)
+    elif (surrendered and side == "christian" and interactive_surrender
+          and check_campaign_victory(state) is None):
+        # Open on the public trigger whether or not C9 is Held.
+        state.pending = PendingDecision(kind="betrayal_of_terms", waiting_on=side,
+                                        payload={"locale_id": here})
+        receipt.update(pending="betrayal_of_terms", waiting_on=side)
+    return receipt
+
+
+def _play_betrayal_of_terms(state: GameState, here: str, mode: str) -> dict[str, Any]:
+    from almoravid.events import _jihad_eligible_locales
+    from almoravid.static_data import load_strongholds
+
+    stronghold = load_strongholds()["strongholds"][state.locales[here].base_type]
+    multiplier = 2 if mode == "double" else 1
+    spoils = {cast(AssetType, asset): amount * multiplier
+              for asset, amount in stronghold["spoils"].items()
+              if asset in ("coin", "loot", "prov") and amount > 0}
+    consume_held_event(state, "christian", "C9")
+    state.decks.discard.append("C9")
+    receipt: dict[str, Any] = {"c9_betrayal_used": True, "mode": mode}
+    if (mode == "double" and _jihad_eligible_locales(state)
+            and check_campaign_victory(state) is None):
+        state.pending = PendingDecision(kind="betrayal_jihad", waiting_on="muslim",
+                                        payload={"locale_id": here})
+        state.meta.active_player = "muslim"
+        receipt.update(pending="betrayal_jihad", waiting_on="muslim")
+    return _settle_battle_spoils(state, "christian", here, [], [spoils], receipt,
+                                 interactive=True, source="surrender")
+
+
+def _h_betrayal_of_terms(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "betrayal_of_terms", side)
+    mode = action.get("mode")
+    _require(mode in ("decline", "single", "double"), "choose decline, single or double",
+             code="bad_arg")
+    if mode != "decline":
+        _require("C9" in held_event_ids(state, side), "C9 is not Held", code="card_not_held")
+    state.pending = None
+    _record(state, action, f"Christian Betrayal of Terms choice: {mode}")
+    if mode == "decline":
+        return {"declined": "betrayal_of_terms"}
+    assert isinstance(mode, str)
+    return _play_betrayal_of_terms(state, pd.payload["locale_id"], mode)
+
+
+def _h_betrayal_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.events import _add_jihad, _jihad_eligible_locales
+
+    side = _require_side(action)
+    _require_pending(state, "betrayal_jihad", side)
+    target = action.get("target_locale_id")
+    _require(target in _jihad_eligible_locales(state), "choose an eligible Jihad Locale",
+             code="bad_target")
+    placement = _add_jihad(state, 1, {"jihad_targets": [target]})
+    state.pending = None
+    state.meta.active_player = "christian"
+    _record(state, action, f"Muslim places Betrayal of Terms Jihad at {target}")
+    return {"jihad_placed": placement}
 
 
 
@@ -3510,7 +3560,8 @@ def _finish_sally(
     side: Side = pl["side"]
     here: str = pl["here"]
     retreat_summary = apply_sally_aftermath(
-        state, result, here, fates=pl.get("fates"), spoils=spoils)
+        state, result, here, fates=pl.get("fates"), spoils=spoils,
+        defer_retreat_spoils=pl["defer_retreat_spoils"])
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     _record(state, action,
@@ -3542,7 +3593,8 @@ def _finish_open_field_battle(
     here: str = pl["here"]
     # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
     retreat_summary = apply_retreat_aftermath(state, result, fates=pl.get("fates"), spoils=spoils)
-    finish_field_battle_losses(state, result, retreat_summary, spoils)
+    finish_field_battle_losses(state, result, retreat_summary, spoils,
+                               defer_retreat_spoils=pl["defer_retreat_spoils"])
     # Battle ends the card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -3593,7 +3645,8 @@ def _finish_approach_battle(
         state, result,
         approach_from_locale=pl.get("from_locale_id"),
         approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"), spoils=spoils)
-    finish_field_battle_losses(state, result, retreat_summary, spoils)
+    finish_field_battle_losses(state, result, retreat_summary, spoils,
+                               defer_retreat_spoils=pl["defer_retreat_spoils"])
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -3619,6 +3672,8 @@ def _settle_battle_spoils(
     state: GameState, winner: Side | None, locale_id: str, participants: list[str],
     batches: list[dict[AssetType, int]], receipt: dict[str, Any], *,
     interactive: bool,
+    eligible: list[str] | None = None,
+    source: str = "battle",
 ) -> dict[str, Any]:
     from almoravid.battle import award_battle_spoils, battle_spoils_recipients
 
@@ -3628,7 +3683,8 @@ def _settle_battle_spoils(
     for batch in batches:
         for asset, amount in batch.items():
             pool[asset] = pool.get(asset, 0) + amount
-    recipients = battle_spoils_recipients(state, winner, locale_id, participants)
+    recipients = (battle_spoils_recipients(state, winner, locale_id, participants)
+                  if eligible is None else eligible)
     receipt["spoils"] = dict(pool)
     if not recipients:
         receipt["spoils_unclaimed"] = pool
@@ -3638,6 +3694,7 @@ def _settle_battle_spoils(
         state.pending = PendingDecision(
             kind="battle_spoils", waiting_on=winner,
             payload={"locale_id": locale_id, "pool": pool, "recipients": recipients,
+                     "source": source,
                      "_battle_spoils_resume": resume})
         state.meta.active_player = winner
         receipt.update(pending="battle_spoils", waiting_on=winner)
@@ -3654,7 +3711,7 @@ def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     asset = action.get("asset")
     amount = action.get("amount")
     _require(lid in pd.payload["recipients"],
-             "choose an eligible winning Lord at the Battle Locale", code="bad_arg")
+             "choose an eligible Lord at the Spoils Locale", code="bad_arg")
     _require(isinstance(asset, str) and asset in pool,
              "choose an Asset from the remaining Spoils", code="bad_arg")
     _require(type(amount) is int and 1 <= amount <= pool[asset],
@@ -3683,6 +3740,8 @@ def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]
 def _complete_battle_aftermath(state: GameState, action: dict[str, Any],
                                result: Any, pl: dict[str, Any], *,
                                interactive: bool) -> dict[str, Any]:
+    from almoravid.battle import _collect_conceded_retreat_spoils, contested_retreat_provender
+
     state.pending = None
     state.meta.active_player = result.attacker.side
     finish = pl.get("finish")
@@ -3693,11 +3752,69 @@ def _complete_battle_aftermath(state: GameState, action: dict[str, Any],
     }.get(finish, _finish_open_field_battle)
     spoils: list[dict[AssetType, int]] = []
     receipt = handler(state, action, atk=result.attacker, dfd=result.defender,
-                      result=result, pl=pl, spoils=spoils)
+                      result=result, pl={**pl, "defer_retreat_spoils": interactive},
+                      spoils=spoils)
     winners = result.attacker if result.winner == result.attacker.side else result.defender
+    locale_id = pl.get("locale_id", pl.get("here"))
+    assert isinstance(locale_id, str)
+    summary = receipt["retreat_summary"]
+    if interactive and "pursuit" in summary:
+        groups = contested_retreat_provender(state, summary)
+        if groups and result.winner is not None and check_campaign_victory(state) is None:
+            loser = _other(result.winner)
+            resume = {"active_player": state.meta.active_player,
+                      "pending": state.pending.model_dump() if state.pending else None,
+                      "summary": deepcopy(summary), "spoils": spoils,
+                      "winner": result.winner, "participants": winners.lord_ids}
+            state.pending = PendingDecision(
+                kind="retreat_provender", waiting_on=loser,
+                payload={"locale_id": locale_id, "groups": groups, "kept": {},
+                         "_retreat_provender_resume": resume})
+            state.meta.active_player = loser
+            receipt.update(pending="retreat_provender", waiting_on=loser)
+            return receipt
+        _collect_conceded_retreat_spoils(state, summary, [], spoils=spoils)
     return _settle_battle_spoils(
-        state, result.winner, pl.get("locale_id", pl.get("here")),
+        state, result.winner, locale_id,
         winners.lord_ids, spoils, receipt, interactive=interactive)
+
+
+def _h_retreat_provender(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.battle import _collect_conceded_retreat_spoils, retreat_provender_bounds
+
+    side = _require_side(action)
+    pd = _require_pending(state, "retreat_provender", side)
+    groups = pd.payload["groups"]
+    kept = pd.payload["kept"]
+    group = groups[0]
+    lid, minimum, maximum = retreat_provender_bounds(group)
+    amount = action.get("amount")
+    _require(action.get("lord_id") == lid and type(amount) is int and minimum <= amount <= maximum,
+             "choose an amount within this Lord's shared Transport limits", code="bad_arg")
+    kept[lid] = amount
+    group["remaining_capacity"] -= amount
+    del group["provender"][lid]
+    if len(group["provender"]) == 1:
+        kept[next(iter(group["provender"]))] = group["remaining_capacity"]
+        groups.pop(0)
+    _record(state, action, f"{lid} keeps {amount} Provender in Retreat")
+    if groups:
+        return {"pending": "retreat_provender", "waiting_on": side, "lord_id": lid,
+                "provender_kept": amount}
+
+    resume = pd.payload["_retreat_provender_resume"]
+    pending = resume["pending"]
+    state.pending = PendingDecision.model_validate(pending) if pending else None
+    state.meta.active_player = resume["active_player"]
+    summary = resume["summary"]
+    spoils = resume["spoils"]
+    _collect_conceded_retreat_spoils(state, summary, [], spoils=spoils, kept=kept)
+    receipt = {"retreat_summary": summary, "provender_kept": kept}
+    if state.pending is not None:
+        receipt.update(pending=state.pending.kind, waiting_on=state.pending.waiting_on)
+    return _settle_battle_spoils(
+        state, resume["winner"], pd.payload["locale_id"], resume["participants"],
+        spoils, receipt, interactive=True)
 
 
 def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
@@ -4599,7 +4716,7 @@ def _remove_orphaned_siege_bypass(state: GameState, locale_id: str) -> dict[str,
 
 def _check_approach_trigger(
     state: GameState, locale_id: str, active_side: Side,
-    from_locale_id: str, way_type: str, active_lord_id: str,
+    from_locale_id: str, way_type: str, active_lord_id: str, approaching: list[str],
 ) -> dict[str, Any] | None:
     """If an Unbesieged/Unbypassed enemy Lord is at `locale_id` not
     inside a Stronghold, set a PendingDecision and return the payload.
@@ -4628,6 +4745,7 @@ def _check_approach_trigger(
         "via_way_type": way_type,
         "active_lord_id": active_lord_id,
         "active_side": active_side,
+        "approaching_lord_ids": list(approaching),
         "defender_lord_ids": defenders,
     }
     state.pending = PendingDecision(
@@ -4669,11 +4787,12 @@ def _approach_subset(payload: dict[str, Any],
     subset = action.get("lord_ids")
     if subset is None:
         return pending
-    subset = list(subset)
-    _require(all(lid in pending for lid in subset) and subset,
-             "lord_ids must be a non-empty subset of the pending "
-             "defenders (4.3.4)", code="bad_subset")
-    return subset
+    _require(isinstance(subset, (list, tuple)) and bool(subset)
+             and all(isinstance(lid, str) and lid in pending for lid in subset)
+             and len(set(subset)) == len(subset),
+             "lord_ids must name distinct pending defenders (4.3.4)",
+             code="bad_subset")
+    return list(subset)
 
 
 def _resolve_or_repend_approach(state: GameState, payload: dict[str, Any],
@@ -4808,17 +4927,15 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any], *,
             if lord.assets["prov"] == 0:
                 lord.assets.pop("prov", None)
             to_drop -= drop
-    # Distribute discarded Assets to the Approaching attackers as Spoils.
-    spoils = {k: v for k, v in discarded.items() if v > 0}
+    # Older Approach saves did not record the Approaching group.
+    spoils = {cast(AssetType, k): v for k, v in discarded.items() if v > 0}
+    approaching = payload.get("approaching_lord_ids")
     attackers = [
         lord.id for lord in state.lords.values()
         if lord.side == active_side and lord.cylinder.kind == "locale"
         and lord.cylinder.locale_id == locale_id and not lord.in_stronghold]
-    spoils_dist = {}
-    if spoils and attackers:
-        from almoravid.battle import distribute_spoils_round_robin
-        spoils_dist = distribute_spoils_round_robin(
-            state, attackers, cast("dict[AssetType, int]", spoils))
+    if approaching is not None:
+        attackers = [lid for lid in attackers if lid in approaching]
     # Move the avoiding subset. Avoid Battle DOES mark Moved/Fought
     # (4.3.4 "Mark Avoiding Lords as Moved/Fought"; 4.8.1 lists Avoid
     # Battle among the Moved/Fought triggers). Only Withdrawal alone is
@@ -4855,9 +4972,13 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any], *,
                if spoils else ""))
     _resolve_or_repend_approach(state, payload, active_side,
                                 some_withdrew=False)
-    return {"avoided_to": target, "lord_ids": avoiding,
-            "remaining_defenders": list(payload["defender_lord_ids"]),
-            "discarded_as_spoils": spoils, "spoils_distribution": spoils_dist}
+    receipt = {"avoided_to": target, "lord_ids": avoiding,
+               "remaining_defenders": list(payload["defender_lord_ids"]),
+               "discarded_as_spoils": spoils}
+    _settle_battle_spoils(state, active_side, locale_id, [], [spoils] if spoils else [],
+                          receipt, interactive=True, eligible=attackers, source="avoid")
+    receipt["spoils_distribution"] = receipt.get("spoils_awarded", {})
+    return receipt
 
 
 def _h_respond_withdraw(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -5073,7 +5194,8 @@ def _finish_relief_sally(
     retreat_summary = apply_relief_sally_aftermath(
         state, result, locale_id=locale_id, besieger_side=pl["other"],
         approach_from_locale=pl.get("from_locale_id"),
-        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"), spoils=spoils)
+        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"), spoils=spoils,
+        defer_retreat_spoils=pl["defer_retreat_spoils"])
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     if not _set_besiege_or_bypass_pending(
@@ -5180,6 +5302,9 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
         result["swollen_river_played"] = blocker_card
         return result
     avoid = dict(p["avoid_action"])
+    # Older saves could already have parked an Avoid with repeated IDs.
+    if isinstance(avoid.get("lord_ids"), list):
+        avoid["lord_ids"] = list(dict.fromkeys(avoid["lord_ids"]))
     return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
 
 
@@ -5385,7 +5510,7 @@ def _open_severed_heads_window(state: GameState) -> bool:
     Suspend any post-combat response, retaining its full controller state
     for save/load. Views strip this continuation for both players.
     """
-    if state.pending is not None and state.pending.kind == "battle_spoils":
+    if state.pending is not None and state.pending.kind in {"battle_spoils", "retreat_provender"}:
         return False
     trigger = state.meta.severed_heads_trigger
     state.meta.severed_heads_trigger = None
@@ -6413,6 +6538,7 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         "via_way_type": None,
         "active_lord_id": lord_id,
         "active_side": side,
+        "approaching_lord_ids": sortie_ids,
         "defender_lord_ids": bypassing_enemy,
         "sortie": True,
     }
@@ -7644,6 +7770,8 @@ CAMPAIGN_HANDLERS = {
     "cmd_forage": _h_cmd_forage,
     "cmd_ravage": _h_cmd_ravage,
     "cmd_siege": _h_cmd_siege,
+    "betrayal_of_terms": _h_betrayal_of_terms,
+    "betrayal_jihad": _h_betrayal_jihad,
     "cmd_battle": _h_cmd_battle,
     "cmd_storm": _h_cmd_storm,
     "cmd_sally": _h_cmd_sally,
@@ -7657,6 +7785,7 @@ CAMPAIGN_HANDLERS = {
     "respond_bypass": _h_respond_bypass,
     "battle_concede": _h_battle_concede,
     "battle_fate": _h_battle_fate,
+    "retreat_provender": _h_retreat_provender,
     "battle_spoils": _h_battle_spoils,
     "storm_concede": _h_storm_concede,
     "relief_concede": _h_relief_concede,

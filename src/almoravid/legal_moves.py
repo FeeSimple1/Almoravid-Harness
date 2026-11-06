@@ -132,6 +132,28 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
             for amount in ((1, total) if total > 1 else (1,))
         ]
 
+    if state.pending is not None and state.pending.kind == "betrayal_of_terms":
+        modes = ["decline"]
+        if "C9" in held_event_ids(state, "christian"):
+            modes.extend(("single", "double"))
+        return [{"type": "betrayal_of_terms", "side": "christian", "mode": mode}
+                for mode in modes]
+
+    if state.pending is not None and state.pending.kind == "betrayal_jihad":
+        from almoravid.events import _jihad_eligible_locales
+
+        return [{"type": "betrayal_jihad", "side": "muslim", "target_locale_id": lid}
+                for lid in _jihad_eligible_locales(state)]
+
+    if state.pending is not None and state.pending.kind == "retreat_provender":
+        from almoravid.battle import retreat_provender_bounds
+
+        pd = state.pending
+        lid, minimum, maximum = retreat_provender_bounds(pd.payload["groups"][0])
+        return [{"type": "retreat_provender", "side": pd.waiting_on,
+                 "lord_id": lid, "amount": amount}
+                for amount in range(minimum, maximum + 1)]
+
     # 4.4.3: the losing owner chooses a fate for any Lord with a choice.
     if state.pending is not None and state.pending.kind == "battle_fate":
         from almoravid.battle import c7_retreat_assets
@@ -1441,9 +1463,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                 )
                                 _fresh_s = (state.meta.actions_remaining
                                             == _ec(state, lord_id))
-                                if cur < 4 and _fresh_s:
-                                    out.append({"type": "cmd_siege",
-                                                "side": active})
+                                if _fresh_s:
                                     # 4.5.1: with no Besieged enemy Lords
                                     # inside, the Besieger MAY roll for
                                     # Surrender OR decline ("including
@@ -1456,10 +1476,23 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                         and lo.cylinder.locale_id == here
                                         and lo.in_stronghold
                                         for lo in state.lords.values())
+                                    if cur < 4 or not _enemy_inside:
+                                        siege: dict[str, Any] = {
+                                            "type": "cmd_siege", "side": active,
+                                        }
+                                        if active == "christian" and not _enemy_inside:
+                                            siege["interactive_surrender"] = True
+                                        out.append(siege)
                                     if not _enemy_inside:
                                         out.append({"type": "cmd_siege",
                                                     "side": active,
                                                     "surrender": False})
+                                        taifa = state.taifas.get(loc.territory)
+                                        if (active == "christian"
+                                                and taifa is not None
+                                                and taifa.status == "reconquista"
+                                                and "C21" in held_event_ids(state, active)):
+                                            out.append({**siege, "mozarabes": True})
                             # Battle: single-Lord against single enemy
                             # Lord at this Locale (Phase 5e baseline).
                             our_here = [

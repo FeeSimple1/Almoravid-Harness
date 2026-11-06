@@ -2334,7 +2334,8 @@ def resolve_sally(
 def apply_sally_aftermath(state: GameState, result: BattleResult,
                           locale_id: str, *,
                           fates: dict[str, dict[str, Any]] | None = None,
-                          spoils: list[dict[AssetType, int]] | None = None) -> dict[str, Any]:
+                          spoils: list[dict[AssetType, int]] | None = None,
+                          defer_retreat_spoils: bool = False) -> dict[str, Any]:
     """Sally-specific aftermath (rule 4.5.3).
 
     4.5.3: "Losing Defenders Retreat normally, ending the Siege. Losing
@@ -2381,7 +2382,8 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
         )
     else:
         retreat_summary = apply_retreat_aftermath(state, result, fates=fates, spoils=captured)
-    finish_field_battle_losses(state, result, retreat_summary, captured)
+    finish_field_battle_losses(state, result, retreat_summary, captured,
+                               defer_retreat_spoils=defer_retreat_spoils)
     if result.winner == sallying_side:
         # "...ending the Siege": the besieging side's Lords have left the
         # Locale, so clear that side's Siege/Bypass markers (per-side, so
@@ -2855,6 +2857,7 @@ def apply_relief_sally_aftermath(
     approach_way_type: str | None = None,
     fates: dict[str, dict[str, Any]] | None = None,
     spoils: list[dict[AssetType, int]] | None = None,
+    defer_retreat_spoils: bool = False,
 ) -> dict[str, Any]:
     """Relief-Sally aftermath (rule 4.4.1 / 4.5.3).
 
@@ -2874,7 +2877,8 @@ def apply_relief_sally_aftermath(
         approach_way_type=approach_way_type,
         fates=fates, spoils=captured,
     )
-    finish_field_battle_losses(state, result, retreat_summary, captured)
+    finish_field_battle_losses(state, result, retreat_summary, captured,
+                               defer_retreat_spoils=defer_retreat_spoils)
     if result.winner is not None and result.winner == besieger_side:
         loc = state.locales.get(locale_id)
         if loc is not None:
@@ -3285,21 +3289,63 @@ def apply_retreat_aftermath(
     return summary
 
 
+def _conceded_retreat_groups(
+    summary: dict[str, Any],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for entry in summary["losers"]:
+        if entry["fate"] == "retreat" and not entry.get("removed_by_losses"):
+            key = (entry["retreat_to"], entry["retreat_way"])
+            groups.setdefault(key, []).append(entry)
+    return groups
+
+
+def contested_retreat_provender(
+    state: GameState, summary: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Find surviving same-Way groups that must choose whose food to carry."""
+    from almoravid.campaign import _unladen_prov_capacity
+
+    choices = []
+    for (destination, way), entries in _conceded_retreat_groups(summary).items():
+        capacity = 0
+        provender = {}
+        for entry in entries:
+            lid = entry["lord_id"]
+            food = state.lords[lid].assets.get("prov", 0)
+            transport = _unladen_prov_capacity(state, [lid], way)
+            if entry.get("c7_opt_out"):
+                capacity += max(0, transport - food)
+            else:
+                capacity += transport
+                if food:
+                    provender[lid] = food
+        if len(provender) > 1 and 0 < capacity < sum(provender.values()):
+            choices.append({"retreat_to": destination, "retreat_way": way,
+                            "provender": provender, "remaining_capacity": capacity})
+    return choices
+
+
+def retreat_provender_bounds(group: dict[str, Any]) -> tuple[str, int, int]:
+    food = group["provender"]
+    lord_id = next(iter(food))
+    capacity = group["remaining_capacity"]
+    return (lord_id, max(0, capacity - (sum(food.values()) - food[lord_id])),
+            min(food[lord_id], capacity))
+
+
 def _collect_conceded_retreat_spoils(
     state: GameState,
     summary: dict[str, Any],
     winner_lord_ids: list[str],
     *,
     spoils: list[dict[AssetType, int]] | None = None,
+    kept: dict[str, int] | None = None,
 ) -> None:
     """Collect Loot and food beyond surviving co-retreaters' Transport."""
     from almoravid.campaign import _unladen_prov_capacity
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for entry in summary["losers"]:
-        if entry["fate"] == "retreat" and not entry.get("removed_by_losses"):
-            key = (entry["retreat_to"], entry["retreat_way"])
-            groups.setdefault(key, []).append(entry)
-    for (_, way), entries in groups.items():
+
+    for (_, way), entries in _conceded_retreat_groups(summary).items():
         # Each Lord keeps food carried by his own usable Transport
         # first, then borrows spare capacity from his co-retreaters.
         # C7 exempts that Lord's Spoils but does not hide spare Transport.
@@ -3317,19 +3363,22 @@ def _collect_conceded_retreat_spoils(
             own = capacities[lord.id]
             borrowed = min(spare, max(0, lord.assets.get("prov", 0) - own))
             spare -= borrowed
+            prov_to_keep = kept.get(lord.id, own + borrowed) if kept else own + borrowed
             entry["spoils_lost"] = _transfer_retreat_spoils(
                 state, lord, "retreat", True, winner_lord_ids,
-                retreat_way_type=way, prov_to_keep=own + borrowed, spoils=spoils)
+                retreat_way_type=way, prov_to_keep=prov_to_keep, spoils=spoils)
 
 
 
 def finish_field_battle_losses(
     state: GameState, result: BattleResult, summary: dict[str, Any],
     spoils: list[dict[AssetType, int]],
+    *,
+    defer_retreat_spoils: bool = False,
 ) -> None:
     """Resolve Losses before finalizing the captured Assets."""
     apply_battle_losses(state, result, summary, spoils=spoils)
-    if "pursuit" in summary:
+    if "pursuit" in summary and not defer_retreat_spoils:
         _collect_conceded_retreat_spoils(state, summary, [], spoils=spoils)
     apply_aftermath(state, result)
 

@@ -63,7 +63,8 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     dump = state.model_dump()
     if dump.get("pending") is not None:
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
-                    "_reset_discard_resume", "_battle_spoils_resume"):
+                    "_reset_discard_resume", "_battle_spoils_resume",
+                    "_retreat_provender_resume"):
             dump["pending"]["payload"].pop(key, None)
         if dump["pending"]["waiting_on"] != viewer_side:
             dump["pending"]["payload"].pop("blocker_card", None)

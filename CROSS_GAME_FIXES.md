@@ -351,3 +351,20 @@ and two reached the configured 400-step bound.
 
 All **five Almoravid groups** from the third audit are fixed. Overall
 progress is **18 of 23 groups**.
+
+## Fourth audit, second tranche
+
+- **A4-01.** Avoid rejects repeated Lord IDs before offering Swollen
+  River. Physical Transport and Provender are each counted once.
+- **A4-02.** Approaching Lords and Lords receiving C9 Spoils use the
+  owner-controlled allocation. Any suspended response resumes afterward.
+- **A4-03.** After Losses, the conceding side chooses which surviving
+  co-retreaters carry Provender when their shared Transport is scarce.
+  Baggage Parapet still protects paid mats.
+- **A4-04.** The Siege menu offers optional C21 before the roll and an
+  optional C9 response upon successful Christian Surrender.
+- **A4-05.** Double C9 Spoils hand control to the Muslim player to
+  place Jihad at an eligible Locale before the Christian Command resumes.
+
+Fourth-audit progress is **nine of 21 groups**, including all five
+Almoravid groups.
