@@ -330,3 +330,24 @@ sweeps passed their invariant checks. Four sessions completed and two reached
 the configured 400-step bound.
 
 Third-audit progress is **three of five Almoravid groups** and **16 of 23 overall**.
+
+## Third audit, batch 4 — A3-02 and A3-04
+
+Battle, Sally, Relief Sally, and successful Storms finish Losses before
+awarding Spoils. Captured Assets are held for surviving winning Lords at
+the Locale. A dead Lord can neither receive Spoils nor contribute Transport
+to a conceding Retreat. Losses forfeitures join the same captured pool.
+
+When multiple recipients remain, the winning player can split the pool in
+any legal amounts. The allocation saves and resumes, rejects foreign mats
+and overdraws, and completes before Severed Heads or the next Command
+decision. Single-recipient, scripted, and campaign-ending settlements
+allocate automatically.
+
+Five seeded regressions fail on preceding main and pass here. All **1,840
+tests passed**, and the source and new tests passed Ruff. Both configured
+self-play sweeps passed their invariant checks. Four sessions completed
+and two reached the configured 400-step bound.
+
+All **five Almoravid groups** from the third audit are fixed. Overall
+progress is **18 of 23 groups**.

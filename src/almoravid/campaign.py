@@ -3502,13 +3502,15 @@ def _finish_sally(
     dfd: Any,
     result: Any,
     pl: dict[str, Any],
+    spoils: list[dict[AssetType, int]],
 ) -> dict[str, Any]:
     """Post-Sally aftermath (4.5.3), shared by the synchronous cmd_sally
     path and the interactive battle_concede driver."""
     from almoravid.battle import apply_sally_aftermath
     side: Side = pl["side"]
     here: str = pl["here"]
-    apply_sally_aftermath(state, result, here, fates=pl.get("fates"))
+    retreat_summary = apply_sally_aftermath(
+        state, result, here, fates=pl.get("fates"), spoils=spoils)
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     _record(state, action,
@@ -3516,7 +3518,7 @@ def _finish_sally(
             f"winner={result.winner}, rounds={len(result.rounds)}; "
             f"card spent ({consumed} actions)")
     return {"winner": result.winner, "rounds": len(result.rounds),
-            "actions_consumed": consumed}
+            "actions_consumed": consumed, "retreat_summary": retreat_summary}
 
 
 def _finish_open_field_battle(
@@ -3527,21 +3529,20 @@ def _finish_open_field_battle(
     dfd: Any,
     result: Any,
     pl: dict[str, Any],
+    spoils: list[dict[AssetType, int]],
 ) -> dict[str, Any]:
     """Post-Battle aftermath for an open-field Battle (4.4.3-.5), shared by
     the synchronous `cmd_battle` path and the interactive (round-stepped)
     battle_concede driver so the two cannot diverge."""
     from almoravid.battle import (
-        apply_aftermath,
-        apply_battle_losses,
         apply_retreat_aftermath,
+        finish_field_battle_losses,
     )
     side: Side = pl["side"]
     here: str = pl["here"]
     # Bug P fix: Retreat aftermath FIRST so C7 opt-out can fire.
-    retreat_summary = apply_retreat_aftermath(state, result, fates=pl.get("fates"))
-    apply_battle_losses(state, result, retreat_summary)
-    apply_aftermath(state, result)
+    retreat_summary = apply_retreat_aftermath(state, result, fates=pl.get("fates"), spoils=spoils)
+    finish_field_battle_losses(state, result, retreat_summary, spoils)
     # Battle ends the card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -3571,6 +3572,7 @@ def _finish_approach_battle(
     dfd: Any,
     result: Any,
     pl: dict[str, Any],
+    spoils: list[dict[AssetType, int]],
 ) -> dict[str, Any]:
     """Post-Battle aftermath for a March-triggered Approach (Stand & Fight)
     Battle (4.3.4 / 4.4.3-.5), shared by the synchronous Stand path and the
@@ -3579,9 +3581,8 @@ def _finish_approach_battle(
     this passes the Approach context (from-Locale + Way type) to the Retreat
     aftermath and clears the Approach pending / sets Besiege-or-Bypass."""
     from almoravid.battle import (
-        apply_aftermath,
-        apply_battle_losses,
         apply_retreat_aftermath,
+        finish_field_battle_losses,
     )
     locale_id: str = pl["locale_id"]
     active_side: Side = pl["active_side"]
@@ -3591,9 +3592,8 @@ def _finish_approach_battle(
     retreat_summary = apply_retreat_aftermath(
         state, result,
         approach_from_locale=pl.get("from_locale_id"),
-        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"))
-    apply_battle_losses(state, result, retreat_summary)
-    apply_aftermath(state, result)
+        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"), spoils=spoils)
+    finish_field_battle_losses(state, result, retreat_summary, spoils)
     # End the active side's card (rule 4.4.5).
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -3615,22 +3615,89 @@ def _finish_approach_battle(
     }
 
 
+def _settle_battle_spoils(
+    state: GameState, winner: Side | None, locale_id: str, participants: list[str],
+    batches: list[dict[AssetType, int]], receipt: dict[str, Any], *,
+    interactive: bool,
+) -> dict[str, Any]:
+    from almoravid.battle import award_battle_spoils, battle_spoils_recipients
+
+    if not batches or winner is None:
+        return receipt
+    pool: dict[AssetType, int] = {}
+    for batch in batches:
+        for asset, amount in batch.items():
+            pool[asset] = pool.get(asset, 0) + amount
+    recipients = battle_spoils_recipients(state, winner, locale_id, participants)
+    receipt["spoils"] = dict(pool)
+    if not recipients:
+        receipt["spoils_unclaimed"] = pool
+    elif interactive and len(recipients) > 1 and check_campaign_victory(state) is None:
+        resume = {"active_player": state.meta.active_player,
+                  "pending": state.pending.model_dump() if state.pending else None}
+        state.pending = PendingDecision(
+            kind="battle_spoils", waiting_on=winner,
+            payload={"locale_id": locale_id, "pool": pool, "recipients": recipients,
+                     "_battle_spoils_resume": resume})
+        state.meta.active_player = winner
+        receipt.update(pending="battle_spoils", waiting_on=winner)
+    else:
+        receipt["spoils_awarded"] = award_battle_spoils(state, recipients, batches)
+    return receipt
+
+
+def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "battle_spoils", side)
+    pool = pd.payload["pool"]
+    lid = action.get("lord_id")
+    asset = action.get("asset")
+    amount = action.get("amount")
+    _require(lid in pd.payload["recipients"],
+             "choose an eligible winning Lord at the Battle Locale", code="bad_arg")
+    _require(isinstance(asset, str) and asset in pool,
+             "choose an Asset from the remaining Spoils", code="bad_arg")
+    _require(type(amount) is int and 1 <= amount <= pool[asset],
+             "amount must be a positive integer within the remaining Spoils", code="bad_arg")
+
+    asset = cast(AssetType, asset)
+    mat = state.lords[lid].assets
+    mat[asset] = mat.get(asset, 0) + amount
+    pool[asset] -= amount
+    if not pool[asset]:
+        del pool[asset]
+    if not pool:
+        resume = pd.payload["_battle_spoils_resume"]
+        pending = resume["pending"]
+        state.pending = PendingDecision.model_validate(pending) if pending else None
+        state.meta.active_player = resume["active_player"]
+    _record(state, action, f"{lid} receives {amount} {asset} as Spoils")
+    result: dict[str, Any] = {
+        "spoils_awarded": {lid: {asset: amount}}, "remaining_spoils": dict(pool),
+    }
+    if state.pending is not None:
+        result.update(pending=state.pending.kind, waiting_on=state.pending.waiting_on)
+    return result
+
+
 def _complete_battle_aftermath(state: GameState, action: dict[str, Any],
-                               result: Any, pl: dict[str, Any]) -> dict[str, Any]:
+                               result: Any, pl: dict[str, Any], *,
+                               interactive: bool) -> dict[str, Any]:
     state.pending = None
     state.meta.active_player = result.attacker.side
     finish = pl.get("finish")
-    if finish == "sally":
-        return _finish_sally(state, action, atk=result.attacker, dfd=result.defender,
-                             result=result, pl=pl)
-    if finish == "relief":
-        return _finish_relief_sally(state, action, atk=result.attacker, dfd=result.defender,
-                                    result=result, pl=pl)
-    if finish == "approach":
-        return _finish_approach_battle(state, action, atk=result.attacker, dfd=result.defender,
-                                       result=result, pl=pl)
-    return _finish_open_field_battle(state, action, atk=result.attacker, dfd=result.defender,
-                                     result=result, pl=pl)
+    handler = {
+        "sally": _finish_sally,
+        "relief": _finish_relief_sally,
+        "approach": _finish_approach_battle,
+    }.get(finish, _finish_open_field_battle)
+    spoils: list[dict[AssetType, int]] = []
+    receipt = handler(state, action, atk=result.attacker, dfd=result.defender,
+                      result=result, pl=pl, spoils=spoils)
+    winners = result.attacker if result.winner == result.attacker.side else result.defender
+    return _settle_battle_spoils(
+        state, result.winner, pl.get("locale_id", pl.get("here")),
+        winners.lord_ids, spoils, receipt, interactive=interactive)
 
 
 def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
@@ -3646,7 +3713,8 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
     if pl.get("finish") != "relief":
         commit_forces_after_battle(state, result.attacker)
         commit_forces_after_battle(state, result.defender)
-    if pl.get("interactive_retreat", action.get("interactive_retreat", False)):
+    interactive = bool(pl.get("interactive_retreat", action.get("interactive_retreat", False)))
+    if interactive:
         options, slots = battle_fate_options(
             state, result, approach_from_locale=pl.get("from_locale_id"),
             approach_way_type=pl.get("via_way_type"))
@@ -3675,7 +3743,7 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
             _record(state, action, f"{loser} chooses losing Lords' fates")
             return {"winner": result.winner, "rounds": len(result.rounds),
                     "pending": "battle_fate", "waiting_on": loser}
-    return _complete_battle_aftermath(state, action, result, pl)
+    return _complete_battle_aftermath(state, action, result, pl, interactive=interactive)
 
 
 def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -3726,7 +3794,8 @@ def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         winner=pl["winner"],
         sallying_lord_ids=pl["sallying_lord_ids"],
     )
-    receipt = _complete_battle_aftermath(state, action, result, {**pl["context"], "fates": fates})
+    receipt = _complete_battle_aftermath(
+        state, action, result, {**pl["context"], "fates": fates}, interactive=True)
     receipt["fates"] = fates
     return receipt
 
@@ -4154,7 +4223,11 @@ def _finish_storm(
 ) -> dict[str, Any]:
     """Post-Storm aftermath (4.5.2 commit + Sack + Losses), shared by the
     synchronous cmd_storm path and the interactive storm_concede driver."""
-    from almoravid.battle import apply_aftermath, commit_forces_after_battle
+    from almoravid.battle import (
+        apply_aftermath,
+        battle_spoils_recipients,
+        commit_forces_after_battle,
+    )
     side: Side = pl["side"]
     here: str = pl["here"]
     enemy_inside: list[str] = pl["enemy_inside"]
@@ -4188,15 +4261,8 @@ def _finish_storm(
     sack = None
     if result.winner == side:
         from almoravid.actions import _shift_service_left as _ssl
-        from almoravid.battle import distribute_spoils_round_robin
         from almoravid.state import Cylinder
         from almoravid.static_data import load_strongholds as _ls
-        # Besieging Lords present (Spoils recipients).
-        besiegers_here = [
-            lord_obj.id for lord_obj in state.lords.values()
-            if lord_obj.side == side and lord_obj.cylinder.kind == "locale"
-            and lord_obj.cylinder.locale_id == here
-        ]
         sack_spoils: dict[AssetType, int] = {}
         removed_lords: list[str] = []
         # (a) Permanently remove all losing Lords (3.3.1); award all
@@ -4232,10 +4298,7 @@ def _finish_storm(
         for k in ("coin", "loot", "prov"):
             if sh_spoils.get(k):
                 sack_spoils[k] = sack_spoils.get(k, 0) + sh_spoils[k]
-        if besiegers_here and sack_spoils:
-            distribute_spoils_round_robin(state, besiegers_here, sack_spoils)
         sack = {"removed_lords": removed_lords, "spoils": sack_spoils,
-                "recipients": besiegers_here,
                 "removal_politics": removal_politics}
         if dfd.side == "christian":
             state.meta.severed_heads_trigger = "combat"
@@ -4247,6 +4310,8 @@ def _finish_storm(
     from almoravid.battle import apply_battle_losses
     apply_battle_losses(state, result, {"losers": []}, storm=True)
     apply_aftermath(state, result)
+    if sack is not None:
+        sack["recipients"] = battle_spoils_recipients(state, side, here, [])
 
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
@@ -4255,9 +4320,13 @@ def _finish_storm(
             f"rounds={len(result.rounds)}"
             + (f", Sack: {sack}" if sack else "")
             + f"; card spent ({consumed} actions)")
-    return {"winner": result.winner, "rounds": len(result.rounds),
-            "conquest": conq_result, "sack": sack,
-            "actions_consumed": consumed}
+    receipt = {"winner": result.winner, "rounds": len(result.rounds),
+               "conquest": conq_result, "sack": sack, "actions_consumed": consumed}
+    if sack is not None and sack["spoils"]:
+        return _settle_battle_spoils(
+            state, side, here, [], [sack["spoils"]], receipt,
+            interactive=pl.get("interactive_spoils", False))
+    return receipt
 
 
 def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -4368,6 +4437,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     reposition_attacker = bool(action.get("reposition_attacker", True))
     pl: dict[str, Any] = {
         "engagement_label": "storm",
+        "interactive_spoils": bool(action.get("interactive_spoils")),
         "finish": "storm",
         "side": side,
         "here": here,
@@ -4991,6 +5061,7 @@ def _finish_relief_sally(
     atk: Any,
     dfd: Any,
     pl: dict[str, Any],
+    spoils: list[dict[AssetType, int]],
 ) -> dict[str, Any]:
     """Relief-Sally aftermath + the shared stand-battle tail (besiege/bypass
     or restore control, end card). Used by the synchronous and interactive
@@ -5002,7 +5073,7 @@ def _finish_relief_sally(
     retreat_summary = apply_relief_sally_aftermath(
         state, result, locale_id=locale_id, besieger_side=pl["other"],
         approach_from_locale=pl.get("from_locale_id"),
-        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"))
+        approach_way_type=pl.get("via_way_type"), fates=pl.get("fates"), spoils=spoils)
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0
     if not _set_besiege_or_bypass_pending(
@@ -5314,6 +5385,8 @@ def _open_severed_heads_window(state: GameState) -> bool:
     Suspend any post-combat response, retaining its full controller state
     for save/load. Views strip this continuation for both players.
     """
+    if state.pending is not None and state.pending.kind == "battle_spoils":
+        return False
     trigger = state.meta.severed_heads_trigger
     state.meta.severed_heads_trigger = None
     if trigger is None or state.meta.phase != "campaign":
@@ -7584,6 +7657,7 @@ CAMPAIGN_HANDLERS = {
     "respond_bypass": _h_respond_bypass,
     "battle_concede": _h_battle_concede,
     "battle_fate": _h_battle_fate,
+    "battle_spoils": _h_battle_spoils,
     "storm_concede": _h_storm_concede,
     "relief_concede": _h_relief_concede,
     "play_pope_gregory": _h_play_pope_gregory,

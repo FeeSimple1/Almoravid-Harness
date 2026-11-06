@@ -75,6 +75,20 @@ Retreat without `c7_pay` to take the normal penalties.
 Scripted callers that omit `interactive_retreat` use the automatic
 resolution policy.
 
+## Allocating combat Spoils
+
+After Losses, the winning player allocates captured Assets when more
+than one Lord can receive them. Use the `battle_spoils` action with
+`lord_id`, `asset`, and a positive integer `amount` up to the amount
+remaining. The menu offers one or all of each Asset for each eligible
+Lord. Any intermediate amount is legal. The game resumes after the
+pool is empty, and a partially allocated pool can be saved and loaded.
+
+Battle and Sally actions with `interactive_retreat` enable this choice.
+Storm actions in the legal menu set `interactive_spoils` for a Sack.
+A single recipient receives the full pool automatically. Scripted and
+campaign-ending combats use automatic allocation after Losses.
+
 ## Lifecycle
 
 ### `begin_levy`

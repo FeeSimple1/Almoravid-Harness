@@ -122,6 +122,16 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "choices": {lid: "add" for lid in locs}})
         return moves
 
+    if state.pending is not None and state.pending.kind == "battle_spoils":
+        pd = state.pending
+        return [
+            {"type": "battle_spoils", "side": pd.waiting_on,
+             "lord_id": lid, "asset": asset, "amount": amount}
+            for asset, total in pd.payload["pool"].items()
+            for lid in pd.payload["recipients"]
+            for amount in ((1, total) if total > 1 else (1,))
+        ]
+
     # 4.4.3: the losing owner chooses a fate for any Lord with a choice.
     if state.pending is not None and state.pending.kind == "battle_fate":
         from almoravid.battle import c7_retreat_assets
@@ -1478,7 +1488,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                                  else loc.siege_green)
                                 if siege_markers > 0:
                                     out.append({"type": "cmd_storm",
-                                                "side": active})
+                                                "side": active, "interactive_spoils": True})
                     # Sally: Besieged Lord with besiegers outside.
                     if _ib(state, lord_id):
                         here = lord.cylinder.locale_id

@@ -2126,6 +2126,9 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     if state.pending is not None and state.pending.kind == "battle_fate":
         _require(action_type in {"battle_fate", "cap_bishoprics"},
                  "resolve losing Lords' fates before continuing", code="pending_decision")
+    if state.pending is not None and state.pending.kind == "battle_spoils":
+        _require(action_type in {"battle_spoils", "cap_bishoprics"},
+                 "allocate the captured Spoils before continuing", code="pending_decision")
     if action_type not in _HANDLERS:
         raise IllegalAction(
             f"unknown action type {action_type!r}. "
