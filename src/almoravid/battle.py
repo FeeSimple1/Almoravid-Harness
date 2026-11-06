@@ -221,6 +221,7 @@ class BattleResult:
     rounds: list[BattleRound] = field(default_factory=list)
     winner: Side | None = None
     notes: list[str] = field(default_factory=list)
+    sallying_lord_ids: list[str] = field(default_factory=list)
     # S11b: per-Lord post-Storm forces (multi-besieger Storms) so the
     # caller can commit each Lord exactly. Empty for non-Storm results.
     attacker_lord_forces: dict[str, Any] = field(default_factory=dict)
@@ -2328,7 +2329,8 @@ def resolve_sally(
 
 
 def apply_sally_aftermath(state: GameState, result: BattleResult,
-                          locale_id: str) -> None:
+                          locale_id: str, *,
+                          fates: dict[str, dict[str, str]] | None = None) -> None:
     """Sally-specific aftermath (rule 4.5.3).
 
     4.5.3: "Losing Defenders Retreat normally, ending the Siege. Losing
@@ -2379,7 +2381,7 @@ def apply_sally_aftermath(state: GameState, result: BattleResult,
     # Retreat normally (4.4.3) -- apply_retreat_aftermath relocates each
     # off the Locale (Retreat branch; no Friendly Stronghold there for
     # them) and rolls the Service penalty. Then Losses + Aftermath.
-    retreat_summary = apply_retreat_aftermath(state, result)
+    retreat_summary = apply_retreat_aftermath(state, result, fates=fates)
     apply_battle_losses(state, result, retreat_summary, storm=False)
     apply_aftermath(state, result)
     if result.winner == sallying_side:
@@ -2703,6 +2705,7 @@ def _relief_finalize(state: GameState, rs: _ReliefState) -> None:
                 state.lords[lid].routed_units = {ut: n for ut, n
                                                  in lr[lid].items() if n > 0}
     result = rs.result
+    result.sallying_lord_ids = list(rs.sallyers.lord_ids)
     if result.attacker.conceded and not result.defender.conceded:
         result.winner = rs.other
     elif result.defender.conceded and not result.attacker.conceded:
@@ -2849,6 +2852,7 @@ def apply_relief_sally_aftermath(
     besieger_side: Side,
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
+    fates: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Relief-Sally aftermath (rule 4.4.1 / 4.5.3).
 
@@ -2865,6 +2869,7 @@ def apply_relief_sally_aftermath(
         state, result,
         approach_from_locale=approach_from_locale,
         approach_way_type=approach_way_type,
+        fates=fates,
     )
     apply_battle_losses(state, result, retreat_summary, storm=False)
     apply_aftermath(state, result)
@@ -3067,70 +3072,91 @@ def _transfer_retreat_spoils(
     return take
 
 
+def battle_fate_options(
+    state: GameState,
+    result: BattleResult,
+    *,
+    approach_from_locale: str | None = None,
+    approach_way_type: str | None = None,
+) -> tuple[dict[str, list[dict[str, str]]], int]:
+    """Legal fates per losing Lord and slots for elective Withdrawals (4.4.3)."""
+    from almoravid.effective import is_friendly_locale
+    from almoravid.map import neighbors_via
+    from almoravid.static_data import load_strongholds
+
+    if result.winner is None:
+        return {}, 0
+    attacking = result.winner == result.defender.side
+    loser = result.attacker if attacking else result.defender
+    if result.engagement == "sally" and attacking:
+        return {}, 0  # apply_sally_aftermath handles the mandatory Withdrawals.
+    losers = sorted(
+        lid for lid in loser.lord_ids
+        if lid in state.lords and state.lords[lid].cylinder.kind == "locale"
+    )
+    if not losers:
+        return {}, 0
+    locale = state.lords[losers[0]].cylinder.locale_id
+    assert locale is not None
+    loc = state.locales[locale]
+    forced = set(result.sallying_lord_ids).intersection(losers) if attacking else set()
+    slots = 0
+    if loc.base_type != "region" and is_friendly_locale(state, locale, loser.side):
+        capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
+        inside = sum(1 for lord in state.lords.values()
+                     if lord.cylinder.kind == "locale" and lord.cylinder.locale_id == locale
+                     and lord.in_stronghold and lord.id not in forced)
+        slots = max(0, capacity - inside - len(forced))
+
+    routes = []
+    for way in ("road", "pass"):
+        for target in neighbors_via(locale, way):
+            if approach_from_locale is not None:
+                is_approach = (target == approach_from_locale
+                               and approach_way_type in (None, way))
+                if attacking != is_approach:
+                    continue
+            if _retreat_target_clear(state, target, loser.side):
+                routes.append({"fate": "retreat", "retreat_to": target, "retreat_way": way})
+    return {
+        lid: ([{"fate": "withdraw"}] if lid in forced else
+              ([{"fate": "withdraw"}] if slots else []) + routes + [{"fate": "removed"}])
+        for lid in losers
+    }, slots
+
+
 def apply_retreat_aftermath(
     state: GameState,
     result: BattleResult,
     *,
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
+    fates: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Rule 4.4.3 retreat_withdraw_remove + service.
-
-    For each losing-side Lord:
-      1. Try Withdraw — Friendly Stronghold at Battle Locale, capacity OK.
-         Withdrawing Lord preserves Assets and does NOT shift Service.
-      2. Else try Retreat — any adjacent Locale with no Enemy Lord and
-         no Enemy Stronghold (unless Besieged or Bypassed).
-         Defender constraint: may not Retreat along the Way the
-         Attackers used to Approach (when known).
-         Marching Attacker constraint: must Retreat to Approach origin.
-         Sallying Attackers must Withdraw — they cannot Retreat (Phase
-         5f handled via resolve_sally / apply_sally_aftermath; this
-         helper does not engage for engagement=='sally' losers).
-         Each Retreating Lord rolls 1d6:
-           1-2 -> Service shift 1 box left
-           3-4 -> Service shift 2 boxes left
-           5-6 -> Service shift 3 boxes left
-         (Vassal markers shift only under advanced rule 3.4.2 — not yet.)
-      3. Else permanent removal (3.3.1).
-
-    Returns a per-Lord summary dict suitable for the result payload.
-    """
+    """Resolve the chosen losing Lords' fates, or use the scripted defaults."""
     from almoravid.actions import _shift_service_left
-    from almoravid.effective import (
-        is_friendly_locale,
-    )
-    from almoravid.map import neighbors_via
     from almoravid.rng import roll_d6
     from almoravid.state import Cylinder
-    from almoravid.static_data import load_strongholds
 
-    summary: dict[str, Any] = {
-        "winner": result.winner,
-        "losers": [],
-    }
-    if result.winner is None:
+    summary: dict[str, Any] = {"winner": result.winner, "losers": []}
+    options, slots = battle_fate_options(
+        state, result, approach_from_locale=approach_from_locale,
+        approach_way_type=approach_way_type)
+    if not options:
         return summary
-
     loser_side_obj = (result.attacker if result.winner == result.defender.side
                       else result.defender)
-    if result.engagement == "sally" and loser_side_obj is result.attacker:
-        # Losing Sallying Attackers Withdraw back inside (handled by
-        # apply_sally_aftermath, 4.5.3 "Losing Attackers must Withdraw").
-        # The losing Besieging DEFENDER, by contrast, "Retreat[s]
-        # normally, ending the Siege" -- so fall through and relocate
-        # it here via the standard Retreat branch. [P-3 playtest]
-        return summary
-
-    # Battle locale = first loser Lord's cylinder.locale_id.
-    battle_locale = None
-    for lid in loser_side_obj.lord_ids:
-        lord_obj = state.lords.get(lid)
-        if lord_obj is not None and lord_obj.cylinder.kind == "locale":
-            battle_locale = lord_obj.cylinder.locale_id
-            break
-    if battle_locale is None:
-        return summary
+    battle_locale = state.lords[next(iter(options))].cylinder.locale_id
+    if fates is None:
+        fates = {}
+        for lid, choices in options.items():
+            choice = choices[0]
+            if choice["fate"] == "withdraw" and len(choices) > 1:
+                if slots:
+                    slots -= 1
+                else:
+                    choice = choices[1]
+            fates[lid] = choice
 
     # Phase 7f: winner-side Lords at the Battle Locale receive Spoils
     # (rule 4.4.3). The losing side conceded iff its BattleSide flag
@@ -3149,78 +3175,21 @@ def apply_retreat_aftermath(
         summary["pursuit"] = {"pursuer": winner_side_obj.side,
                               "conceder": loser_side_obj.side}
 
-    loc = state.locales[battle_locale]
-    has_stronghold = loc.base_type != "region"
-    if has_stronghold:
-        capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
-    else:
-        capacity = 0
-    already_inside = sum(
-        1 for lord_obj in state.lords.values()
-        if lord_obj.cylinder.kind == "locale"
-        and lord_obj.cylinder.locale_id == battle_locale
-        and lord_obj.in_stronghold
-    )
-
-    # Iterate losing Lords in stable order so RNG draws are
-    # deterministic across runs.
-    for lid in sorted(loser_side_obj.lord_ids):
-        lord = state.lords.get(lid)
-        if lord is None:
-            continue
+    # Stable order keeps Service rolls deterministic across selection order.
+    for lid, choice in sorted(fates.items()):
+        lord = state.lords[lid]
         loser_side = lord.side
-        entry: dict[str, Any] = {"lord_id": lid, "fate": None}
-
-        # Step 1: Withdraw if possible.
-        if (has_stronghold
-                and is_friendly_locale(state, battle_locale, loser_side)
-                and already_inside < capacity):
+        entry: dict[str, Any] = {"lord_id": lid, **choice}
+        if choice["fate"] == "withdraw":
             lord.in_stronghold = True
-            already_inside += 1
-            entry["fate"] = "withdraw"
             entry["into_stronghold"] = battle_locale
-            entry["spoils_lost"] = _transfer_retreat_spoils(
-                state, lord, "withdraw", loser_conceded, winner_lord_ids)
+            entry["spoils_lost"] = {}
             summary["losers"].append(entry)
             continue
 
-        # Step 2: Retreat.
-        retreat_target: str | None = None
-        retreat_way: str | None = None
-        # Marching attacker constraint: must Retreat to approach origin
-        # (only when both side is the attacker AND approach context known).
-        if (loser_side == result.attacker.side
-                and approach_from_locale is not None
-                and approach_way_type is not None
-                and approach_from_locale in neighbors_via(
-                    battle_locale, approach_way_type)):
-            target = approach_from_locale
-            if _retreat_target_clear(state, target, loser_side):
-                retreat_target = target
-                retreat_way = approach_way_type
-        else:
-            # Defender (or attacker without context): pick first clear
-            # neighbor. Defender may not use the Way the attackers came
-            # along (when known).
-            for way_type in ("road", "pass"):
-                for nbr in neighbors_via(battle_locale, way_type):
-                    if (loser_side == result.defender.side
-                            and approach_from_locale == nbr
-                            and approach_way_type == way_type):
-                        continue  # blocked Way
-                    if _retreat_target_clear(state, nbr, loser_side):
-                        retreat_target = nbr
-                        retreat_way = way_type
-                        break
-                if retreat_target is not None:
-                    break
-
-        if retreat_target is not None:
-            lord.cylinder = Cylinder(kind="locale", locale_id=retreat_target)
+        if choice["fate"] == "retreat":
+            lord.cylinder = Cylinder(kind="locale", locale_id=choice["retreat_to"])
             lord.in_stronghold = False
-            entry["fate"] = "retreat"
-            entry["retreat_to"] = retreat_target
-            entry["retreat_way"] = retreat_way
             # Bug P fix (Pattern 9): C7 Baggage Parapet opt-out.
             # When a Christian Lord Retreats and C7 sits in
             # this_levy_events["christian"], the Lord may pay 1 Asset

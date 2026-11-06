@@ -32,7 +32,8 @@ def _combat_revealed_lords(state: GameState) -> set[str]:
     revealed = set(combat_visible_lords(state))
     pd = state.pending
     if pd is None or pd.kind not in {
-            "battle_concede", "storm_concede", "relief_concede", "oneround_timing"}:
+            "battle_concede", "storm_concede", "relief_concede", "oneround_timing",
+            "battle_fate"}:
         return revealed
     payload = pd.payload
     snapshots = [payload.get("attacker"), payload.get("defender")]

@@ -54,6 +54,22 @@ engagement. If both sides pass, the round resolves normally and the
 attacker answers first again if combat continues. The synchronous
 `*_concede_round` arguments are for referee-controlled play and replays.
 
+## Choosing losing Lords' fates
+
+Battle and Sally actions in the legal menu request `interactive_retreat`.
+Set it to `true` when constructing a Battle, Stand, or Sally action by
+hand. It works with either synchronous combat or `interactive_concede`.
+
+When a choice is owed, `battle_fate` names the losing side, Lord, and
+fate. A Retreat includes `retreat_to` and `retreat_way`. The player can
+choose Lords in any order. The menu updates as Stronghold slots are
+assigned. Once the last choice is made, the engine applies all fates,
+Losses, Spoils, and Service and resumes the Command sequence.
+Mandatory fates resolve automatically.
+
+Scripted callers that omit `interactive_retreat` use the automatic
+resolution policy.
+
 ## Lifecycle
 
 ### `begin_levy`

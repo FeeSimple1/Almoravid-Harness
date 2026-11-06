@@ -95,7 +95,8 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         w = state.pending.waiting_on
         options = [{"type": "respond_swollen_river_block", "side": w, "play": False}]
         if state.pending.payload["blocker_card"] in held_event_ids(state, w):
-            options.insert(0, {"type": "respond_swollen_river_block", "side": w, "play": True})
+            options.insert(0, {"type": "respond_swollen_river_block", "side": w, "play": True,
+                               "interactive_retreat": True})
         return options
 
     # C1 (4.3.5): after a Withdraw, the Active side must choose Besiege
@@ -120,6 +121,15 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "respond_neutrality_choice", "side": side,
                       "choices": {lid: "add" for lid in locs}})
         return moves
+
+    # 4.4.3: the losing owner chooses a fate for any Lord with a choice.
+    if state.pending is not None and state.pending.kind == "battle_fate":
+        return [
+            {"type": "battle_fate", "side": state.pending.waiting_on,
+             "lord_id": lid, **choice}
+            for lid, choices in state.pending.payload["options"].items() if len(choices) > 1
+            for choice in choices
+        ]
 
     # 4.4.2 Concede the Field: only the side whose election is owed.
     if state.pending is not None and state.pending.kind in FIELD_CONCEDE_KINDS:
@@ -1452,7 +1462,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             # allowed via aggregated BattleSide.
                             if our_here and enemy_here:
                                 out.append({"type": "cmd_battle",
-                                            "side": active})
+                                            "side": active, "interactive_retreat": True})
                             # Storm: at ENEMY Stronghold with our Siege.
                             if (loc.base_type != "region"
                                     and _iel(state, here, active)):
@@ -1475,7 +1485,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         ]
                         if besiegers:
                             out.append({"type": "cmd_sally",
-                                        "side": active})
+                                        "side": active, "interactive_retreat": True})
                     # Encamp (4.3.6): a Bypassing Lord (our Bypass marker
                     # here) may replace it with 1 Siege marker.
                     if (lord.cylinder.kind == "locale"
@@ -1543,7 +1553,7 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
 
     # Stand & Fight is always available (Battle resolution is the
     # default outcome if nothing else fires).
-    out.append({"type": "respond_stand_battle", "side": side})
+    out.append({"type": "respond_stand_battle", "side": side, "interactive_retreat": True})
 
     # Withdraw: friendly stronghold present, capacity check.
     try:

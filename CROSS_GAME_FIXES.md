@@ -294,3 +294,23 @@ Follow-up for the Retreat work — a losing Relief Sally Lord can Retreat
 along the Approach Way. The same seeded case reproduces on preceding main.
 
 Third-audit progress is **one of five Almoravid groups** and **14 of 23 overall**.
+
+## Third audit, batch 2 — A3-01
+
+The losing player chooses each eligible Lord's fate and Retreat Way after
+combat. The legal menu opens the choice for field Battle, Approach Battle,
+Sally, and Relief Sally. Choices can be saved and resumed before movement,
+Losses, and Service are applied. Selecting a Withdrawal reserves a slot
+before the next Lord chooses. Scripted calls can use immediate resolution.
+
+Losing Relief Sally Lords Withdraw into their Stronghold. Their mandatory
+slots are reserved before Marchers can elect Withdrawal. In the Zamora
+regression, the losing Marcher Retreats to León and the Sallying Lord returns
+inside the castle, leaving one Siege marker.
+
+Eight seeded regressions fail on preceding main and pass here. All **1,827
+tests passed**, and the source and new tests passed Ruff. Both configured
+self-play sweeps passed their invariant checks. Four sessions completed
+and two reached the configured 400-step bound.
+
+Third-audit progress is **two of five Almoravid groups** and **15 of 23 overall**.
