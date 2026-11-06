@@ -30,6 +30,7 @@ from almoravid.checkpoint import ActionCheckpoint
 from almoravid.effective import effective_lordship
 from almoravid.rng import roll_d6, shuffle
 from almoravid.state import (
+    FIELD_CONCEDE_KINDS,
     AssetType,
     GameState,
     HistoryEntry,
@@ -2118,6 +2119,10 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(action_type in {"play_severed_heads", "decline_severed_heads",
                                  "cap_bishoprics"},
                  "resolve Severed Heads before continuing", code="pending_decision")
+    if state.pending is not None and state.pending.kind in FIELD_CONCEDE_KINDS:
+        _require(action_type in {state.pending.kind, "set_absorption_policy",
+                                 "set_array_tactics", "cap_bishoprics"},
+                 "resolve Concede before continuing", code="pending_decision")
     if action_type not in _HANDLERS:
         raise IllegalAction(
             f"unknown action type {action_type!r}. "

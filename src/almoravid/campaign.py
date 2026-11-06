@@ -3665,18 +3665,36 @@ def _begin_interactive_battle(
         if queue:
             pl["timing_queue"] = queue
             return _oneround_timing_pend(state, atk, dfd, pl)
-    return _battle_pend_concede(state, pl)
+    return _pend_field_concede(state, pl, kind="battle_concede")
 
 
-def _battle_pend_concede(state: GameState,
-                         pl: dict[str, Any]) -> dict[str, Any]:
-    """Pend the Round-1 Concede declaration to start the round-stepped
-    Battle (shared by the timing-prompt resume and the direct start)."""
+def _pend_field_concede(state: GameState, pl: dict[str, Any], *,
+                        kind: str, role: str = "attacker") -> dict[str, Any]:
+    """Give the next Concede election to its owner."""
+    attacker = pl.get("active_side", pl["side"])
+    side = attacker if role == "attacker" else _other(attacker)
+    payload = {**pl, "concede_role": role}
     state.pending = PendingDecision(
-        kind="battle_concede", waiting_on=pl["side"], payload=pl)
-    state.meta.active_player = pl["side"]
-    return {"battle": "awaiting_concede", "round": pl["round_idx"],
-            "engagement": pl["engagement_label"]}
+        kind=kind, waiting_on=side, payload=payload)
+    state.meta.active_player = side
+    key = "relief_sally" if kind == "relief_concede" else "battle"
+    result = {key: "awaiting_concede", "round": pl["round_idx"],
+              "waiting_on": side, "role": role}
+    if kind == "battle_concede":
+        result["engagement"] = pl["engagement_label"]
+    return result
+
+
+def _field_concede_choice(pd: PendingDecision,
+                           action: dict[str, Any]) -> tuple[str, bool]:
+    role = pd.payload["concede_role"]
+    other_role = "defender" if role == "attacker" else "attacker"
+    _require(f"{other_role}_concede" not in action,
+             f"only the {role} may make this Concede choice", code="wrong_side")
+    declared = action.get(f"{role}_concede", False)
+    _require(isinstance(declared, bool), "Concede choice must be true or false",
+             code="bad_arg")
+    return role, declared
 
 
 def _oneround_timing_queue(state: GameState, atk: Any,
@@ -3744,17 +3762,12 @@ def _h_oneround_timing(state: GameState,
         return {"oneround_timing": "set",
                 "advance": _oneround_timing_pend(state, atk, dfd, pl)}
     return {"oneround_timing": "set",
-            "advance": _battle_pend_concede(state, pl)}
+            "advance": _pend_field_concede(state, pl, kind="battle_concede")}
 
 
 def _h_battle_concede(state: GameState,
                       action: dict[str, Any]) -> dict[str, Any]:
-    """Resolve one Round of a reactive Battle after its start-of-Round
-    Concede declaration (rule 4.4.2). The response carries this Round's
-    `attacker_concede` / `defender_concede` booleans (Attacker then
-    Defender). Runs the Round; if a side Conceded, the Battle is over by
-    Rout, finishes via the shared aftermath;
-    otherwise re-pends for the next Round's declaration."""
+    """Collect each owner's Concede in order, then resolve the Round."""
     from almoravid.battle import (
         BattleResult,
         BattleRound,
@@ -3767,31 +3780,28 @@ def _h_battle_concede(state: GameState,
     side = _require_side(action)
     pd = _require_pending(state, "battle_concede", side)
     pl = pd.payload
+    role, declared = _field_concede_choice(pd, action)
+    if role == "attacker" and not declared:
+        return _pend_field_concede(state, pl, kind=pd.kind, role="defender")
     atk = battle_side_from_snapshot(pl["attacker"])
     dfd = battle_side_from_snapshot(pl["defender"])
     round_idx: int = pl["round_idx"]
     dwr_raw = pl.get("defender_walls_range")
     dwr: tuple[int, int] | None = (
         (int(dwr_raw[0]), int(dwr_raw[1])) if dwr_raw else None)
-    # Apply this Round's Concede declarations (Attacker then Defender).
-    if bool(action.get("attacker_concede")):
-        atk.conceded = True
-    if bool(action.get("defender_concede")):
-        dfd.conceded = True
+    atk.conceded = declared and role == "attacker"
+    dfd.conceded = declared and role == "defender"
     _battle_one_round(state, atk, dfd, round_idx, defender_walls_range=dwr)
     rounds_done: int = pl["rounds_done"] + 1
     # Rules of Play 4.4.2: ordinary Battle has no round limit.
     ended = atk.conceded or dfd.conceded or _battle_over(atk, dfd)
     if not ended:
-        atk.conceded = False
-        dfd.conceded = False
         pl = dict(pl)
         pl["attacker"] = battle_side_to_snapshot(atk)
         pl["defender"] = battle_side_to_snapshot(dfd)
         pl["round_idx"] = round_idx + 1
         pl["rounds_done"] = rounds_done
-        state.pending = PendingDecision(
-            kind="battle_concede", waiting_on=side, payload=pl)
+        _pend_field_concede(state, pl, kind=pd.kind)
         return {"battle": "in_progress", "round_resolved": round_idx,
                 "rounds_done": rounds_done}
     # Battle ended this Round -> winner + aftermath.
@@ -3811,6 +3821,7 @@ def _h_battle_concede(state: GameState,
     else:
         result.winner = None
     state.pending = None
+    state.meta.active_player = atk.side
     if pl.get("finish") == "sally":
         return _finish_sally(state, action, atk=atk, dfd=dfd,
                              result=result, pl=pl)
@@ -4930,17 +4941,12 @@ def _begin_interactive_relief(
     pl["rs"] = _relief_to_snapshot(rs)
     pl["round_idx"] = 1
     pl["max_rounds"] = None
-    state.pending = PendingDecision(
-        kind="relief_concede", waiting_on=pl["active_side"], payload=pl)
-    state.meta.active_player = pl["active_side"]
-    return {"relief_sally": "awaiting_concede", "round": 1}
+    return _pend_field_concede(state, pl, kind="relief_concede")
 
 
 def _h_relief_concede(state: GameState,
                       action: dict[str, Any]) -> dict[str, Any]:
-    """Resolve one Relief-Sally Round after its start-of-Round Concede
-    declaration (4.4.2; either side, from Round 1). Runs the Round, then
-    finishes (Concede / Rout) or re-pends for the next Round."""
+    """Collect each owner's Concede in order, then resolve the Relief Sally Round."""
     from almoravid.battle import (
         _relief_declare_concede,
         _relief_finalize,
@@ -4952,23 +4958,23 @@ def _h_relief_concede(state: GameState,
     side = _require_side(action)
     pd = _require_pending(state, "relief_concede", side)
     pl = pd.payload
+    role, declared = _field_concede_choice(pd, action)
+    if role == "attacker" and not declared:
+        return _pend_field_concede(state, pl, kind=pd.kind, role="defender")
     rs = _relief_from_snapshot(state, pl["rs"])
     rnd_i: int = pl["round_idx"]
-    atk_concedes = bool(action.get("attacker_concede"))
-    dfd_concedes = bool(action.get("defender_concede"))
-    _relief_declare_concede(rs, atk_concedes=atk_concedes,
-                            dfd_concedes=dfd_concedes)
+    _relief_declare_concede(rs, atk_concedes=declared and role == "attacker",
+                            dfd_concedes=declared and role == "defender")
     rs.result.rounds.append(_relief_run_round(state, rs, rnd_i))
-    ended = atk_concedes or dfd_concedes or _relief_over(state, rs)
+    ended = declared or _relief_over(state, rs)
     if not ended:
         pl = dict(pl)
         pl["rs"] = _relief_to_snapshot(rs)
         pl["round_idx"] = rnd_i + 1
-        state.pending = PendingDecision(
-            kind="relief_concede", waiting_on=side, payload=pl)
+        _pend_field_concede(state, pl, kind=pd.kind)
         return {"relief_sally": "in_progress", "round_resolved": rnd_i,
                 "rounds_done": len(rs.result.rounds)}
-    if atk_concedes or dfd_concedes:
+    if declared:
         rs.result.notes.append(
             f"Round {rnd_i} ended with Concede; Relief Sally ends")
     _relief_finalize(state, rs)

@@ -38,9 +38,10 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Side = Literal["christian", "muslim"]
+FIELD_CONCEDE_KINDS = ("battle_concede", "relief_concede")
 StrongholdType = Literal["city", "fortress", "town", "castle", "region"]
 TaifaStatus = Literal["independent", "parias", "reconquista", "kingdoms"]
 UnitType = Literal[
@@ -629,3 +630,16 @@ class GameState(StrictModel):
     cathedral_seat_locales: list[str] = Field(default_factory=list)
     history: list[HistoryEntry] = Field(default_factory=list)
     score: Score = Field(default_factory=Score)
+
+    @model_validator(mode="after")
+    def _resume_legacy_concede(self) -> GameState:
+        """Resume old single-prompt combat saves with the attacker to decide."""
+        pd = self.pending
+        if (pd is not None and pd.kind in FIELD_CONCEDE_KINDS
+                and "concede_role" not in pd.payload):
+            side = pd.payload.get("active_side", pd.payload.get("side"))
+            if side in ("christian", "muslim"):
+                pd.payload["concede_role"] = "attacker"
+                pd.waiting_on = side
+                self.meta.active_player = side
+        return self

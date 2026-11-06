@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from almoravid.events import held_event_ids, held_event_moves
-from almoravid.state import GameState, Lord, Side
+from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
 
 def legal_moves(state: GameState) -> list[dict[str, Any]]:
@@ -121,19 +121,13 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "choices": {lid: "add" for lid in locs}})
         return moves
 
-    # 4.4.2 CONCEDE THE FIELD? — reactive per-Round Concede declaration in
-    # an interactive Battle. The waiting side declares whether the Attacker
-    # and/or Defender Concedes this Round (Attacker then Defender). Offer
-    # the three meaningful choices; the driver may also send a custom
-    # combination of attacker_concede / defender_concede.
-    if (state.pending is not None
-            and state.pending.kind == "battle_concede"):
+    # 4.4.2 Concede the Field: only the side whose election is owed.
+    if state.pending is not None and state.pending.kind in FIELD_CONCEDE_KINDS:
         side = state.pending.waiting_on
-        moves.append({"type": "battle_concede", "side": side})
-        moves.append({"type": "battle_concede", "side": side,
-                      "attacker_concede": True})
-        moves.append({"type": "battle_concede", "side": side,
-                      "defender_concede": True})
+        role = state.pending.payload.get("concede_role", "attacker")
+        action = {"type": state.pending.kind, "side": side}
+        moves.append(action)
+        moves.append({**action, f"{role}_concede": True})
         # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
         # a genuine player choice and may be (re)set between Rounds. Surface
         # it here so an agent on the public interface can discover it; the
@@ -185,38 +179,6 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         moves.append({"type": "storm_concede", "side": side})
         moves.append({"type": "storm_concede", "side": side,
                       "attacker_concede": True})
-        # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
-        # a genuine player choice and may be (re)set between Rounds. Surface
-        # it here so an agent on the public interface can discover it; the
-        # set_absorption_policy action leaves the Concede decision pending.
-        for _pol in ("weakest_first", "armored_first"):
-            moves.append({"type": "set_absorption_policy", "side": side,
-                          "policy": _pol})
-        # 4.4.2 Reposition / Flanking — multi-Lord Array placement choices
-        # (standing policies; mechanically relevant only with a multi-Lord
-        # Array, harmless otherwise). Surface the enumerable directions;
-        # reserve_priority takes an explicit lord_id list via the action.
-        for _fc in ("larger", "left", "right"):
-            moves.append({"type": "set_array_tactics", "side": side,
-                          "flank_choice": _fc})
-        for _cf in ("left", "right"):
-            moves.append({"type": "set_array_tactics", "side": side,
-                          "center_fill": _cf})
-        for _fa in ("opposed", "flanking"):
-            moves.append({"type": "set_array_tactics", "side": side,
-                          "flank_absorb": _fa})
-        return moves
-
-    # 4.4.2 CONCEDE THE FIELD? — reactive Relief-Sally Concede (either
-    # side may Concede; relieving side = Attacker, besieger = Defender).
-    if (state.pending is not None
-            and state.pending.kind == "relief_concede"):
-        side = state.pending.waiting_on
-        moves.append({"type": "relief_concede", "side": side})
-        moves.append({"type": "relief_concede", "side": side,
-                      "attacker_concede": True})
-        moves.append({"type": "relief_concede", "side": side,
-                      "defender_concede": True})
         # 4.4.2 ASSIGN HITS — the owner's standing Hit-absorption policy is
         # a genuine player choice and may be (re)set between Rounds. Surface
         # it here so an agent on the public interface can discover it; the

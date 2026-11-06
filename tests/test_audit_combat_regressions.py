@@ -140,7 +140,7 @@ def test_interactive_battle_offers_round_eight_and_then_concedes():
     with patch.object(B, "roll_d6", return_value=1):
         apply_action(s, {"type": "cmd_battle", "side": "christian",
                          "interactive_concede": True})
-        for _ in range(7):
+        for _ in range(14):  # Seven rounds with an election for each side.
             move = next(m for m in legal_moves(s) if m["type"] == "battle_concede"
                         and not m.get("attacker_concede") and not m.get("defender_concede"))
             apply_action(s, move)

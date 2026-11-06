@@ -39,6 +39,21 @@ branch the state. Exit codes: 0 success, 1 usage error, 2 IllegalAction
 (or malformed action JSON) — agents should branch on exit code 2 to
 re-pick from the legal-moves palette.
 
+## Interactive Concede the Field
+
+Set `interactive_concede: true` on `cmd_battle`, `cmd_sally`, or
+`respond_stand_battle` to make Concede decisions one round at a time.
+The attacker answers first. To pass, submit the action with its type
+and side only. To Concede, add `attacker_concede: true`. If the attacker
+passes, the defender may pass or submit `defender_concede: true`.
+Use `battle_concede` for Battle and Sally and `relief_concede` for Relief
+Sally. Follow the pending side or the legal menu after each response.
+
+A concession resolves the current round with Pursuit and ends the
+engagement. If both sides pass, the round resolves normally and the
+attacker answers first again if combat continues. The synchronous
+`*_concede_round` arguments are for referee-controlled play and replays.
+
 ## Lifecycle
 
 ### `begin_levy`

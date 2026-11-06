@@ -245,8 +245,8 @@ def _drive_interactive(s, *, concede_at=None, conceder="defender"):
     assert r["battle"] == "awaiting_concede"
     while s.pending is not None and s.pending.kind == "battle_concede":
         cur = s.pending.payload["round_idx"]
-        act = {"type": "battle_concede", "side": "christian"}
-        if concede_at is not None and cur == concede_at:
+        act = {"type": "battle_concede", "side": s.pending.waiting_on}
+        if cur == concede_at and s.pending.payload["concede_role"] == conceder:
             act[f"{conceder}_concede"] = True
         r = apply_action(s, act)
         if "winner" in r:
@@ -270,10 +270,11 @@ def test_interactive_legal_moves_offers_concede() -> None:
     s = _activate_alfonso(seed=3)
     apply_action(s, {"type": "cmd_battle", "side": "christian",
                      "interactive_concede": True})
-    kinds = [m for m in legal_moves(s) if m["type"] == "battle_concede"]
-    assert len(kinds) == 3
-    assert any("attacker_concede" in m for m in kinds)
-    assert any("defender_concede" in m for m in kinds)
+    for side, role in (("christian", "attacker"), ("muslim", "defender")):
+        kinds = [m for m in legal_moves(s) if m["type"] == "battle_concede"]
+        stand = {"type": "battle_concede", "side": side}
+        assert kinds == [stand, {**stand, f"{role}_concede": True}]
+        apply_action(s, stand)
 
 
 def test_interactive_no_concede_matches_synchronous() -> None:
@@ -363,7 +364,7 @@ def test_interactive_sally_pauses_and_parity() -> None:
     assert r["battle"] == "awaiting_concede"
     assert s_int.pending.kind == "battle_concede"
     while s_int.pending is not None and s_int.pending.kind == "battle_concede":
-        r = apply_action(s_int, {"type": "battle_concede", "side": "muslim"})
+        r = apply_action(s_int, {"type": "battle_concede", "side": s_int.pending.waiting_on})
     assert r["winner"] == r_sync["winner"]
     assert r["rounds"] == r_sync["rounds"]
 
@@ -374,9 +375,11 @@ def test_interactive_sally_besieger_concede() -> None:
     s = _sally_setup()
     apply_action(s, {"type": "cmd_sally", "side": "muslim",
                      "interactive_concede": True})
-    r = apply_action(s, {"type": "battle_concede", "side": "muslim",
+    apply_action(s, {"type": "battle_concede", "side": "muslim"})
+    r = apply_action(s, {"type": "battle_concede", "side": "christian",
                          "defender_concede": True})
     assert r["winner"] == "muslim"   # sallying (attacker) side
+    assert s.meta.active_player == "muslim"
 
 
 def test_interactive_sally_sallying_lord_concede() -> None:

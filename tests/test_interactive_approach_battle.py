@@ -13,13 +13,15 @@ and that the interactive and synchronous paths agree on outcomes.
 
 from __future__ import annotations
 
-from almoravid.actions import apply_action
+import pytest
+
+from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
-from almoravid.state import Cylinder
+from almoravid.state import Cylinder, GameState
 from tests.test_phase6b_approach import _activate_lord_at_locale
 
 
-def _march_into_battle(seed: int = 11):
+def _march_into_battle(seed: int = 11, *, relief: bool = False):
     """Drive Alfonso (Christian) to March into al_mutamid (Muslim) at
     sahagun, leaving a pending `march_arrival_response` on the Muslim."""
     s = _activate_lord_at_locale("scenario_a_toledo_beset", "alfonso",
@@ -27,6 +29,10 @@ def _march_into_battle(seed: int = 11):
     s.lords["al_mutamid"].cylinder = Cylinder(kind="locale",
                                               locale_id="sahagun")
     s.lords["al_mutamid"].in_stronghold = False
+    if relief:
+        s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="sahagun")
+        s.lords["alvar_fanez"].in_stronghold = True
+        s.locales["sahagun"].siege_green = 1
     s.lords["alfonso"].assets = {}
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "sahagun", "way_type": "road"})
@@ -45,26 +51,32 @@ def test_stand_battle_opt_in_pends_concede() -> None:
     assert r["round"] == 1
     assert s.pending is not None
     assert s.pending.kind == "battle_concede"
-    assert s.pending.waiting_on == "muslim"
+    assert s.pending.waiting_on == "christian" == s.meta.active_player
     types = {m["type"] for m in legal_moves(s)}
     assert "battle_concede" in types
 
 
-def test_stand_battle_interactive_runs_to_completion() -> None:
+@pytest.mark.parametrize("relief", [False, True])
+def test_stand_battle_interactive_runs_to_completion(relief) -> None:
     """Stepping the `battle_concede` decisions to the end produces the
     same terminal bookkeeping as the synchronous Stand path: card ended,
     pending cleared, control restored to the Active (Christian) side."""
-    s = _march_into_battle()
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
-                     "interactive_concede": True})
+    s = _march_into_battle(relief=relief)
+    synchronous = s.model_copy(deep=True)
+    stand = {"type": "respond_stand_battle", "side": "muslim"}
+    expected = apply_action(synchronous, stand)
+    result = apply_action(s, {**stand, "interactive_concede": True})
+    kind = "relief_concede" if relief else "battle_concede"
     guard = 0
-    while s.pending is not None and s.pending.kind == "battle_concede":
-        apply_action(s, {"type": "battle_concede", "side": "muslim"})
+    while s.pending is not None and s.pending.kind == kind:
+        result = apply_action(s, {"type": kind, "side": s.pending.waiting_on})
         guard += 1
-        assert guard < 10, "battle_concede did not terminate"
+        assert guard < 20, f"{kind} did not terminate"
+    assert (result["winner"], result["rounds"]) == (expected["winner"], expected["rounds"])
+    assert s.meta.rng_state == synchronous.meta.rng_state
     assert s.meta.actions_remaining == 0       # card ended (4.4.5)
     assert (s.pending is None
-            or s.pending.kind != "battle_concede")
+            or s.pending.kind != kind)
     if s.pending is None:
         assert s.meta.active_player == "christian"
 
@@ -76,6 +88,7 @@ def test_interactive_concede_matches_resolver_outcome() -> None:
     s = _march_into_battle()
     apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
+    apply_action(s, {"type": "battle_concede", "side": "christian"})
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
                          "defender_concede": True})
     assert r["winner"] == "christian"
@@ -89,7 +102,7 @@ def test_interactive_attacker_concede_defender_wins() -> None:
     s = _march_into_battle()
     apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
-    r = apply_action(s, {"type": "battle_concede", "side": "muslim",
+    r = apply_action(s, {"type": "battle_concede", "side": "christian",
                          "attacker_concede": True})
     assert r["winner"] == "muslim"
 
@@ -111,3 +124,73 @@ def test_hit_absorption_choice_discoverable_during_battle() -> None:
                      "policy": "armored_first"})
     assert s.pending is not None and s.pending.kind == "battle_concede"
     assert s.meta.absorption_policy["muslim"] == "armored_first"
+
+
+@pytest.mark.parametrize("relief", [False, True])
+def test_approach_concede_prompts_only_authorize_the_waiting_owner(relief):
+    s = _march_into_battle(relief=relief)
+    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+                     "interactive_concede": True})
+    kind = "relief_concede" if relief else "battle_concede"
+    assert s.pending.kind == kind
+    rng_before = s.meta.rng_state
+    combat_before = s.pending.payload.copy()
+
+    for role, side, opposing_side, opposing_role in (
+        ("attacker", "christian", "muslim", "defender"),
+        ("defender", "muslim", "christian", "attacker"),
+    ):
+        assert s.pending.waiting_on == s.meta.active_player == side
+        assert [m for m in legal_moves(s) if m["type"] == kind] == [
+            {"type": kind, "side": side}, {"type": kind, "side": side,
+                                         f"{role}_concede": True},
+        ]
+        saved = s.model_dump_json()
+        for action, code in (
+            ({"type": kind, "side": opposing_side, f"{opposing_role}_concede": True},
+             "not_responder"),
+            ({"type": kind, "side": side, f"{opposing_role}_concede": True}, "wrong_side"),
+            ({"type": kind, "side": side, f"{role}_concede": "false"}, "bad_arg"),
+            ({"type": "end_card", "side": side}, "pending_decision"),
+        ):
+            with pytest.raises(IllegalAction) as exc:
+                apply_action(s, action)
+            assert exc.value.code == code
+            assert s.model_dump_json() == saved
+
+        if role == "attacker":
+            apply_action(s, {"type": kind, "side": side})
+            assert s.pending.payload == {**combat_before, "concede_role": "defender"}
+            assert s.meta.rng_state == rng_before
+            # The defender's election is still owed after a save and reload.
+            s = GameState.model_validate_json(s.model_dump_json())
+
+    result = apply_action(s, {"type": kind, "side": "muslim", "defender_concede": True})
+    assert result["winner"] == "christian" and result["rounds"] == 1
+    assert s.meta.active_player == "christian"
+
+
+def test_relief_attacker_can_concede_before_the_besiegers():
+    s = _march_into_battle(relief=True)
+    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+                     "interactive_concede": True})
+    result = apply_action(s, {"type": "relief_concede", "side": "christian",
+                             "attacker_concede": True})
+    assert result["winner"] == "muslim" and result["rounds"] == 1
+    assert result["retreat_summary"]["pursuit"]["conceder"] == "christian"
+
+
+@pytest.mark.parametrize("relief", [False, True])
+def test_legacy_combat_save_resumes_at_the_current_rounds_attacker(relief):
+    s = _march_into_battle(relief=relief)
+    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+                     "interactive_concede": True})
+    saved = s.model_dump()
+    saved["pending"]["payload"].pop("concede_role", None)
+    # The old Approach driver assigned its combined election to the defender.
+    if not relief:
+        saved["pending"]["waiting_on"] = saved["meta"]["active_player"] = "muslim"
+    loaded = GameState.model_validate(saved)
+    assert loaded.pending.waiting_on == loaded.meta.active_player == "christian"
+    assert loaded.pending.payload["concede_role"] == "attacker"
+    assert loaded.model_dump() == s.model_dump()

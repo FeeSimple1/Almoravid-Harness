@@ -270,3 +270,27 @@ bound in the other two, without violations.
 
 Second-audit progress: **all 6 Almoravid groups fixed**. All nine findings
 from the original audit remain fixed.
+
+## Third audit, batch 1 — A3-05
+
+Interactive Battle, Approach Battle, Sally, and Relief Sally now give each
+player their own Concede choice. The attacker answers first in each round.
+A pass hands the choice to the defender without rolling dice. The first
+concession starts that round with Pursuit and ends combat after the round.
+Two passes resolve a normal round. This updates the prompt ownership
+described in DECISION-002. Referees can use the scripted round arguments.
+
+Only the current owner's concession appears in the legal menu. An opponent
+declaration or an out-of-order response rejects without changing state.
+After the battle, the original Command side resumes control. Legacy saves
+with a single Concede prompt resume with the attacker in the saved round.
+
+Regressions cover both owners, save and reload, card control, and parity
+with synchronous resolution. All **1,819 tests passed**, and source Ruff
+checks passed. Both configured stress sweeps passed their invariant checks.
+Four sessions completed and two reached the configured 400-step bound.
+
+Follow-up for the Retreat work — a losing Relief Sally Lord can Retreat
+along the Approach Way. The same seeded case reproduces on preceding main.
+
+Third-audit progress is **one of five Almoravid groups** and **14 of 23 overall**.
