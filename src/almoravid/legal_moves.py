@@ -124,12 +124,19 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
 
     # 4.4.3: the losing owner chooses a fate for any Lord with a choice.
     if state.pending is not None and state.pending.kind == "battle_fate":
-        return [
-            {"type": "battle_fate", "side": state.pending.waiting_on,
-             "lord_id": lid, **choice}
-            for lid, choices in state.pending.payload["options"].items() if len(choices) > 1
-            for choice in choices
-        ]
+        from almoravid.battle import c7_retreat_assets
+
+        for lid, choices in state.pending.payload["options"].items():
+            if len(choices) <= 1:
+                continue
+            payments = c7_retreat_assets(state, state.lords[lid])
+            for choice in choices:
+                action = {"type": "battle_fate", "side": state.pending.waiting_on,
+                          "lord_id": lid, **choice}
+                if choice["fate"] == "retreat":
+                    moves.extend({**action, "c7_pay": asset} for asset in payments)
+                moves.append(action)
+        return moves
 
     # 4.4.2 Concede the Field: only the side whose election is owed.
     if state.pending is not None and state.pending.kind in FIELD_CONCEDE_KINDS:

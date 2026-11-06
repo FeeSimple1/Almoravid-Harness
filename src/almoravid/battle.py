@@ -2330,7 +2330,7 @@ def resolve_sally(
 
 def apply_sally_aftermath(state: GameState, result: BattleResult,
                           locale_id: str, *,
-                          fates: dict[str, dict[str, str]] | None = None) -> None:
+                          fates: dict[str, dict[str, Any]] | None = None) -> None:
     """Sally-specific aftermath (rule 4.5.3).
 
     4.5.3: "Losing Defenders Retreat normally, ending the Siege. Losing
@@ -2852,7 +2852,7 @@ def apply_relief_sally_aftermath(
     besieger_side: Side,
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
-    fates: dict[str, dict[str, str]] | None = None,
+    fates: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Relief-Sally aftermath (rule 4.4.1 / 4.5.3).
 
@@ -3125,13 +3125,21 @@ def battle_fate_options(
     }, slots
 
 
+def c7_retreat_assets(state: GameState, lord: Lord) -> tuple[AssetType, ...]:
+    """Assets this Lord can pay for Baggage Parapet's Retreat protection."""
+    if lord.side != "christian" or "C7" not in state.decks.this_levy_events.get("christian", []):
+        return ()
+    payment_order: tuple[AssetType, ...] = ("loot", "mule", "cart", "prov", "coin")
+    return tuple(asset for asset in payment_order if lord.assets.get(asset, 0) > 0)
+
+
 def apply_retreat_aftermath(
     state: GameState,
     result: BattleResult,
     *,
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
-    fates: dict[str, dict[str, str]] | None = None,
+    fates: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve the chosen losing Lords' fates, or use the scripted defaults."""
     from almoravid.actions import _shift_service_left
@@ -3178,7 +3186,6 @@ def apply_retreat_aftermath(
     # Stable order keeps Service rolls deterministic across selection order.
     for lid, choice in sorted(fates.items()):
         lord = state.lords[lid]
-        loser_side = lord.side
         entry: dict[str, Any] = {"lord_id": lid, **choice}
         if choice["fate"] == "withdraw":
             lord.in_stronghold = True
@@ -3190,28 +3197,16 @@ def apply_retreat_aftermath(
         if choice["fate"] == "retreat":
             lord.cylinder = Cylinder(kind="locale", locale_id=choice["retreat_to"])
             lord.in_stronghold = False
-            # Bug P fix (Pattern 9): C7 Baggage Parapet opt-out.
-            # When a Christian Lord Retreats and C7 sits in
-            # this_levy_events["christian"], the Lord may pay 1 Asset
-            # to skip Spoils transfer AND the Service-shift roll
-            # entirely. We auto-pay greedily when an Asset is
-            # available (preferring loot/cart/mule/prov, keeping coin
-            # for Pay step). If no Asset is available, the opt-out
-            # cannot be exercised and the Service-shift fires normally.
-            asset_pay_order: tuple[AssetType, ...] = (
-                "loot", "mule", "cart", "prov", "coin")
-            c7_held = "C7" in state.decks.this_levy_events.get("christian", [])
-            opt_out_used = False
-            if c7_held and loser_side == "christian":
-                for atype in asset_pay_order:
-                    if lord.assets.get(atype, 0) > 0:
-                        lord.assets[atype] -= 1
-                        if lord.assets[atype] == 0:
-                            lord.assets.pop(atype, None)
-                        opt_out_used = True
-                        entry["c7_opt_out_asset"] = atype
-                        break
+            # An explicit None declines protection. Scripted battles and
+            # legacy saved fate selections use the existing payment order.
+            payable = c7_retreat_assets(state, lord)
+            payment = choice.get("c7_pay", payable[0] if payable else None)
+            opt_out_used = payment is not None
             if opt_out_used:
+                lord.assets[payment] -= 1
+                if lord.assets[payment] == 0:
+                    lord.assets.pop(payment)
+                entry["c7_opt_out_asset"] = payment
                 entry["service_shift_boxes"] = 0
                 entry["service_roll"] = None
                 entry["c7_opt_out"] = True

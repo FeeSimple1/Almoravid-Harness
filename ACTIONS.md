@@ -67,6 +67,11 @@ assigned. Once the last choice is made, the engine applies all fates,
 Losses, Spoils, and Service and resumes the Command sequence.
 Mandatory fates resolve automatically.
 
+With Baggage Parapet in play, each retreating Christian Lord can add
+`c7_pay` to the chosen Retreat. Set it to an Asset on that Lord's mat
+to spend one and skip his Retreat Spoils and Service shift. Select the
+Retreat without `c7_pay` to take the normal penalties.
+
 Scripted callers that omit `interactive_retreat` use the automatic
 resolution policy.
 

@@ -314,3 +314,19 @@ self-play sweeps passed their invariant checks. Four sessions completed
 and two reached the configured 400-step bound.
 
 Third-audit progress is **two of five Almoravid groups** and **15 of 23 overall**.
+
+## Third audit, batch 3 — A3-03
+
+The Retreat menu offers Baggage Parapet payments from each eligible
+Christian Lord's own Assets. A chosen payment spends one Asset and skips
+that Lord's Retreat Spoils and Service shift. The player can also Retreat
+without paying. Choices are staged until all fates are selected and survive
+save and reload. Scripted resolution and fate selections saved before the
+payment field existed use the prior automatic payment order.
+
+Eight regressions fail on preceding main and pass here. All **1,835 tests
+passed**, and the source and new tests passed Ruff. Both configured self-play
+sweeps passed their invariant checks. Four sessions completed and two reached
+the configured 400-step bound.
+
+Third-audit progress is **three of five Almoravid groups** and **16 of 23 overall**.

@@ -3679,7 +3679,12 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
 
 
 def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    from almoravid.battle import BattleResult, BattleRound, battle_side_from_snapshot
+    from almoravid.battle import (
+        BattleResult,
+        BattleRound,
+        battle_side_from_snapshot,
+        c7_retreat_assets,
+    )
 
     side = _require_side(action)
     pd = _require_pending(state, "battle_fate", side)
@@ -3690,6 +3695,14 @@ def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              "choose a Lord with an outstanding fate", code="bad_arg")
     choice = {k: action[k] for k in ("fate", "retreat_to", "retreat_way") if k in action}
     _require(choice in options[lid], "illegal fate or Retreat route", code="bad_arg")
+    payable = c7_retreat_assets(state, state.lords[lid]) if choice["fate"] == "retreat" else ()
+    payment = action.get("c7_pay")
+    if "c7_pay" in action:
+        _require(bool(payable) and (payment is None or payment in payable),
+                 "C7 payment must be an Asset on the retreating Lord's mat",
+                 code="bad_arg")
+    if payable:
+        choice["c7_pay"] = payment
 
     # Forced fates need no action. Each elective Withdrawal uses one slot.
     if choice["fate"] == "withdraw":
