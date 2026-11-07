@@ -41,8 +41,8 @@ re-pick from the legal-moves palette.
 
 ## Combat Holds
 
-Battle, Stand & Fight, Sally, and Storm open a `combat_holds` decision
-when either side has Held cards. The attacker chooses first, followed
+Battle, Stand & Fight, Sally, Storm, and Sagrajas resolution open a
+`combat_holds` decision when either side has Held cards. The attacker chooses first, followed
 by the defender. Each owner may play any subset of applicable combat
 Events, one card per action, and then finish by omitting `card_id`.
 Unchosen cards stay Held. Follow `pending.waiting_on` or `legal_moves`
@@ -51,6 +51,16 @@ Events before choosing.
 
 ```json
 {"type": "combat_holds", "side": "christian", "card_id": "C8"}
+```
+
+Playing M7 Spear Wall requires `lord_ids` with two distinct Muslim
+Lords participating in the Battle, or the sole Lord if only one is
+participating. The menu offers each legal selection. The choice stays
+with those Lords through save/load and is separate from the Round
+when the bonus applies.
+
+```json
+{"type": "combat_holds", "side": "muslim", "card_id": "M7", "lord_ids": ["al_mundir", "al_mustain"]}
 ```
 
 ```json

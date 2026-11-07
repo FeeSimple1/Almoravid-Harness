@@ -258,43 +258,27 @@ def play_combat_hold(state: GameState, side: Side, card_id: str, *,
 
 
 def init_m7_cap(state: GameState, side: BattleSide) -> None:
-    """Phase 6g: set up M7 Spear Wall markers on the Muslim side.
-
-    If side.array is present: place per-Lord m7_marked=True on the
-    TWO Muslim Lords with the most MaA + AfricanFoot (per card text:
-    Muslim player picks two Lords; we pick greedily for
-    determinism). The protection-roll helpers (both pool and per-
-    pair paths) consult these markers.
-
-    If side.array is absent (single-Lord or legacy multi-Lord): fall
-    back to side.m7_boosts_remaining = cap of top-2 Lords' MaA+AF.
-    No-op when M7 is not in play or side is not Muslim.
-    """
+    """Set up the chosen Spear Wall markers, with a legacy default."""
     if side.side != "muslim":
         return
     if "M7" not in state.decks.this_levy_events.get("muslim", []):
         return
     side.m7_owned = True
-    contribs: list[tuple[int, str]] = []
-    for lid in side.lord_ids:
-        lord = state.lords.get(lid)
-        if lord is None:
-            continue
-        af = (lord.forces.get("men_at_arms", 0)
-              + lord.forces.get("african_foot", 0))
-        contribs.append((af, lid))
-    contribs.sort(reverse=True)
+    selected = state.meta.spear_wall_lord_ids
+    if selected is None:
+        # Saves and direct callers with M7 already in play may predate targeting.
+        contribs = []
+        for lid in side.lord_ids:
+            lord = state.lords.get(lid)
+            if lord is not None:
+                foot = lord.forces.get("men_at_arms", 0) + lord.forces.get("african_foot", 0)
+                contribs.append((foot, lid))
+        top_two = sorted(contribs, reverse=True)[:2]
+        selected = [lid for _, lid in top_two]
+        side.m7_boosts_remaining = sum(foot for foot, _ in top_two)
     if side.array is not None:
-        top_two = {lid for _, lid in contribs[:2]}
         for lp in side.array:
-            if lp.lord_id in top_two:
-                lp.m7_marked = True
-        # Also set the side-level cap so legacy callers that don't
-        # consult per-Lord markers (none currently, but defensive)
-        # still respect the count.
-        side.m7_boosts_remaining = sum(af for af, _ in contribs[:2])
-    else:
-        side.m7_boosts_remaining = sum(af for af, _ in contribs[:2])
+            lp.m7_marked = lp.lord_id in selected
 
 
 def _lookup_unit(forces_data: dict[str, Any], unit_type: str) -> dict[str, Any] | None:
@@ -607,6 +591,27 @@ def _striker_select_prio(state: GameState, target_side_name: Side,
     return (prio, 0)
 
 
+def _pooled_unit_owner(
+    target: BattleSide,
+    unit: UnitType,
+    lord_forces: dict[str, dict[UnitType, int]] | None,
+) -> str | None:
+    if len(target.lord_ids) == 1:
+        return target.lord_ids[0]
+    if lord_forces is None:
+        return None
+    # Match the lane's loss attribution in _relief_push_lane. The pool
+    # reflects earlier hits in this step. The per-Lord counts are updated
+    # together when the step finishes.
+    counts = [lord_forces[lid].get(unit, 0) for lid in target.lord_ids]
+    removed = sum(counts) - target.forces[unit]
+    for lid, count in zip(target.lord_ids, counts, strict=True):
+        if removed < count:
+            return lid
+        removed -= count
+    return None
+
+
 def _resolve_protection_roll(
     state: GameState,
     target_side: BattleSide,
@@ -617,6 +622,7 @@ def _resolve_protection_roll(
     striker_unit_class: UnitClass | None = None,
     absorb_policy: str = "weakest_first",
     striker_minus_armor: int = 0,
+    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -705,23 +711,20 @@ def _resolve_protection_roll(
     canceled = False
     if ptype == "armored":
         lo, hi = unit["protection"]["range"]
-        # M7 Spear Wall (Phase 6a, Bug T fix) — Muslim defenders'
-        # Armored Foot (Men-at-Arms, African Foot) get Armor +1 vs
-        # Christian Horse Melee in Battle (not Storm, not vs Missiles,
-        # not vs Foot strikers). Per card text the marker is on TWO
-        # specific Muslim Lords' mats; until per-Lord forces tracking
-        # lands we cap total +1 consultations at the sum of the two
-        # largest Muslim contributors' MaA + AfricanFoot (set up in
-        # resolve_battle).
+        # M7 protects only the marked Lords' Armored Foot against Horse Melee.
         if (target_side.side == "muslim"
                 and "M7" in state.decks.this_levy_events.get("muslim", [])
                 and chosen in ("men_at_arms", "african_foot")
                 and striker_unit_class == "horse"
                 and striker_kind == "melee"
-                and context == "battle"
-                and target_side.m7_boosts_remaining > 0):
-            hi = hi + 1
-            target_side.m7_boosts_remaining -= 1
+                and context == "battle"):
+            selected = state.meta.spear_wall_lord_ids
+            if selected is not None:
+                if _pooled_unit_owner(target_side, chosen, target_lord_forces) in selected:
+                    hi += 1
+            elif target_side.m7_boosts_remaining > 0:
+                hi += 1
+                target_side.m7_boosts_remaining -= 1
         # Crossbows: -1 vs Armor (Quick Ref Table 1 / Errata).
         hi = hi - striker_minus_armor
         if lo <= rng <= hi:
@@ -774,6 +777,7 @@ def _resolve_step(
     melee_hits_override: int | None = None,
     c8_ctx: dict[str, Any] | None = None,
     arrada_active: bool = False,
+    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
 ) -> StepResolution:
     # Rules of Play 4.4.1-.2: unequal armies still resolve Hits per Lord.
     # A singleton opposite a multi-Lord array occupies Front center.
@@ -917,7 +921,8 @@ def _resolve_step(
                             raw_hits=raw, rounded_hits=total_hits)
     _apply_step_cancellation_and_hits(
         state, actor_role, target, per_kind_hits, total_hits,
-        walls_range, siege_markers, context, unit_class, result)
+        walls_range, siege_markers, context, unit_class, result,
+        target_lord_forces=target_lord_forces)
     return result
 
 
@@ -952,6 +957,8 @@ def _apply_step_cancellation_and_hits(
     context: Literal["battle", "storm"],
     unit_class: UnitClass | None,
     result: StepResolution,
+    *,
+    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
 ) -> None:
     """Walls/Siegeworks cancellation then Protection-roll Hit
     application (shared by the normal and Storm-melee-override paths
@@ -991,6 +998,7 @@ def _apply_step_cancellation_and_hits(
                 striker_unit_class=unit_class,
                 absorb_policy=absorb_policy,
                 striker_minus_armor=minus_armor,
+                target_lord_forces=target_lord_forces,
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
@@ -1509,6 +1517,8 @@ def apply_aftermath(
         if (result.engagement != "storm" and side_obj.m7_owned
                 and "M7" not in state.decks.discard):
             state.decks.discard.append("M7")
+    if result.engagement != "storm":
+        state.meta.spear_wall_lord_ids = None
 
 
 def _restore_routed_to_forces(state: GameState, side: BattleSide) -> None:
@@ -2524,7 +2534,8 @@ def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
                          kw["step_type"], kw["unit_class"],
                          attacker_side, defender_side, context="battle",
                          walls_range=kw.get("walls_range"),
-                         arrada_active=True)
+                         arrada_active=True,
+                         target_lord_forces=rs.lf[_relief_name_of(rs, target)])
     _relief_push_lane(rs, target, before)
     return step
 
@@ -2919,6 +2930,8 @@ def _discard_round1_events(state: GameState, card_ids: list[str]) -> None:
                 state.decks.discard.append(cid)
                 if cid == "C8":
                     state.meta.cantador_lord_id = None
+                elif cid == "M7":
+                    state.meta.spear_wall_lord_ids = None
         if not bucket:
             state.decks.this_levy_events.pop(side_key, None)
 

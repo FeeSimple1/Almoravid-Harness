@@ -97,6 +97,8 @@ class Meta(StrictModel):
     # None retains the existing automatic choice; the Sagrajas variant
     # specifically assigns the Event to Alfonso.
     cantador_lord_id: str | None = None
+    # M7 targets for the current Battle. None covers pre-selection saves.
+    spear_wall_lord_ids: list[str] | None = None
     version: str = "0.2.0"
 
     # Levy sub-phase tracking (Pattern 1: state-set-but-unreachable —

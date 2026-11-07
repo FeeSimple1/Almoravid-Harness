@@ -132,11 +132,12 @@ def render_sagrajas(state: GameState) -> str:
             lines.append(f"RESULT: winner={state.score.winner} "
                          f"({state.score.victory_reason}).")
         else:
+            next_action = ("combat_holds" if state.pending and state.pending.kind == "combat_holds"
+                           else "resolve_battle")
             lines.append(f"ROLE: Christians {role.upper()}  ->  ATTACKER = "
                          f"{atk_side} (Marshal {marshal} at Front center, "
                          f"4.4.1), DEFENDER = {def_side}. "
-                         f"Legal action: resolve_battle.")
-    held = state.decks.this_levy_events
+                         f"Legal action: {next_action}.")
     sidewide = [c.card_id for c in state.decks.capabilities_in_play
                 if c.scope == "side_wide"]
     for sd in ("christian", "muslim"):
@@ -150,9 +151,14 @@ def render_sagrajas(state: GameState) -> str:
             caps = ",".join(lord.capabilities) if lord.capabilities else "-"
             lines.append(f"  {lord.name} [{lid}]  forces=[{_forces_short(lord.forces)}]"
                          f"  caps={caps}")
-        h = held.get(sd, [])
-        if h:
-            lines.append(f"  Held Battle Events: {', '.join(h)}")
+        held = state.decks.held.get(sd, [])
+        played = state.decks.this_levy_events.get(sd, [])
+        if held:
+            lines.append(f"  Held Battle Events: {', '.join(held)}")
+        if played:
+            lines.append(f"  Battle Events in play: {', '.join(played)}")
+    if state.meta.spear_wall_lord_ids:
+        lines.append(f"Spear Wall markers on {', '.join(state.meta.spear_wall_lord_ids)}")
     if sidewide:
         lines.append(f"\nSide-wide capabilities in play: {', '.join(sorted(sidewide))}")
     lines.append("\nCard key: C4/C5 Arqueros & M4/M5 Alrama = Bowmen; "

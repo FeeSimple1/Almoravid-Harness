@@ -783,6 +783,21 @@
           "default": null,
           "title": "Cantador Lord Id"
         },
+        "spear_wall_lord_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spear Wall Lord Ids"
+        },
         "version": {
           "default": "0.2.0",
           "title": "Version",

@@ -3,7 +3,7 @@
 from almoravid.actions import apply_action
 
 
-def apply_combat_choices(state, action, *, cards=()):
+def apply_combat_choices(state, action, *, cards=(), spear_wall_lords=()):
     """Play the requested cards and decline every other combat Hold."""
     result = apply_action(state, action)
     played = set()
@@ -11,7 +11,10 @@ def apply_combat_choices(state, action, *, cards=()):
         side = state.pending.waiting_on
         for card in cards:
             if card in state.decks.held.get(side, []):
-                apply_action(state, {"type": "combat_holds", "side": side, "card_id": card})
+                play = {"type": "combat_holds", "side": side, "card_id": card}
+                if card == "M7":
+                    play["lord_ids"] = list(spear_wall_lords)
+                apply_action(state, play)
                 played.add(card)
         result = apply_action(state, {"type": "combat_holds", "side": side})
     assert played == set(cards)

@@ -42,11 +42,20 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     moves: list[dict[str, Any]] = []
 
     if state.pending is not None and state.pending.kind == "combat_holds":
-        from almoravid.campaign import combat_hold_candidates
+        from itertools import combinations
+
+        from almoravid.campaign import combat_hold_candidates, combat_hold_lord_ids
         side = state.pending.waiting_on
-        return [{"type": "combat_holds", "side": side, "card_id": card}
-                for card in combat_hold_candidates(state, side, state.pending.payload)] + [
-                    {"type": "combat_holds", "side": side}]
+        payload = state.pending.payload
+        for card in combat_hold_candidates(state, side, payload):
+            play = {"type": "combat_holds", "side": side, "card_id": card}
+            if card == "M7":
+                eligible = combat_hold_lord_ids(side, payload)
+                moves.extend({**play, "lord_ids": list(ids)}
+                             for ids in combinations(eligible, min(2, len(eligible))))
+            else:
+                moves.append(play)
+        return moves + [{"type": "combat_holds", "side": side}]
 
     if state.pending is not None and state.pending.kind == "reset_discard":
         from almoravid.campaign import reset_discard_candidates

@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from almoravid.actions import apply_action  # noqa: E402
-from almoravid.battle import battleside_for_lords, resolve_battle  # noqa: E402
+from almoravid.battle import battleside_for_lords, play_combat_hold, resolve_battle  # noqa: E402
 from almoravid.scenarios import load_scenario  # noqa: E402
 
 
@@ -53,6 +53,8 @@ def template(cfg):
     s.meta.hidden_mats = cfg.get("hidden", False)
     s.meta.advanced_vassal_service = cfg.get("service", False)
     apply_action(s, {"type": f"sagrajas_{cfg['role']}", "side": "christian"})
+    # Retain the historical study's pre-played M7 and target policy.
+    play_combat_hold(s, "muslim", "M7", defending=cfg["role"] == "attack")
     s.meta.absorption_policy = {"christian": cfg.get("c_policy", "weakest_first"),
                                 "muslim": cfg.get("m_policy", "weakest_first")}
     # Background Book p46: Bowmen can go on any TWO Christian Lords.

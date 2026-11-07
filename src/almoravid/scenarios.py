@@ -559,7 +559,7 @@ def build_sagrajas(seed: int = 0) -> GameState:
             owner_lord_id=lid))
 
     # Muslims hold M7 Spear Wall to play at the outset of Battle.
-    s.decks.this_levy_events.setdefault("muslim", []).append("M7")
+    s.decks.held.setdefault("muslim", []).append("M7")
 
     # Yusuf/Sir's African Horse have native once-per-Battle Javelin rows
     # in forces.json (4.4.1-.2); they need no Harbah capability card.

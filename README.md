@@ -24,6 +24,10 @@ from playtest_harness import Harness
 h = Harness("sagrajas_variant", seed=13)
 print(h.show())
 h.apply({"type": "resolve_battle", "side": "christian"})
+h.apply({"type": "combat_holds", "side": "christian"})
+h.apply({"type": "combat_holds", "side": "muslim", "card_id": "M7",
+         "lord_ids": ["al_mutamid", "yusuf"]})
+h.apply({"type": "combat_holds", "side": "muslim"})
 ```
 
 The same option is listed by `almoravid scenarios` and can be saved with:

@@ -11,6 +11,13 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import (list_campaign_scenarios, list_scenarios,
                                  load_scenario)
+from tests.combat_choices import apply_combat_choices
+
+
+def resolve_sagrajas(state):
+    return apply_combat_choices(
+        state, {"type": "resolve_battle", "side": state.pending.waiting_on},
+        cards=("M7",), spear_wall_lords=("yusuf", "sir"))
 
 
 # --- 1. appears in the scenario list, startable by a stable key -----------
@@ -71,8 +78,7 @@ def test_legal_offers_role_then_resolve_and_palette_is_clean():
 def test_resolves_to_completion(role, seed):
     s = load_scenario("sagrajas", seed=seed)
     apply_action(s, {"type": role, "side": "christian"})
-    r = apply_action(s, {"type": "resolve_battle",
-                         "side": s.pending.waiting_on})
+    r = resolve_sagrajas(s)
     assert s.meta.phase == "ended"
     assert r["winner"] in ("christian", "muslim")
     # No leftover co-location: the loser left the field.
@@ -88,7 +94,7 @@ def test_resolves_to_completion(role, seed):
 def test_final_result_recorded():
     s = load_scenario("sagrajas", seed=1)
     apply_action(s, {"type": "sagrajas_attack", "side": "christian"})
-    apply_action(s, {"type": "resolve_battle", "side": "christian"})
+    resolve_sagrajas(s)
     assert s.score.winner in ("christian", "muslim")
     assert "Sagrajas" in (s.score.victory_reason or "")
     assert s.meta.phase == "ended"
@@ -99,7 +105,7 @@ def test_defend_branch_makes_muslims_attacker():
     apply_action(s, {"type": "sagrajas_defend", "side": "christian"})
     assert s.meta.sagrajas_role == "defend"
     assert s.meta.active_player == "muslim"       # Yusuf attacks
-    r = apply_action(s, {"type": "resolve_battle", "side": "muslim"})
+    r = resolve_sagrajas(s)
     assert r["attacker"] == "muslim"
 
 
@@ -118,7 +124,7 @@ def test_defend_branch_resolves_past_six_rounds_no_colocation(seed):
     leak: seeds 3/25/67 take 7/9/7 Rounds with the corrected profiles."""
     s = load_scenario("sagrajas", seed=seed)
     apply_action(s, {"type": "sagrajas_defend", "side": "christian"})
-    r = apply_action(s, {"type": "resolve_battle", "side": "muslim"})
+    r = resolve_sagrajas(s)
     assert r["winner"] in ("christian", "muslim"), r   # not None
     assert r["rounds"] > 6                              # ran past the old cap
     by: dict[str, set] = {}
@@ -136,7 +142,7 @@ def test_sagrajas_never_ends_co_located(seed, role):
     clears the field) with no opposing field Lords co-located."""
     s = load_scenario("sagrajas", seed=seed)
     apply_action(s, {"type": role, "side": "christian"})
-    apply_action(s, {"type": "resolve_battle", "side": s.pending.waiting_on})
+    resolve_sagrajas(s)
     assert s.meta.phase == "ended"
     by: dict[str, set] = {}
     for lid, l in s.lords.items():

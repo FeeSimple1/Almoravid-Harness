@@ -22,8 +22,8 @@ print(Harness.scenarios())
 #  'scenario_e_alfonso', 'scenario_f_reconquista']
 # 'sagrajas' is the battle-only Battle of Sagrajas minigame: it starts in a
 # 'battle' phase, the Christian chooses sagrajas_attack/sagrajas_defend, then
-# resolve_battle resolves a single Battle (whoever wins wins). h.start(...) and
-# h.show() also work.
+# resolve_battle opens the combat_holds choices before the single Battle.
+# h.start(...) and h.show() also work.
 
 # A quick sanity run (random policy, validated palette + invariants active):
 print(selfplay_smoke("scenario_a_toledo_beset", seed=1, steps=300))

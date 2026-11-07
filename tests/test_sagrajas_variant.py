@@ -1,4 +1,5 @@
 """Integration checks for the user-authorized BGG Sagrajas variant."""
+import json
 from collections import Counter
 
 import pytest
@@ -15,6 +16,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.render import render_summary
 from almoravid.scenarios import list_campaign_scenarios, list_scenarios, load_scenario
 from almoravid.state import GameState
+from tests.test_sagrajas_minigame import resolve_sagrajas
 
 
 def test_variant_setup_and_muslim_parity():
@@ -39,7 +41,8 @@ def test_variant_setup_and_muslim_parity():
     for lid, lord in s.lords.items():
         if lord.side == "muslim":
             assert lord == original.lords[lid]
-    assert s.decks.this_levy_events == {"christian": ["C8"], "muslim": ["M7"]}
+    assert s.decks.this_levy_events == {"christian": ["C8"]}
+    assert s.decks.held == {"muslim": ["M7"]}
     assert [c.card_id for c in s.decks.capabilities_in_play] == ["M4", "M5"]
     assert not s.decks.board_edge.get("christian")
     atk = battleside_for_lords(s, list(christians), "christian", "attacker",
@@ -69,9 +72,8 @@ def test_variant_saved_game_resolves_with_optional_rules(seed, options):
     restored = GameState.model_validate_json(s.model_dump_json())
     assert restored.meta.cantador_lord_id == "alfonso"
     assert "GermanBrau1 variant" in render_summary(restored)
-    action = {"type": "resolve_battle", "side": "christian"}
-    result = apply_action(restored, action)
-    assert result == apply_action(s, action)
+    result = resolve_sagrajas(restored)
+    assert result == resolve_sagrajas(s)
     assert restored.model_dump() == s.model_dump()
     assert result["winner"] in ("christian", "muslim")
     assert restored.meta.phase == "ended" and restored.pending is None
@@ -102,12 +104,21 @@ def test_variant_cli_round_trip(tmp_path):
     assert result.exit_code == 0, result.output
     view = runner.invoke(app, ["view", str(state_file)])
     assert view.exit_code == 0 and "unofficial" in view.stdout
-    action_file.write_text('{"type": "resolve_battle", "side": "christian"}')
-    result = runner.invoke(app, ["do", str(state_file), str(action_file)])
-    assert result.exit_code == 0, result.output
+    for action in (
+        {"type": "resolve_battle", "side": "christian"},
+        {"type": "combat_holds", "side": "christian"},
+        {"type": "combat_holds", "side": "muslim"},
+    ):
+        action_file.write_text(json.dumps(action))
+        result = runner.invoke(app, ["do", str(state_file), str(action_file)])
+        assert result.exit_code == 0, result.output
+        if action["type"] == "resolve_battle":
+            view = runner.invoke(app, ["view", str(state_file)])
+            assert view.exit_code == 0 and "Legal action: combat_holds" in view.stdout
     state = GameState.model_validate_json(state_file.read_text())
     assert state.meta.phase == "ended"
     assert state.meta.scenario_id == "sagrajas_variant"
+    assert state.decks.held["muslim"] == ["M7"]
 
 
 def test_original_setup_is_isolated_from_variant():

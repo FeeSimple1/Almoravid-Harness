@@ -3917,12 +3917,15 @@ def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return receipt
 
 
+def combat_hold_lord_ids(side: Side, payload: dict[str, Any]) -> list[str]:
+    return payload["attacker_ids"] if side == payload["attacker_side"] else payload["defender_ids"]
+
+
 def combat_hold_candidates(state: GameState, side: Side, payload: dict[str, Any]) -> list[str]:
     from almoravid.battle import combat_hold_options
     defending = side != payload["attacker_side"]
-    ids = payload["defender_ids"] if defending else payload["attacker_ids"]
     return (combat_hold_options(state, side, defending=defending, storm=payload["storm"])
-            if ids else [])
+            if combat_hold_lord_ids(side, payload) else [])
 
 
 def _begin_combat_holds(state: GameState, action: dict[str, Any], attacker_side: Side,
@@ -3957,9 +3960,21 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     pd = _require_pending(state, "combat_holds", side)
     payload = pd.payload
     card = action.get("card_id")
+    _require(card == "M7" or "lord_ids" not in action,
+             "lord_ids are only used when playing Spear Wall", code="bad_arg")
     if card is not None:
         _require(isinstance(card, str) and card in combat_hold_candidates(state, side, payload),
                  "choose one of your applicable Held combat Events", code="bad_combat_hold")
+        if card == "M7":
+            eligible = combat_hold_lord_ids(side, payload)
+            count = min(2, len(eligible))
+            ids = action.get("lord_ids")
+            _require(isinstance(ids, list) and len(ids) == count
+                     and all(isinstance(lid, str) and lid in eligible for lid in ids)
+                     and len(set(ids)) == count,
+                     f"Spear Wall requires {count} distinct Muslim Lords in this Battle",
+                     code="bad_arg")
+            state.meta.spear_wall_lord_ids = list(ids)
         play_combat_hold(state, side, card, defending=side != payload["attacker_side"],
                          storm=payload["storm"])
         _record(state, action, f"{side} plays {card} before combat")
@@ -3977,6 +3992,7 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     handlers = {
         "cmd_battle": _h_cmd_battle, "cmd_sally": _h_cmd_sally,
         "cmd_storm": _h_cmd_storm, "respond_stand_battle": _h_respond_stand_battle,
+        "resolve_battle": _h_resolve_battle,
     }
     return handlers[original["type"]](state, original, _holds_chosen=True)
 
@@ -7230,7 +7246,8 @@ def _h_sagrajas_defend(state: GameState, action: dict[str, Any]) -> dict[str, An
     return {"role": "defend", "attacker": "muslim"}
 
 
-def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_resolve_battle(state: GameState, action: dict[str, Any], *,
+                      _holds_chosen: bool = False) -> dict[str, Any]:
     """Resolve the Sagrajas Battle (4.4) once the role is chosen. The
     Attacker's Marshal (Alfonso or Yusuf) is at Front center; whoever wins
     the Battle wins the game (Background Book). Supports an optional
@@ -7265,8 +7282,14 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     def_lords = [lid for lid, lord in state.lords.items()
                  if lord.side == def_side and lord.cylinder.kind == "locale"
                  and lord.cylinder.locale_id == here]
+    attacker_concede = _concede_round_arg(action, "attacker_concede_round")
+    defender_concede = _concede_round_arg(action, "defender_concede_round")
     _apply_absorption_policy(state, atk_side, action)
     _apply_absorption_policy(state, def_side, action)
+    if not _holds_chosen:
+        prompt = _begin_combat_holds(state, action, atk_side, atk_lords, def_lords)
+        if prompt is not None:
+            return prompt
     atk = battleside_for_lords(state, atk_lords, atk_side, "attacker",
                                active_lord_id=marshal)
     dfd = battleside_for_lords(state, def_lords, def_side, "defender",
@@ -7274,10 +7297,8 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     # Rules of Play 4.4.2: Sagrajas, like any Battle, has no round limit.
     result = resolve_battle(
         state, atk, dfd,
-        attacker_concede_round=_concede_round_arg(
-            action, "attacker_concede_round"),
-        defender_concede_round=_concede_round_arg(
-            action, "defender_concede_round"))
+        attacker_concede_round=attacker_concede,
+        defender_concede_round=defender_concede)
     commit_forces_after_battle(state, atk)
     commit_forces_after_battle(state, dfd)
     winner = result.winner
@@ -7301,6 +7322,7 @@ def _h_resolve_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any
     elif winner == "muslim":
         state.score.muslim += 1.0
     state.meta.phase = "ended"
+    state.meta.spear_wall_lord_ids = None
     state.pending = None
     _record(state, action,
             f"Sagrajas Battle resolved over {len(result.rounds)} rounds: "
