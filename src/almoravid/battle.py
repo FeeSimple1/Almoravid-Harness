@@ -2611,7 +2611,8 @@ def _relief_setup(
     if def_front is not None:
         init_m7_cap(state, def_front)
     if marcher_ids and def_front is not None:
-        _consume_camp_attack(state, marchers, def_front, result)
+        # Camp Attack covers every Lord in the Battle, across both lanes and Reserve.
+        _consume_camp_attack(state, result.attacker, result.defender, result)
     rs = _ReliefState(
         marchers=marchers, sallyers=sallyers, def_front=def_front,
         def_rear=def_rear, shared=shared, result=result, lf={}, lr={},
