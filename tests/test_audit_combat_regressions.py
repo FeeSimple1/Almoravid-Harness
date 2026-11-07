@@ -10,6 +10,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests.test_phase7f_battle_array import _retreat_setup
+from tests.combat_choices import apply_combat_choices
 
 
 def _combat_state(forces, *, side="christian", active="alfonso",
@@ -49,7 +50,7 @@ def test_unequal_battle_arrays_commit_casualties(interactive, multi_attacker):
                       active="alfonso" if multi_attacker else "al_mustain")
     with patch.object(B, "roll_d6", return_value=6), \
             patch("almoravid.rng.roll_d6", return_value=6):
-        result = apply_action(s, {"type": "cmd_battle",
+        result = apply_combat_choices(s, {"type": "cmd_battle",
                                  "side": s.meta.active_player,
                                  "interactive_concede": interactive})
         result = _finish_interactive(s, result)
@@ -69,7 +70,7 @@ def test_sally_commits_every_besieger(interactive):
     s.locales["zaragoza"].siege_yellow = 1
     with patch.object(B, "roll_d6", return_value=6), \
             patch("almoravid.rng.roll_d6", return_value=6):
-        result = apply_action(s, {"type": "cmd_sally", "side": "muslim",
+        result = apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim",
                                  "interactive_concede": interactive})
         result = _finish_interactive(s, result)
     assert result["winner"] == "muslim"
@@ -138,7 +139,7 @@ def test_interactive_battle_offers_round_eight_and_then_concedes():
     s = _combat_state({"alfonso": {"men_at_arms": 1},
                        "al_mutamid": {"men_at_arms": 1}})
     with patch.object(B, "roll_d6", return_value=1):
-        apply_action(s, {"type": "cmd_battle", "side": "christian",
+        apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "interactive_concede": True})
         for _ in range(14):  # Seven rounds with an election for each side.
             move = next(m for m in legal_moves(s) if m["type"] == "battle_concede"
@@ -159,7 +160,7 @@ def test_unlimited_battle_timing_menu_accepts_round_eight():
     s = _combat_state({"alfonso": {"men_at_arms": 1},
                        "al_mutamid": {"men_at_arms": 1}})
     s.decks.this_levy_events["muslim"] = ["M7"]
-    apply_action(s, {"type": "cmd_battle", "side": "christian",
+    apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                      "interactive_concede": True, "interactive_timing": True})
     assert s.pending.kind == "oneround_timing"
     assert s.pending.payload["max_rounds"] is None

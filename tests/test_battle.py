@@ -17,6 +17,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests._plan_helpers import legal_pad, step_levy
+from tests.combat_choices import apply_combat_choices
 
 
 def _activate_lord(scenario, lord_id, seed=1):
@@ -195,7 +196,7 @@ def test_aftermath_marks_lords_moved_fought() -> None:
 def test_cmd_battle_requires_enemy_lord_present() -> None:
     s = _activate_lord("scenario_a_toledo_beset", "alfonso")
     with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_battle", "side": "christian"})
+        apply_combat_choices(s, {"type": "cmd_battle", "side": "christian"})
     assert ei.value.code == "no_enemy"
 
 
@@ -208,7 +209,7 @@ def test_cmd_battle_accepts_multi_lord_after_deferred_fix() -> None:
     # Move other Christian Lords away to leave alfonso alone on his side
     s.lords["pedro_ansurez"].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords["garcia_ordonez"].cylinder = Cylinder(kind="locale", locale_id="burgos")
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian"})
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian"})
     assert r["winner"] in ("christian", "muslim", None)
     assert s.meta.actions_remaining == 0
 
@@ -220,7 +221,7 @@ def test_cmd_battle_resolves_and_ends_card() -> None:
     # Move other Christian Lords away to make ours alone
     s.lords["pedro_ansurez"].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords["garcia_ordonez"].cylinder = Cylinder(kind="locale", locale_id="burgos")
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian"})
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian"})
     # Card used up
     assert s.meta.actions_remaining == 0
     # Both Lords marked moved_fought

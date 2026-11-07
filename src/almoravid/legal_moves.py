@@ -41,6 +41,13 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
+    if state.pending is not None and state.pending.kind == "combat_holds":
+        from almoravid.campaign import combat_hold_candidates
+        side = state.pending.waiting_on
+        return [{"type": "combat_holds", "side": side, "card_id": card}
+                for card in combat_hold_candidates(state, side, state.pending.payload)] + [
+                    {"type": "combat_holds", "side": side}]
+
     if state.pending is not None and state.pending.kind == "reset_discard":
         from almoravid.campaign import reset_discard_candidates
         side = state.pending.waiting_on

@@ -39,6 +39,30 @@ branch the state. Exit codes: 0 success, 1 usage error, 2 IllegalAction
 (or malformed action JSON) — agents should branch on exit code 2 to
 re-pick from the legal-moves palette.
 
+## Combat Holds
+
+Battle, Stand & Fight, Sally, and Storm open a `combat_holds` decision
+when either side has Held cards. The attacker chooses first, followed
+by the defender. Each owner may play any subset of applicable combat
+Events, one card per action, and then finish by omitting `card_id`.
+Unchosen cards stay Held. Follow `pending.waiting_on` or `legal_moves`
+after each response. The defender can inspect the attacker's played
+Events before choosing.
+
+```json
+{"type": "combat_holds", "side": "christian", "card_id": "C8"}
+```
+
+```json
+{"type": "combat_holds", "side": "christian"}
+```
+
+Combat resumes after both owners finish. Dice and combat effects wait
+for those decisions. The window supports save/load and keeps unplayed
+opponent cards hidden. Scripted callers also answer this decision.
+Direct combat-resolver callers can explicitly activate a Held Event
+with `almoravid.battle.play_combat_hold` before resolving combat.
+
 ## Interactive Concede the Field
 
 Set `interactive_concede: true` on `cmd_battle`, `cmd_sally`, or

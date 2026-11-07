@@ -19,6 +19,7 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.state import Cylinder, GameState
 from tests.test_phase6b_approach import _activate_lord_at_locale
+from tests.combat_choices import apply_combat_choices
 
 
 def _march_into_battle(seed: int = 11, *, relief: bool = False):
@@ -45,7 +46,7 @@ def test_stand_battle_opt_in_pends_concede() -> None:
     """`respond_stand_battle` with `interactive_concede` pauses on a
     per-Round `battle_concede` decision instead of auto-resolving."""
     s = _march_into_battle()
-    r = apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    r = apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                          "interactive_concede": True})
     assert r["battle"] == "awaiting_concede"
     assert r["round"] == 1
@@ -64,8 +65,8 @@ def test_stand_battle_interactive_runs_to_completion(relief) -> None:
     s = _march_into_battle(relief=relief)
     synchronous = s.model_copy(deep=True)
     stand = {"type": "respond_stand_battle", "side": "muslim"}
-    expected = apply_action(synchronous, stand)
-    result = apply_action(s, {**stand, "interactive_concede": True})
+    expected = apply_combat_choices(synchronous, stand)
+    result = apply_combat_choices(s, {**stand, "interactive_concede": True})
     kind = "relief_concede" if relief else "battle_concede"
     guard = 0
     while s.pending is not None and s.pending.kind == kind:
@@ -86,7 +87,7 @@ def test_interactive_concede_matches_resolver_outcome() -> None:
     Battle -> Attacker (Christian) wins, matching the deterministic
     resolver's `defender_concede_round=1` outcome."""
     s = _march_into_battle()
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     apply_action(s, {"type": "battle_concede", "side": "christian"})
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
@@ -100,7 +101,7 @@ def test_interactive_attacker_concede_defender_wins() -> None:
     This is the half a leftmost-default resolver could not express from
     the public interface for a normal field Battle."""
     s = _march_into_battle()
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     r = apply_action(s, {"type": "battle_concede", "side": "christian",
                          "attacker_concede": True})
@@ -113,7 +114,7 @@ def test_hit_absorption_choice_discoverable_during_battle() -> None:
     legal_moves while a field Battle is in progress so an agent on the
     public interface can use it (and re-set it between Rounds)."""
     s = _march_into_battle()
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     sap = [m for m in legal_moves(s)
            if m["type"] == "set_absorption_policy"]
@@ -129,7 +130,7 @@ def test_hit_absorption_choice_discoverable_during_battle() -> None:
 @pytest.mark.parametrize("relief", [False, True])
 def test_approach_concede_prompts_only_authorize_the_waiting_owner(relief):
     s = _march_into_battle(relief=relief)
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     kind = "relief_concede" if relief else "battle_concede"
     assert s.pending.kind == kind
@@ -172,7 +173,7 @@ def test_approach_concede_prompts_only_authorize_the_waiting_owner(relief):
 
 def test_relief_attacker_can_concede_before_the_besiegers():
     s = _march_into_battle(relief=True)
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     result = apply_action(s, {"type": "relief_concede", "side": "christian",
                              "attacker_concede": True})
@@ -183,7 +184,7 @@ def test_relief_attacker_can_concede_before_the_besiegers():
 @pytest.mark.parametrize("relief", [False, True])
 def test_legacy_combat_save_resumes_at_the_current_rounds_attacker(relief):
     s = _march_into_battle(relief=relief)
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     saved = s.model_dump()
     saved["pending"]["payload"].pop("concede_role", None)

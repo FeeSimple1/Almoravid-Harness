@@ -15,6 +15,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import CardInPlay, Cylinder, GameState, PendingDecision, ServiceMarker
 from almoravid.views import redacted_view
+from tests.combat_choices import apply_combat_choices
 
 
 def _base(seed=1, held=True):
@@ -55,7 +56,7 @@ def _retreat(state, christian_active=False):
     if christian_active:
         state.meta.active_player = "christian"
         state.meta.active_lord_id = "alfonso"
-    return apply_action(state, {
+    return apply_combat_choices(state, {
         "type": "cmd_battle", "side": state.meta.active_player,
         "attacker_concede_round" if christian_active else "defender_concede_round": 1,
     })
@@ -145,7 +146,7 @@ def test_real_withdraw_then_losses_removal_captures_spoils_without_m13():
     state.lords["alfonso"].forces = {"militia": 1}
     state.lords["alfonso"].assets = {"coin": 3, "mule": 1, "prov": 1}
     before = sum(loc.jihad_markers for loc in state.locales.values())
-    result = apply_action(state, {"type": "cmd_battle", "side": "muslim"})
+    result = apply_combat_choices(state, {"type": "cmd_battle", "side": "muslim"})
     assert result["retreat_summary"]["losers"][0]["fate"] == "withdraw"
     assert state.lords["alfonso"].cylinder.kind == "removed"
     assert state.lords["al_mutamid"].assets == {"coin": 3, "mule": 1, "prov": 1}
@@ -363,7 +364,7 @@ def test_christian_stronghold_sack_opens_greater_reward():
     state.lords["alfonso"].in_stronghold = True
     state.lords["alfonso"].forces = {"militia": 1}
     state.locales["leon"].siege_green = 3
-    result = apply_action(state, {"type": "cmd_storm", "side": "muslim"})
+    result = apply_combat_choices(state, {"type": "cmd_storm", "side": "muslim"})
     assert result["sack"] is not None
     assert state.pending.kind == "severed_heads"
     assert state.pending.payload["jihad_count"] == 4
@@ -425,7 +426,7 @@ def test_surviving_christian_withdrawal_does_not_trigger_m13():
     state.lords["al_mutamid"].cylinder.locale_id = "leon"
     state.lords["alfonso"].forces = {"militia": 1}
     before = sum(loc.jihad_markers for loc in state.locales.values())
-    result = apply_action(state, {"type": "cmd_battle", "side": "muslim"})
+    result = apply_combat_choices(state, {"type": "cmd_battle", "side": "muslim"})
     assert result["retreat_summary"]["losers"][0]["fate"] == "withdraw"
     assert state.lords["alfonso"].cylinder.kind == "locale"
     assert state.lords["alfonso"].in_stronghold is True

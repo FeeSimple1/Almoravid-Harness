@@ -54,6 +54,7 @@ from almoravid.actions import apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests._plan_helpers import legal_pad, step_levy
+from tests.combat_choices import apply_combat_choices
 
 # The full die queue: 3 Forage rolls, then the Storm exactly as above,
 # then 4.4.4 Losses (the two Routed Knights need a "1"; both fail).
@@ -171,7 +172,7 @@ def test_bgbook_jativa_storm_exact_trace(monkeypatch) -> None:
         apply_action(s, {"type": "cmd_forage", "side": "christian"})
     assert alvar.assets.get("prov") == 2
 
-    r = apply_action(s, {"type": "cmd_storm", "side": "christian"})
+    r = apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
 
     # The queue is consumed EXACTLY — any divergence in a Hit count,
     # cancellation count, or Protection-roll count breaks this.

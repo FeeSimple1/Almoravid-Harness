@@ -7,6 +7,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.state import GameState
 from tests.test_audit_combat_regressions import _combat_state
 from tests.test_cross_game_battle_fates import fate_moves
+from tests.combat_choices import apply_combat_choices
 
 
 def begin_retreat(assets, *, locale="transduero", held=True, ally_assets=None):
@@ -19,7 +20,8 @@ def begin_retreat(assets, *, locale="transduero", held=True, ally_assets=None):
         state.lords["alvar_fanez"].assets = ally_assets
     state.decks.held["christian"] = ["C7"] if held else []
     battle = next(m for m in legal_moves(state) if m["type"] == "cmd_battle")
-    result = apply_action(state, {**battle, "attacker_concede_round": 1})
+    result = apply_combat_choices(state, {**battle, "attacker_concede_round": 1},
+                                  cards=("C7",) if held else ())
     assert result["pending"] == "battle_fate"
     return state
 

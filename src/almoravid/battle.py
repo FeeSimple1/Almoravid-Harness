@@ -235,24 +235,26 @@ class BattleResult:
 # ---------------------------------------------------------------------------
 
 
-def _activate_combat_holds(state: GameState, side: BattleSide,
-                           *, storm: bool = False) -> None:
-    """Move applicable drawn Holds into the existing combat-effect buckets.
-
-    Drawn cards remain hidden in ``held`` until their printed window
-    (3.1.3, 4.4.1 Events). Preserve unrelated Holds through aftermath.
-    """
-    from almoravid.events import consume_held_event
+def combat_hold_options(state: GameState, side: Side, *,
+                        defending: bool, storm: bool = False) -> list[str]:
+    """Held Events available to this owner at the outset of the engagement."""
     cards = {"C8"} if storm else {"C2", "M2", "C7", "C8", "M6", "M7"}
-    if not storm and side.role == "defender":
-        cards.add("C1" if side.side == "christian" else "M1")
-    for card_id in list(state.decks.held.get(side.side, [])):
-        if card_id not in cards:
-            continue
-        consume_held_event(state, side.side, card_id)
-        bucket = (state.decks.this_campaign_events if card_id in ("C2", "M2")
-                  else state.decks.this_levy_events)
-        bucket.setdefault(side.side, []).append(card_id)
+    if not storm and defending:
+        cards.add("C1" if side == "christian" else "M1")
+    return [cid for cid in state.decks.held.get(side, []) if cid in cards]
+
+
+def play_combat_hold(state: GameState, side: Side, card_id: str, *,
+                     defending: bool, storm: bool = False) -> None:
+    """Activate a card explicitly selected by its owner (4.4.1 Events)."""
+    from almoravid.actions import _require
+    from almoravid.events import consume_held_event
+    _require(card_id in combat_hold_options(state, side, defending=defending, storm=storm),
+             "select an applicable Held combat Event", code="bad_combat_hold")
+    consume_held_event(state, side, card_id)
+    bucket = (state.decks.this_campaign_events if card_id in ("C2", "M2")
+              else state.decks.this_levy_events)
+    bucket.setdefault(side, []).append(card_id)
 
 
 def init_m7_cap(state: GameState, side: BattleSide) -> None:
@@ -266,9 +268,8 @@ def init_m7_cap(state: GameState, side: BattleSide) -> None:
 
     If side.array is absent (single-Lord or legacy multi-Lord): fall
     back to side.m7_boosts_remaining = cap of top-2 Lords' MaA+AF.
-    No-op when M7 is not held or side is not Muslim.
+    No-op when M7 is not in play or side is not Muslim.
     """
-    _activate_combat_holds(state, side)
     if side.side != "muslim":
         return
     if "M7" not in state.decks.this_levy_events.get("muslim", []):
@@ -2076,8 +2077,6 @@ def _storm_setup(
     resolve_storm and the interactive Storm driver."""
     from almoravid.capabilities import any_lord_with_capability
     from almoravid.static_data import load_strongholds
-    _activate_combat_holds(state, attacker, storm=True)
-    _activate_combat_holds(state, defender, storm=True)
 
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
@@ -2934,8 +2933,7 @@ def _consume_camp_attack(
 
     Rule (card-text fidelity, Pattern 7):
       * Each side may have played its own Camp Attack into
-        this_campaign_events during prior Plan/Activation; both fire
-        at Battle start.
+        this_campaign_events before combat. Both fire at Battle start.
       * C7 Baggage Parapet (in this_levy_events on the Christian side)
         CANCELS Muslim Camp Attack (M2) only. C7 does NOT cancel
         Christian Camp Attack (C2). C2 is never cancelled.
@@ -2947,8 +2945,6 @@ def _consume_camp_attack(
       * Camp Attack does NOT apply in Storm — resolve_storm does not
         call this helper.
     """
-    _activate_combat_holds(state, attacker)
-    _activate_combat_holds(state, defender)
     for side_key in ("christian", "muslim"):
         ca_id = "C2" if side_key == "christian" else "M2"
         camp_bucket = state.decks.this_campaign_events.get(side_key, [])

@@ -10,6 +10,7 @@ from __future__ import annotations
 from almoravid.battle import BattleSide, LordPosition, build_strike_rows
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests.combat_choices import apply_combat_choices
 
 
 def _missile_raw(rows):
@@ -70,7 +71,6 @@ def test_array_groups_also_clamped() -> None:
 
 def test_sally_multi_lord_sides_scope_missiles_per_lord(monkeypatch) -> None:
     """cmd_sally preserves missile ownership in BOTH Battle Arrays."""
-    from almoravid.actions import apply_action
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     # Two Besieged Muslim Lords inside Zaragoza (al_mustain holds M2),
     # two Christian besiegers outside (alvar holds C2).
@@ -102,6 +102,6 @@ def test_sally_multi_lord_sides_scope_missiles_per_lord(monkeypatch) -> None:
         return orig(state, atk, dfd, **kw)
 
     monkeypatch.setattr(B, "resolve_sally", spy)
-    apply_action(s, {"type": "cmd_sally", "side": "muslim"})
+    apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim"})
     assert captured["atk"] == (1.0, {"crossbows": 1.0})
     assert captured["dfd"] == (1.0, {"crossbows": 1.0})

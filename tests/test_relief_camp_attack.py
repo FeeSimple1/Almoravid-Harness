@@ -36,7 +36,14 @@ def test_relief_camp_attack_targets_all_lords_once(card, besiegers, parapet):
                          "target_locale_id": "zamora", "way_type": "road"})
     stand = next(move for move in legal_moves(state) if move["type"] == "respond_stand_battle")
     synchronous = state.model_copy(deep=True)
-    apply_action(state, {**stand, "interactive_concede": True})
+    for current, command in (
+        (state, {**stand, "interactive_concede": True}),
+        (synchronous, {**stand, "attacker_concede_round": 1}),
+    ):
+        result = apply_action(current, command)
+        while current.pending is not None and current.pending.kind == "combat_holds":
+            move = next(move for move in legal_moves(current) if move["type"] == "combat_holds")
+            result = apply_action(current, move)
     assert state.pending.kind == "relief_concede"
     relief = state.pending.payload["rs"]
     assert relief["shared"] == (besiegers == 1)
@@ -52,7 +59,7 @@ def test_relief_camp_attack_targets_all_lords_once(card, besiegers, parapet):
     state = GameState.model_validate_json(state.model_dump_json())
     stepped = apply_action(state, {"type": "relief_concede", "side": "christian",
                                   "attacker_concede": True})
-    resolved = apply_action(synchronous, {**stand, "attacker_concede_round": 1})
+    resolved = result
     assert (stepped["winner"], stepped["rounds"]) == (resolved["winner"], resolved["rounds"])
     assert state.lords == synchronous.lords
     assert state.decks == synchronous.decks

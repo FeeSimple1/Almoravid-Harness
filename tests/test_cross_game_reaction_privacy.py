@@ -10,6 +10,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.state import Cylinder, GameState
 from almoravid.views import redacted_view
 from tests.test_phase6b_approach import _activate_lord_at_locale
+from tests.combat_choices import apply_combat_choices
 
 
 def approach(side="christian", hidden=True):
@@ -170,7 +171,7 @@ def test_committed_battle_reveals_only_participants_and_rehides_afterward(timing
     bystander.in_stronghold = True
     if timing:
         state.decks.this_levy_events["muslim"] = ["M7"]
-    apply_action(
+    apply_combat_choices(
         state,
         {
             "type": "respond_stand_battle",

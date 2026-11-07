@@ -6,12 +6,13 @@ from almoravid.scenarios import load_scenario
 from almoravid.state import HistoryEntry, PendingDecision, PlanEntry
 from almoravid.views import redacted_view
 from tests.test_interactive_approach_battle import _march_into_battle
+from tests.combat_choices import apply_combat_choices
 
 
 def test_approach_mats_remain_visible_during_interactive_battle():
     state = _march_into_battle()
     state.meta.hidden_mats = True
-    apply_action(state, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(state, {"type": "respond_stand_battle", "side": "muslim",
                          "interactive_concede": True})
     assert state.pending.kind == "battle_concede"
     view = redacted_view(state, "christian")

@@ -13,6 +13,7 @@ from __future__ import annotations
 from almoravid.battle import apply_battle_losses, BattleSide, BattleResult
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests.combat_choices import apply_combat_choices
 
 
 def test_storm_loss_eliminating_sole_besieger_clears_siege_marker() -> None:
@@ -58,7 +59,7 @@ def test_storm_loss_eliminating_sole_besieger_clears_siege_marker() -> None:
     apply_action(s, {"side": "christian", "type": "command_reveal"})
     assert s.meta.active_lord_id == "alvar_fanez"
     assert s.locales["toledo"].siege_yellow == 1
-    res = apply_action(s, {"side": "christian", "type": "cmd_storm"})
+    res = apply_combat_choices(s, {"side": "christian", "type": "cmd_storm"})
     # Álvar's 4-unit army vs a City (walls 1-4) + 6-unit garrison is wiped.
     assert s.lords["alvar_fanez"].cylinder.kind == "removed", res
     # The orphaned siege marker must be gone (4.5.4).

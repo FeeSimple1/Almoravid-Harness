@@ -3917,6 +3917,70 @@ def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     return receipt
 
 
+def combat_hold_candidates(state: GameState, side: Side, payload: dict[str, Any]) -> list[str]:
+    from almoravid.battle import combat_hold_options
+    defending = side != payload["attacker_side"]
+    ids = payload["defender_ids"] if defending else payload["attacker_ids"]
+    return (combat_hold_options(state, side, defending=defending, storm=payload["storm"])
+            if ids else [])
+
+
+def _begin_combat_holds(state: GameState, action: dict[str, Any], attacker_side: Side,
+                        attacker_ids: list[str], defender_ids: list[str], *,
+                        storm: bool = False) -> dict[str, Any] | None:
+    """Collect the owners' plays before committing any combat dice or effects."""
+    if not action.get("interactive_concede"):
+        keys = ("concede_after_round",) if storm else (
+            "attacker_concede_round", "defender_concede_round")
+        for key in keys:
+            _concede_round_arg(action, key)
+    payload = {
+        "attacker_side": attacker_side, "attacker_ids": attacker_ids,
+        "defender_ids": defender_ids, "storm": storm,
+    }
+    # Window availability depends on Held-card counts, never their private identities.
+    if not any(state.decks.held.get(side, [])
+               for side in (attacker_side, _other(attacker_side))):
+        return None
+    payload["_combat_hold_resume"] = {
+        "action": deepcopy(action), "active_player": state.meta.active_player,
+        "pending": state.pending.model_dump(mode="json") if state.pending else None,
+    }
+    state.pending = PendingDecision(kind="combat_holds", waiting_on=attacker_side, payload=payload)
+    state.meta.active_player = attacker_side
+    return {"pending": "combat_holds", "waiting_on": attacker_side}
+
+
+def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.battle import play_combat_hold
+    side = _require_side(action)
+    pd = _require_pending(state, "combat_holds", side)
+    payload = pd.payload
+    card = action.get("card_id")
+    if card is not None:
+        _require(isinstance(card, str) and card in combat_hold_candidates(state, side, payload),
+                 "choose one of your applicable Held combat Events", code="bad_combat_hold")
+        play_combat_hold(state, side, card, defending=side != payload["attacker_side"],
+                         storm=payload["storm"])
+        _record(state, action, f"{side} plays {card} before combat")
+        return {"pending": "combat_holds", "waiting_on": side, "played": card}
+    _record(state, action, f"{side} finishes combat Event plays")
+    if side == payload["attacker_side"]:
+        defender = _other(side)
+        state.pending = PendingDecision(kind="combat_holds", waiting_on=defender, payload=payload)
+        state.meta.active_player = defender
+        return {"pending": "combat_holds", "waiting_on": defender}
+    resume = payload["_combat_hold_resume"]
+    state.pending = PendingDecision.model_validate(resume["pending"]) if resume["pending"] else None
+    state.meta.active_player = resume["active_player"]
+    original = resume["action"]
+    handlers = {
+        "cmd_battle": _h_cmd_battle, "cmd_sally": _h_cmd_sally,
+        "cmd_storm": _h_cmd_storm, "respond_stand_battle": _h_respond_stand_battle,
+    }
+    return handlers[original["type"]](state, original, _holds_chosen=True)
+
+
 def _begin_interactive_battle(
     state: GameState,
     action: dict[str, Any],
@@ -4118,7 +4182,8 @@ def _h_battle_concede(state: GameState,
     return _battle_aftermath_or_fates(state, action, result, pl)
 
 
-def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_cmd_battle(state: GameState, action: dict[str, Any], *,
+                  _holds_chosen: bool = False) -> dict[str, Any]:
     """4.4 Battle: end-of-card action.
 
     Active Lord at a Locale containing exactly one Enemy Lord triggers
@@ -4179,6 +4244,11 @@ def _h_cmd_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         and lord_obj.cylinder.locale_id == here
         and not lord_obj.in_stronghold
     ]
+    _require(our_at_here, "no attacker Lords at Battle locale", code="no_attacker")
+    if not _holds_chosen:
+        prompt = _begin_combat_holds(state, action, side, our_at_here, enemy_lord_ids)
+        if prompt is not None:
+            return prompt
     other = "muslim" if side == "christian" else "christian"
     atk = battleside_for_lords(state, our_at_here, side, "attacker",
                                active_lord_id=state.meta.active_lord_id)
@@ -4446,7 +4516,8 @@ def _finish_storm(
     return receipt
 
 
-def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
+                 _holds_chosen: bool = False) -> dict[str, Any]:
     """4.5.2 Storm. Active Lord outside a Besieged Stronghold (i.e.,
     with at least one of our Siege markers at the Locale) assaults
     the defending Garrison + any besieged enemy Lords inside.
@@ -4544,6 +4615,10 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
             capabilities_in_play=[],
         )
     # Phase 6i: C6 Surprise pending -> modify walls_range to -1.
+    if not _holds_chosen:
+        prompt = _begin_combat_holds(state, action, side, besieger_ids, enemy_inside, storm=True)
+        if prompt is not None:
+            return prompt
     surprise_loc = state.meta.surprise_storm_pending_locale_id
     walls_override: tuple[int, int] | None = None
     if surprise_loc == here:
@@ -4583,7 +4658,8 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                          pl=pl)
 
 
-def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_cmd_sally(state: GameState, action: dict[str, Any], *,
+                 _holds_chosen: bool = False) -> dict[str, Any]:
     """4.5.3 Sally. Besieged Lord attacks the besieger.
 
     Uses entire card. If Sally loses, sallying Lords Withdraw back
@@ -4631,6 +4707,10 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         if lo.side == side and lo.cylinder.kind == "locale"
         and lo.cylinder.locale_id == here and lo.in_stronghold
         and is_besieged(state, lo.id) and lo.id != lord_id]
+    if not _holds_chosen:
+        prompt = _begin_combat_holds(state, action, side, sallying_ids, besiegers)
+        if prompt is not None:
+            return prompt
     atk = battleside_for_lords(
         state, sallying_ids, side, "attacker", active_lord_id=lord_id)
     # Sallying Lords exit the Stronghold for the duration of the Sally.
@@ -5308,7 +5388,8 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
     return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
 
 
-def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
+                           _holds_chosen: bool = False) -> dict[str, Any]:
     """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
     on both sides at the Approach Locale. Battle ends the active side's
     card (rule 4.4.5)."""
@@ -5344,6 +5425,17 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
         and lord.cylinder.locale_id == locale_id
         and lord.in_stronghold and _isb(state, lord.id)
     ]
+    defender_lord_ids = list(payload["defender_lord_ids"])
+    _require(attacker_lord_ids or relief_sally_ids,
+             "no attacker Lords at Battle locale", code="no_attacker")
+    _require(defender_lord_ids, "no defender Lords at Battle locale",
+             code="no_defender")
+    if not _holds_chosen:
+        prompt = _begin_combat_holds(
+            state, action, active_side, attacker_lord_ids + relief_sally_ids,
+            defender_lord_ids)
+        if prompt is not None:
+            return prompt
     # B6 (4.4.1): the relieving Marchers and the Sallying (Besieged)
     # Lords are SEPARATE groups in the Array, not one merged Attacker.
     marcher_ids = list(attacker_lord_ids)
@@ -5351,11 +5443,6 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any]) -> dict[st
         if rid not in marcher_ids:
             state.lords[rid].in_stronghold = False  # Sallied out
     sallyer_ids = [rid for rid in relief_sally_ids if rid not in marcher_ids]
-    defender_lord_ids = list(payload["defender_lord_ids"])
-    _require(marcher_ids or sallyer_ids,
-             "no attacker Lords at Battle locale", code="no_attacker")
-    _require(defender_lord_ids, "no defender Lords at Battle locale",
-             code="no_defender")
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
@@ -7738,6 +7825,7 @@ def _h_cap_bishoprics(state: GameState, action: dict[str, Any]) -> dict[str, Any
 
 
 CAMPAIGN_HANDLERS = {
+    "combat_holds": _h_combat_holds,
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
     "cap_fueros": _h_cap_fueros,

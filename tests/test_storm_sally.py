@@ -14,6 +14,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests._plan_helpers import legal_pad, step_levy
+from tests.combat_choices import apply_combat_choices
 
 
 def _activate_lord(scenario, lord_id, seed=1):
@@ -92,7 +93,7 @@ def test_cmd_storm_requires_siege_marker() -> None:
     # No Siege there from us
     s.locales["zaragoza"].siege_yellow = 0
     with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_storm", "side": "christian"})
+        apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     assert ei.value.code == "no_siege"
 
 
@@ -100,7 +101,7 @@ def test_cmd_storm_rejects_region() -> None:
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez")
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="sahagun")
     with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_storm", "side": "christian"})
+        apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     assert ei.value.code == "region_no_storm"
 
 
@@ -110,7 +111,7 @@ def test_cmd_storm_rejects_besieged() -> None:
     s.lords["alvar_fanez"].in_stronghold = True
     s.locales["zaragoza"].siege_green = 1
     with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_storm", "side": "christian"})
+        apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     assert ei.value.code == "besieged"
 
 
@@ -118,7 +119,7 @@ def test_cmd_storm_consumes_entire_card() -> None:
     s = _activate_lord("scenario_a_toledo_beset", "alvar_fanez", seed=11)
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="zaragoza")
     s.locales["zaragoza"].siege_yellow = 1
-    apply_action(s, {"type": "cmd_storm", "side": "christian"})
+    apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     assert s.meta.actions_remaining == 0
 
 
@@ -128,7 +129,7 @@ def test_cmd_sally_requires_besieged() -> None:
     """Sally rejected if Lord isn't Besieged."""
     s = _activate_lord("scenario_a_toledo_beset", "al_mutamid")
     with pytest.raises(IllegalAction) as ei:
-        apply_action(s, {"type": "cmd_sally", "side": "muslim"})
+        apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim"})
     assert ei.value.code == "not_besieged"
 
 
@@ -141,7 +142,7 @@ def test_cmd_sally_with_besiegers_resolves() -> None:
     # Move alvar_fanez to Sevilla outside the walls
     s.lords["alvar_fanez"].cylinder = Cylinder(kind="locale", locale_id="sevilla")
     s.lords["alvar_fanez"].in_stronghold = False
-    r = apply_action(s, {"type": "cmd_sally", "side": "muslim"})
+    r = apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim"})
     # Card consumed; winner picked
     assert s.meta.actions_remaining == 0
     assert r["winner"] in ("muslim", "christian", None)

@@ -9,6 +9,7 @@ from almoravid.views import redacted_view
 from tests.test_audit_combat_regressions import _combat_state
 from tests.test_concede_field_battle import _storm_setup
 from tests.test_cross_game_battle_fates import fate_moves
+from tests.combat_choices import apply_combat_choices
 
 
 def muslim_attack(forces):
@@ -25,7 +26,7 @@ def test_spoils_survive_the_removal_of_a_winning_lord(interactive):
         "alfonso": {"men_at_arms": 4},
     })
     state.lords["alfonso"].assets = {"loot": 2}
-    result = apply_action(state, {
+    result = apply_combat_choices(state, {
         "type": "cmd_battle", "side": "muslim", "defender_concede_round": 1,
         "interactive_retreat": interactive,
     })
@@ -49,7 +50,7 @@ def test_winner_can_split_spoils_and_resume_the_command_side_after_save():
     distant = state.lords["al_mustain"]
     distant.cylinder = Cylinder(kind="locale", locale_id="zaragoza")
     battle = next(m for m in legal_moves(state) if m["type"] == "cmd_battle")
-    apply_action(state, {**battle, "interactive_concede": True})
+    apply_combat_choices(state, {**battle, "interactive_concede": True})
     apply_action(state, {"type": "battle_concede", "side": "christian", "attacker_concede": True})
     retreat = next(m for m in fate_moves(state) if m.get("retreat_to") == "sahagun")
     result = apply_action(state, retreat)
@@ -99,7 +100,7 @@ def test_loss_of_conceding_transport_donor_increases_spoils():
     })
     state.lords["alfonso"].assets = {"cart": 2, "coin": 1}
     state.lords["alvar_fanez"].assets = {"prov": 2, "loot": 1}
-    result = apply_action(state, {
+    result = apply_combat_choices(state, {
         "type": "cmd_battle", "side": "muslim", "defender_concede_round": 1,
     })
     entries = {e["lord_id"]: e for e in result["retreat_summary"]["losers"]}
@@ -117,7 +118,7 @@ def test_sack_spoils_use_only_surviving_besiegers():
     strong.in_stronghold = False
     strong.forces, strong.assets = {"knights": 7, "men_at_arms": 7}, {}
     storm = next(m for m in legal_moves(state) if m["type"] == "cmd_storm")
-    result = apply_action(state, storm)
+    result = apply_combat_choices(state, storm)
     assert result["winner"] == "christian"
     assert weak.cylinder.kind == "removed"
     assert result["sack"]["recipients"] == ["alfonso"]

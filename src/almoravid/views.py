@@ -31,6 +31,10 @@ def _combat_revealed_lords(state: GameState) -> set[str]:
     from almoravid.visibility import combat_visible_lords
     revealed = set(combat_visible_lords(state))
     pd = state.pending
+    if pd is not None and pd.kind == "combat_holds":
+        revealed.update(pd.payload["attacker_ids"])
+        revealed.update(pd.payload["defender_ids"])
+        return revealed
     if pd is None or pd.kind not in {
             "battle_concede", "storm_concede", "relief_concede", "oneround_timing",
             "battle_fate"}:
@@ -64,7 +68,7 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     if dump.get("pending") is not None:
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
-                    "_retreat_provender_resume"):
+                    "_retreat_provender_resume", "_combat_hold_resume"):
             dump["pending"]["payload"].pop(key, None)
         if dump["pending"]["waiting_on"] != viewer_side:
             dump["pending"]["payload"].pop("blocker_card", None)

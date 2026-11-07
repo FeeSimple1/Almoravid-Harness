@@ -7,6 +7,7 @@ from almoravid.actions import apply_action
 from almoravid.map import neighbors_via
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, PendingDecision
+from tests.combat_choices import apply_combat_choices
 
 
 def _setup(s):
@@ -56,7 +57,7 @@ def test_partition_avoid_then_withdraw_then_stand() -> None:
     assert s.pending.kind == "march_arrival_response"
     assert s.pending.payload["defender_lord_ids"] == ["abd_allah"]
     # 3) abd_allah Stands — Battle resolves; the pending clears.
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim"})
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim"})
     assert (s.pending is None
             or s.pending.kind == "besiege_or_bypass")
 

@@ -21,6 +21,7 @@ from almoravid.battle import BattleSide, resolve_battle
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests._plan_helpers import legal_pad, step_levy
+from tests.combat_choices import apply_combat_choices
 
 
 def _sides(seed: int = 7) -> tuple:
@@ -120,14 +121,14 @@ def _activate_alfonso(seed: int):
 
 def test_cmd_battle_defender_concede_via_action() -> None:
     s = _activate_alfonso(seed=3)
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "defender_concede_round": 1})
     assert r["winner"] == "christian"
 
 
 def test_cmd_battle_attacker_concede_via_action() -> None:
     s = _activate_alfonso(seed=3)
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "attacker_concede_round": 1})
     assert r["winner"] == "muslim"
 
@@ -135,7 +136,7 @@ def test_cmd_battle_attacker_concede_via_action() -> None:
 def test_cmd_battle_bad_concede_arg_rejected() -> None:
     s = _activate_alfonso(seed=3)
     try:
-        apply_action(s, {"type": "cmd_battle", "side": "christian",
+        apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "attacker_concede_round": 0})
     except Exception as e:  # IllegalAction
         assert "concede" in str(e).lower()
@@ -240,7 +241,7 @@ def _drive_interactive(s, *, concede_at=None, conceder="defender"):
     at which `conceder` declares Concede (reactively, after seeing prior
     Rounds); None = never concede. Returns the final result dict."""
     from almoravid.actions import apply_action
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "interactive_concede": True})
     assert r["battle"] == "awaiting_concede"
     while s.pending is not None and s.pending.kind == "battle_concede":
@@ -255,9 +256,8 @@ def _drive_interactive(s, *, concede_at=None, conceder="defender"):
 
 
 def test_interactive_battle_pauses_for_concede() -> None:
-    from almoravid.actions import apply_action
     s = _activate_alfonso(seed=3)
-    r = apply_action(s, {"type": "cmd_battle", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                          "interactive_concede": True})
     assert r["battle"] == "awaiting_concede"
     assert s.pending is not None and s.pending.kind == "battle_concede"
@@ -265,10 +265,9 @@ def test_interactive_battle_pauses_for_concede() -> None:
 
 
 def test_interactive_legal_moves_offers_concede() -> None:
-    from almoravid.actions import apply_action
     from almoravid.legal_moves import legal_moves
     s = _activate_alfonso(seed=3)
-    apply_action(s, {"type": "cmd_battle", "side": "christian",
+    apply_combat_choices(s, {"type": "cmd_battle", "side": "christian",
                      "interactive_concede": True})
     for side, role in (("christian", "attacker"), ("muslim", "defender")):
         kinds = [m for m in legal_moves(s) if m["type"] == "battle_concede"]
@@ -280,10 +279,9 @@ def test_interactive_legal_moves_offers_concede() -> None:
 def test_interactive_no_concede_matches_synchronous() -> None:
     """Driving the interactive Battle without ever conceding is byte-for-
     byte identical to the synchronous resolution (same RNG, same result)."""
-    from almoravid.actions import apply_action
     for seed in (1, 3, 7, 11):
         s_sync = _activate_alfonso(seed=seed)
-        r_sync = apply_action(s_sync, {"type": "cmd_battle",
+        r_sync = apply_combat_choices(s_sync, {"type": "cmd_battle",
                                        "side": "christian"})
         s_int = _activate_alfonso(seed=seed)
         r_int = _drive_interactive(s_int, concede_at=None)
@@ -356,10 +354,10 @@ def test_interactive_sally_pauses_and_parity() -> None:
     from almoravid.actions import apply_action
     # Synchronous baseline.
     s_sync = _sally_setup()
-    r_sync = apply_action(s_sync, {"type": "cmd_sally", "side": "muslim"})
+    r_sync = apply_combat_choices(s_sync, {"type": "cmd_sally", "side": "muslim"})
     # Interactive, never concede -> identical outcome.
     s_int = _sally_setup()
-    r = apply_action(s_int, {"type": "cmd_sally", "side": "muslim",
+    r = apply_combat_choices(s_int, {"type": "cmd_sally", "side": "muslim",
                              "interactive_concede": True})
     assert r["battle"] == "awaiting_concede"
     assert s_int.pending.kind == "battle_concede"
@@ -373,7 +371,7 @@ def test_interactive_sally_besieger_concede() -> None:
     """In a Sally the besieger (Defender) may Concede -> sallying side wins."""
     from almoravid.actions import apply_action
     s = _sally_setup()
-    apply_action(s, {"type": "cmd_sally", "side": "muslim",
+    apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim",
                      "interactive_concede": True})
     apply_action(s, {"type": "battle_concede", "side": "muslim"})
     r = apply_action(s, {"type": "battle_concede", "side": "christian",
@@ -386,7 +384,7 @@ def test_interactive_sally_sallying_lord_concede() -> None:
     """The sallying (Besieged) Lord may Concede -> the besieger wins."""
     from almoravid.actions import apply_action
     s = _sally_setup()
-    apply_action(s, {"type": "cmd_sally", "side": "muslim",
+    apply_combat_choices(s, {"type": "cmd_sally", "side": "muslim",
                      "interactive_concede": True})
     r = apply_action(s, {"type": "battle_concede", "side": "muslim",
                          "attacker_concede": True})
@@ -408,9 +406,8 @@ def _storm_setup(seed=3, siege=3):
 
 
 def test_interactive_storm_pauses_before_round2() -> None:
-    from almoravid.actions import apply_action
     s = _storm_setup(siege=3)
-    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_storm", "side": "christian",
                          "interactive_concede": True})
     # Round 1 runs immediately; pause before Round 2 (Storm Concede is 2+).
     assert r["storm"] == "awaiting_concede" and r["round"] == 2
@@ -418,10 +415,9 @@ def test_interactive_storm_pauses_before_round2() -> None:
 
 
 def test_interactive_storm_legal_moves_attacker_only() -> None:
-    from almoravid.actions import apply_action
     from almoravid.legal_moves import legal_moves
     s = _storm_setup(siege=3)
-    apply_action(s, {"type": "cmd_storm", "side": "christian",
+    apply_combat_choices(s, {"type": "cmd_storm", "side": "christian",
                      "interactive_concede": True})
     sc = [m for m in legal_moves(s) if m["type"] == "storm_concede"]
     assert len(sc) == 2  # continue + attacker concede (no defender concede)
@@ -432,10 +428,10 @@ def test_interactive_storm_parity_with_synchronous() -> None:
     from almoravid.actions import apply_action
     for seed in (1, 3, 11):
         s_sync = _storm_setup(seed=seed, siege=3)
-        r_sync = apply_action(s_sync, {"type": "cmd_storm",
+        r_sync = apply_combat_choices(s_sync, {"type": "cmd_storm",
                                        "side": "christian"})
         s_int = _storm_setup(seed=seed, siege=3)
-        r_int = apply_action(s_int, {"type": "cmd_storm", "side": "christian",
+        r_int = apply_combat_choices(s_int, {"type": "cmd_storm", "side": "christian",
                                      "interactive_concede": True})
         while s_int.pending is not None and s_int.pending.kind == "storm_concede":
             r_int = apply_action(s_int, {"type": "storm_concede",
@@ -450,7 +446,7 @@ def test_interactive_storm_attacker_reactive_concede() -> None:
     start of Round 2 -> the Storm ends and the Attacker (Christian) loses."""
     from almoravid.actions import apply_action
     s = _storm_setup(seed=3, siege=4)
-    r = apply_action(s, {"type": "cmd_storm", "side": "christian",
+    r = apply_combat_choices(s, {"type": "cmd_storm", "side": "christian",
                          "interactive_concede": True})
     assert r["round"] == 2
     r = apply_action(s, {"type": "storm_concede", "side": "christian",

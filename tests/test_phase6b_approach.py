@@ -21,6 +21,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests._plan_helpers import legal_pad, step_levy
+from tests.combat_choices import apply_combat_choices
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ def test_respond_stand_battle_resolves_and_ends_card() -> None:
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "sahagun", "way_type": "road"})
     actions_before = s.meta.actions_remaining
-    res = apply_action(s, {"type": "respond_stand_battle",
+    res = apply_combat_choices(s, {"type": "respond_stand_battle",
                            "side": "muslim"})
     assert res["winner"] in ("christian", "muslim", None)
     assert s.meta.actions_remaining == 0  # card ended (rule 4.4.5)

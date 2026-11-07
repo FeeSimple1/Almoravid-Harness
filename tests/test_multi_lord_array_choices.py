@@ -27,6 +27,7 @@ from almoravid.battle import (
     battleside_for_lords,
 )
 from almoravid.scenarios import load_scenario
+from tests.combat_choices import apply_combat_choices
 
 
 def _make_array_side(s, lord_ids, side_name, role, forces_per_lord):
@@ -202,7 +203,7 @@ def test_array_tactics_discoverable_during_field_battle() -> None:
     s.lords["alfonso"].assets = {}
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "sahagun", "way_type": "road"})
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim",
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
                      "interactive_concede": True})
     at = [m for m in legal_moves(s) if m["type"] == "set_array_tactics"]
     flanks = {m.get("flank_choice") for m in at if "flank_choice" in m}

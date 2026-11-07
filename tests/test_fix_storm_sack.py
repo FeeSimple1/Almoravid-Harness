@@ -1,10 +1,10 @@
 """FIX-B S5: Storm Sack (4.5.2) — defender loss removes defending Lords,
 awards their Assets + Stronghold Spoils to the besiegers."""
 from __future__ import annotations
-from almoravid.actions import apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 from tests.test_siege import _activate_lord
+from tests.combat_choices import apply_combat_choices
 
 
 def test_storm_sack_removes_lord_and_awards_spoils():
@@ -20,7 +20,7 @@ def test_storm_sack_removes_lord_and_awards_spoils():
     s.lords["al_mustain"].in_stronghold = True
     s.lords["al_mustain"].forces = {"militia": 1}
     s.lords["al_mustain"].assets = {"coin": 3}
-    r = apply_action(s, {"type": "cmd_storm", "side": "christian"})
+    r = apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     if r["winner"] == "christian":
         assert r["sack"] is not None
         assert "al_mustain" in r["sack"]["removed_lords"]
@@ -39,7 +39,7 @@ def test_storm_attacker_loss_no_sack():
     s.lords["alfonso"].in_stronghold = False
     s.lords["alfonso"].forces = {"serfs": 1}  # token attacker
     s.locales[loc].siege_yellow = 1  # only 1 round
-    r = apply_action(s, {"type": "cmd_storm", "side": "christian"})
+    r = apply_combat_choices(s, {"type": "cmd_storm", "side": "christian"})
     if r["winner"] != "christian":
         assert r["sack"] is None
         assert r["conquest"] is None

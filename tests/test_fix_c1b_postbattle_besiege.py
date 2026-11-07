@@ -10,6 +10,7 @@ from __future__ import annotations
 from almoravid.actions import apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, PendingDecision
+from tests.combat_choices import apply_combat_choices
 
 
 def _stand_battle(seed):
@@ -34,7 +35,7 @@ def _stand_battle(seed):
                  "via_way_type": "road", "active_lord_id": "alvar_fanez",
                  "active_side": "christian", "defender_lord_ids": ["al_mustain"]})
     s.meta.active_player = "muslim"
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim"})
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim"})
     return s
 
 

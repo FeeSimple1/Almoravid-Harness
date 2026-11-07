@@ -24,6 +24,7 @@ from almoravid.battle import (
 from almoravid.map import neighbors_via
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests.combat_choices import apply_combat_choices
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +220,6 @@ def test_sally_engagement_skipped_by_retreat_aftermath() -> None:
 def test_cmd_battle_emits_retreat_summary() -> None:
     """cmd_battle path now returns a retreat_summary key with one
     entry per losing Lord."""
-    from almoravid.actions import apply_action
     from tests.test_battle import _activate_lord
 
     s = _activate_lord("scenario_a_toledo_beset", "alfonso", seed=3)
@@ -230,7 +230,7 @@ def test_cmd_battle_emits_retreat_summary() -> None:
     # Boost Alfonso so the result is decisive.
     s.lords["alfonso"].forces = {"knights": 6, "men_at_arms": 4}
     s.lords["al_mutamid"].forces = {"sergeants": 1}
-    res = apply_action(s, {"type": "cmd_battle", "side": "christian"})
+    res = apply_combat_choices(s, {"type": "cmd_battle", "side": "christian"})
     assert "retreat_summary" in res
     rs = res["retreat_summary"]
     assert rs["winner"] in ("christian", "muslim", None)

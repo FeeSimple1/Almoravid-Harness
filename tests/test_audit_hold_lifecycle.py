@@ -133,8 +133,11 @@ def test_battle_preserves_unrelated_held_events_including_legacy_bucket() -> Non
 
 
 def test_canonical_combat_hold_activates_only_for_eligible_side() -> None:
+    from almoravid.battle import play_combat_hold
     state = load_scenario("scenario_a_toledo_beset", seed=9)
     state.decks.held = {"christian": ["C1", "C8"], "muslim": ["M1", "M12"]}
+    play_combat_hold(state, "christian", "C8", defending=False)
+    play_combat_hold(state, "muslim", "M1", defending=True)
     result = resolve_battle(
         state,
         BattleSide(side="christian", role="attacker", lord_ids=["alfonso"],

@@ -7,6 +7,7 @@ from almoravid.legal_moves import legal_moves
 from almoravid.state import Cylinder, GameState
 from tests.test_audit_combat_regressions import _combat_state
 from tests.test_concede_field_battle import _sally_setup
+from tests.combat_choices import apply_combat_choices
 
 
 def fate_moves(state, lord_id=None):
@@ -22,12 +23,12 @@ def start_leon_battle(interactive=False):
     )
     battle = next(m for m in legal_moves(state) if m["type"] == "cmd_battle")
     if interactive:
-        apply_action(state, {**battle, "interactive_concede": True})
+        apply_combat_choices(state, {**battle, "interactive_concede": True})
         result = apply_action(state, {
             "type": "battle_concede", "side": "christian", "attacker_concede": True,
         })
     else:
-        result = apply_action(state, {**battle, "attacker_concede_round": 1})
+        result = apply_combat_choices(state, {**battle, "attacker_concede_round": 1})
     assert result["winner"] == "muslim"
     assert result["pending"] == "battle_fate"
     return state
@@ -69,7 +70,7 @@ def test_owner_can_assign_last_stronghold_slot_and_resume_saved_decisions():
         "alfonso": {"men_at_arms": 4}, "alvar_fanez": {"men_at_arms": 4},
         "al_mutamid": {"men_at_arms": 4},
     }, locale="zamora")
-    apply_action(state, {"type": "cmd_battle", "side": "christian",
+    apply_combat_choices(state, {"type": "cmd_battle", "side": "christian",
                          "attacker_concede_round": 1, "interactive_retreat": True})
     first = next(m for m in fate_moves(state, "alvar_fanez") if m["fate"] == "withdraw")
     rng = state.meta.rng_state
@@ -111,7 +112,7 @@ def test_approach_defenders_cannot_retreat_along_the_approach_way():
     apply_action(state, {"type": "cmd_march", "side": "muslim", "target_locale_id": "leon",
                          "way_type": "road"})
     stand = next(m for m in legal_moves(state) if m["type"] == "respond_stand_battle")
-    apply_action(state, {**stand, "defender_concede_round": 1})
+    apply_combat_choices(state, {**stand, "defender_concede_round": 1})
     moves = fate_moves(state, "alfonso")
     assert {m["retreat_to"] for m in moves if m["fate"] == "retreat"} == {"astorga", "sahagun"}
     saved = state.model_dump_json()
@@ -136,12 +137,12 @@ def test_relief_sally_reserves_withdrawal_for_the_sallying_lord(interactive):
                          "way_type": "road"})
     stand = next(m for m in legal_moves(state) if m["type"] == "respond_stand_battle")
     if interactive:
-        apply_action(state, {**stand, "interactive_concede": True})
+        apply_combat_choices(state, {**stand, "interactive_concede": True})
         result = apply_action(state, {
             "type": "relief_concede", "side": "christian", "attacker_concede": True,
         })
     else:
-        result = apply_action(state, {**stand, "attacker_concede_round": 1})
+        result = apply_combat_choices(state, {**stand, "attacker_concede_round": 1})
     assert result["pending"] == "battle_fate"
     moves = fate_moves(state)
     assert {m["lord_id"] for m in moves} == {"alfonso"}
@@ -160,7 +161,7 @@ def test_relief_sally_reserves_withdrawal_for_the_sallying_lord(interactive):
 def test_losing_sally_besieger_owns_the_retreat_prompt():
     state = _sally_setup()
     sally = next(m for m in legal_moves(state) if m["type"] == "cmd_sally")
-    result = apply_action(state, {**sally, "defender_concede_round": 1})
+    result = apply_combat_choices(state, {**sally, "defender_concede_round": 1})
     assert result["pending"] == "battle_fate"
     assert state.meta.active_player == "christian"
     retreat = next(m for m in fate_moves(state, "alvar_fanez") if m["fate"] == "retreat")

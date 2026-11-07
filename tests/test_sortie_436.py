@@ -5,6 +5,7 @@ from __future__ import annotations
 from almoravid.actions import apply_action
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
+from tests.combat_choices import apply_combat_choices
 
 
 def _sortie_setup(seed=3):
@@ -46,7 +47,7 @@ def test_sortie_then_stand_resolves_battle() -> None:
     s, here = _sortie_setup()
     apply_action(s, {"type": "cmd_sortie", "side": "christian"})
     # Bypassing Muslim stands and fights.
-    apply_action(s, {"type": "respond_stand_battle", "side": "muslim"})
+    apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim"})
     assert s.pending is None   # Battle resolved, Approach cleared
 
 
