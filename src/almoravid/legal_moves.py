@@ -41,6 +41,16 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
+    if state.pending is not None and state.pending.kind == "relief_sally":
+        from itertools import combinations
+
+        payload = state.pending.payload
+        eligible = payload["eligible_lord_ids"]
+        minimum = 0 if payload["attacker_ids"] else 1
+        return [{"type": "relief_sally", "side": state.pending.waiting_on, "lord_ids": list(ids)}
+                for count in range(minimum, len(eligible) + 1)
+                for ids in combinations(eligible, count)]
+
     if state.pending is not None and state.pending.kind == "combat_holds":
         from itertools import combinations
 

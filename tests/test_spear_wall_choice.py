@@ -100,6 +100,7 @@ def test_relief_sally_scopes_the_bonus_to_the_owner_of_each_unit(monkeypatch):
                          "target_locale_id": "zamora", "way_type": "road"})
     apply_action(state, {"type": "respond_stand_battle", "side": "muslim",
                          "interactive_concede": True})
+    apply_action(state, {"type": "relief_sally", "side": "christian", "lord_ids": ["alvar_fanez"]})
     _pass_holds(state)
     apply_action(state, {"type": "combat_holds", "side": "muslim", "card_id": "M7",
                          "lord_ids": ["al_mutamid", "al_mundir"]})

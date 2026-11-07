@@ -40,7 +40,9 @@ def test_relief_camp_attack_targets_all_lords_once(card, besiegers, parapet):
         (state, {**stand, "interactive_concede": True}),
         (synchronous, {**stand, "attacker_concede_round": 1}),
     ):
-        result = apply_action(current, command)
+        apply_action(current, command)
+        result = apply_action(current, {"type": "relief_sally", "side": "christian",
+                                        "lord_ids": ["alvar_fanez"]})
         while current.pending is not None and current.pending.kind == "combat_holds":
             move = next(move for move in legal_moves(current) if move["type"] == "combat_holds")
             result = apply_action(current, move)

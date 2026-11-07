@@ -39,6 +39,21 @@ branch the state. Exit codes: 0 success, 1 usage error, 2 IllegalAction
 (or malformed action JSON) — agents should branch on exit code 2 to
 re-pick from the legal-moves palette.
 
+## Relief Sally
+
+When a defender Stands & Fights against an Approach to a Locale with
+Besieged Lords of the Approaching side, that side gets a `relief_sally`
+decision. Choose any subset of the eligible Lords. Use an empty list
+to fight a regular Approach Battle and leave all of them inside.
+
+```json
+{"type": "relief_sally", "side": "christian", "lord_ids": ["alvar_fanez"]}
+```
+
+This choice comes before combat Holds and before dice are rolled.
+It works with both synchronous and interactive combat and can be
+saved and reloaded.
+
 ## Combat Holds
 
 Battle, Stand & Fight, Sally, Storm, and Sagrajas resolution open a

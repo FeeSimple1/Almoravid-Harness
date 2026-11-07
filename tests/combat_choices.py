@@ -1,11 +1,14 @@
-"""Explicit Event policy for tests that exercise later combat decisions."""
+"""Explicit setup choices for tests that exercise later combat decisions."""
 
 from almoravid.actions import apply_action
 
 
-def apply_combat_choices(state, action, *, cards=(), spear_wall_lords=()):
-    """Play the requested cards and decline every other combat Hold."""
+def apply_combat_choices(state, action, *, cards=(), spear_wall_lords=(), sallyers=()):
+    """Select Relief Sally participants and play the requested combat Holds."""
     result = apply_action(state, action)
+    if state.pending is not None and state.pending.kind == "relief_sally":
+        result = apply_action(state, {"type": "relief_sally", "side": state.pending.waiting_on,
+                                      "lord_ids": list(sallyers)})
     played = set()
     while state.pending is not None and state.pending.kind == "combat_holds":
         side = state.pending.waiting_on

@@ -137,12 +137,14 @@ def test_relief_sally_reserves_withdrawal_for_the_sallying_lord(interactive):
                          "way_type": "road"})
     stand = next(m for m in legal_moves(state) if m["type"] == "respond_stand_battle")
     if interactive:
-        apply_combat_choices(state, {**stand, "interactive_concede": True})
+        apply_combat_choices(state, {**stand, "interactive_concede": True},
+                             sallyers=("alvar_fanez",))
         result = apply_action(state, {
             "type": "relief_concede", "side": "christian", "attacker_concede": True,
         })
     else:
-        result = apply_combat_choices(state, {**stand, "attacker_concede_round": 1})
+        result = apply_combat_choices(state, {**stand, "attacker_concede_round": 1},
+                                      sallyers=("alvar_fanez",))
     assert result["pending"] == "battle_fate"
     moves = fate_moves(state)
     assert {m["lord_id"] for m in moves} == {"alfonso"}

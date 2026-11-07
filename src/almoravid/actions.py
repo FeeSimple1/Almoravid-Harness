@@ -2107,9 +2107,9 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
-    if state.pending is not None and state.pending.kind == "combat_holds":
-        _require(action_type in {"combat_holds", "cap_bishoprics"},
-                 "finish combat Event choices before continuing", code="pending_decision")
+    if state.pending is not None and state.pending.kind in {"combat_holds", "relief_sally"}:
+        _require(action_type in {state.pending.kind, "cap_bishoprics"},
+                 "finish the pending combat choice before continuing", code="pending_decision")
     reset_pending = (state.pending is not None and (
         state.pending.kind == "reset_discard"
         or "_reset_discard_resume" in state.pending.payload))

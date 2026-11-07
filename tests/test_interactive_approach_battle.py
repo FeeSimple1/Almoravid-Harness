@@ -65,8 +65,9 @@ def test_stand_battle_interactive_runs_to_completion(relief) -> None:
     s = _march_into_battle(relief=relief)
     synchronous = s.model_copy(deep=True)
     stand = {"type": "respond_stand_battle", "side": "muslim"}
-    expected = apply_combat_choices(synchronous, stand)
-    result = apply_combat_choices(s, {**stand, "interactive_concede": True})
+    sallyers = ("alvar_fanez",) if relief else ()
+    expected = apply_combat_choices(synchronous, stand, sallyers=sallyers)
+    result = apply_combat_choices(s, {**stand, "interactive_concede": True}, sallyers=sallyers)
     kind = "relief_concede" if relief else "battle_concede"
     guard = 0
     while s.pending is not None and s.pending.kind == kind:
@@ -131,7 +132,7 @@ def test_hit_absorption_choice_discoverable_during_battle() -> None:
 def test_approach_concede_prompts_only_authorize_the_waiting_owner(relief):
     s = _march_into_battle(relief=relief)
     apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
-                     "interactive_concede": True})
+                     "interactive_concede": True}, sallyers=("alvar_fanez",) if relief else ())
     kind = "relief_concede" if relief else "battle_concede"
     assert s.pending.kind == kind
     rng_before = s.meta.rng_state
@@ -174,7 +175,7 @@ def test_approach_concede_prompts_only_authorize_the_waiting_owner(relief):
 def test_relief_attacker_can_concede_before_the_besiegers():
     s = _march_into_battle(relief=True)
     apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
-                     "interactive_concede": True})
+                     "interactive_concede": True}, sallyers=("alvar_fanez",))
     result = apply_action(s, {"type": "relief_concede", "side": "christian",
                              "attacker_concede": True})
     assert result["winner"] == "muslim" and result["rounds"] == 1
@@ -185,7 +186,7 @@ def test_relief_attacker_can_concede_before_the_besiegers():
 def test_legacy_combat_save_resumes_at_the_current_rounds_attacker(relief):
     s = _march_into_battle(relief=relief)
     apply_combat_choices(s, {"type": "respond_stand_battle", "side": "muslim",
-                     "interactive_concede": True})
+                     "interactive_concede": True}, sallyers=("alvar_fanez",) if relief else ())
     saved = s.model_dump()
     saved["pending"]["payload"].pop("concede_role", None)
     # The old Approach driver assigned its combined election to the defender.

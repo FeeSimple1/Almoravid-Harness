@@ -5404,11 +5404,34 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
     return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
 
 
+def _h_relief_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "relief_sally", side)
+    eligible = pd.payload["eligible_lord_ids"]
+    selected = action.get("lord_ids")
+    _require(isinstance(selected, list)
+             and all(isinstance(lid, str) and lid in eligible for lid in selected)
+             and len(set(selected)) == len(selected),
+             "choose a list of distinct Besieged Lords eligible to join",
+             code="bad_arg")
+    _require(selected or pd.payload["attacker_ids"],
+             "no attacker Lords at Battle locale", code="no_attacker")
+    sallyer_ids = [lid for lid in eligible if lid in selected]
+    resume = pd.payload["_relief_sally_resume"]
+    arrival = PendingDecision.model_validate(resume["arrival"])
+    arrival.payload["sallyer_ids"] = sallyer_ids
+    state.pending = arrival
+    state.meta.active_player = arrival.waiting_on
+    _record(state, action, f"{side} selects Relief Sally Lords: {sallyer_ids}")
+    return _h_respond_stand_battle(state, resume["stand"])
+
+
 def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
                            _holds_chosen: bool = False) -> dict[str, Any]:
-    """4.3.4 Stand & Fight. Auto-resolve Battle with all eligible Lords
-    on both sides at the Approach Locale. Battle ends the active side's
-    card (rule 4.4.5)."""
+    """Stand & Fight (4.3.4) commits the defenders to Battle.
+
+    The Approaching player chooses any Relief Sally participants (4.4.1).
+    """
     from almoravid.battle import (
         _front_lord_count,
         battleside_for_lords,
@@ -5423,18 +5446,15 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
     active_side = payload["active_side"]
     other = _other(active_side)
 
-    attacker_lord_ids = [
+    marcher_ids = [
         lord.id for lord in state.lords.values()
         if lord.side == active_side
         and lord.cylinder.kind == "locale"
         and lord.cylinder.locale_id == locale_id
         and not lord.in_stronghold
     ]
-    # Relief Sally (4.4.1, Phase 7f): if the Approaching side also has
-    # its own Besieged Lords inside a Stronghold at this Locale, they
-    # Sally out to join the Approach as relief attackers.
     from almoravid.effective import is_besieged as _isb
-    relief_sally_ids = [
+    eligible = [
         lord.id for lord in state.lords.values()
         if lord.side == active_side
         and lord.cylinder.kind == "locale"
@@ -5442,23 +5462,42 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
         and lord.in_stronghold and _isb(state, lord.id)
     ]
     defender_lord_ids = list(payload["defender_lord_ids"])
-    _require(attacker_lord_ids or relief_sally_ids,
+    _require(marcher_ids or eligible,
              "no attacker Lords at Battle locale", code="no_attacker")
     _require(defender_lord_ids, "no defender Lords at Battle locale",
              code="no_defender")
+
+    interactive = bool(action.get("interactive_concede"))
+    concede = {} if interactive else {
+        key: _concede_round_arg(action, key)
+        for key in ("attacker_concede_round", "defender_concede_round")
+    }
+    if eligible and "sallyer_ids" not in payload and not _holds_chosen:
+        state.pending = PendingDecision(kind="relief_sally", waiting_on=active_side, payload={
+            "locale_id": locale_id,
+            "eligible_lord_ids": eligible,
+            "attacker_ids": marcher_ids,
+            "defender_ids": defender_lord_ids,
+            "_relief_sally_resume": {
+                "arrival": pd.model_dump(mode="json"),
+                "stand": deepcopy(action),
+            },
+        })
+        state.meta.active_player = active_side
+        return {"pending": "relief_sally", "waiting_on": active_side}
+
+    # Older combat_holds saves already committed every eligible Sallyer.
+    sallyer_ids = payload.get("sallyer_ids", eligible)
     if not _holds_chosen:
         prompt = _begin_combat_holds(
-            state, action, active_side, attacker_lord_ids + relief_sally_ids,
+            state, action, active_side, marcher_ids + sallyer_ids,
             defender_lord_ids)
         if prompt is not None:
             return prompt
     # B6 (4.4.1): the relieving Marchers and the Sallying (Besieged)
     # Lords are SEPARATE groups in the Array, not one merged Attacker.
-    marcher_ids = list(attacker_lord_ids)
-    for rid in relief_sally_ids:
-        if rid not in marcher_ids:
-            state.lords[rid].in_stronghold = False  # Sallied out
-    sallyer_ids = [rid for rid in relief_sally_ids if rid not in marcher_ids]
+    for rid in sallyer_ids:
+        state.lords[rid].in_stronghold = False
 
     if sallyer_ids:
         # ---- Relief Sally dual-lane resolution (4.4.1 / 4.5.3). ----
@@ -5473,7 +5512,7 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
             "active_lord_id": payload.get("active_lord_id"),
         }
         # Reactive (round-stepped) Concede for the Relief Sally (opt-in).
-        if bool(action.get("interactive_concede")):
+        if interactive:
             return _begin_interactive_relief(
                 state, action, marcher_ids, sallyer_ids,
                 defender_lord_ids, relief_pl)
@@ -5481,10 +5520,7 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
         result, _ = resolve_relief_sally(
             state, marcher_ids, sallyer_ids, defender_lord_ids,
             besieger_side=other, locale_id=locale_id,
-            attacker_concede_round=_concede_round_arg(
-                action, "attacker_concede_round"),
-            defender_concede_round=_concede_round_arg(
-                action, "defender_concede_round"))
+            **concede)
         return _battle_aftermath_or_fates(state, action, result, relief_pl)
 
     # ---- Standard Approach Battle (no Relief Sally). ----
@@ -5519,15 +5555,10 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
     # per-Round Concede declarations (and, with interactive_timing, pick
     # the Round their one-Round effects fire) just like the end-of-card
     # Battle and the Relief Sally already allow.
-    if bool(action.get("interactive_concede")):
+    if interactive:
         return _begin_interactive_battle(
             state, action, atk, dfd, approach_pl)
-    result = resolve_battle(
-        state, atk, dfd,
-        attacker_concede_round=_concede_round_arg(
-            action, "attacker_concede_round"),
-        defender_concede_round=_concede_round_arg(
-            action, "defender_concede_round"))
+    result = resolve_battle(state, atk, dfd, **concede)
     return _battle_aftermath_or_fates(state, action, result, approach_pl)
 
 
@@ -7891,6 +7922,7 @@ CAMPAIGN_HANDLERS = {
     "respond_swollen_river_block": _h_respond_swollen_river_block,
     "respond_withdraw": _h_respond_withdraw,
     "respond_stand_battle": _h_respond_stand_battle,
+    "relief_sally": _h_relief_sally,
     "respond_besiege": _h_respond_besiege,
     "respond_bypass": _h_respond_bypass,
     "battle_concede": _h_battle_concede,
