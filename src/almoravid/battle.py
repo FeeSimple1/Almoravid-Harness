@@ -35,7 +35,7 @@ Bug-pattern preemption:
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
@@ -2645,13 +2645,32 @@ def _relief_setup(
     return rs
 
 
+def _relief_strike_pairs(rs: _ReliefState, role: Role) -> Iterator[tuple[BattleSide, BattleSide]]:
+    """Yield the live pair for each striking lane, in initiative order."""
+    front = rs.def_front
+    rear = None if rs.shared else rs.def_rear
+    if role == "attacker":
+        lanes = ((rs.marchers, front, rear), (rs.sallyers, rear, front))
+    else:
+        lanes = ((front, rs.marchers, rs.sallyers), (rear, rs.sallyers, rs.marchers))
+
+    for striker, opposed, flank in lanes:
+        if striker is None or not striker.has_unrouted():
+            continue
+        # Recheck after each Strike. A Rout can expose the other lane during
+        # this very step. In particular, Sallyers flank the Front when the
+        # rear has no remaining defenders (4.4.1).
+        target = opposed if opposed is not None and opposed.has_unrouted() else flank
+        if target is not None and target.has_unrouted():
+            yield (striker, target) if role == "attacker" else (target, striker)
+
+
 def _relief_run_round(state: GameState, rs: _ReliefState,
                       rnd_i: int) -> BattleRound:
     """Resolve one Relief-Sally Round (Reposition + two-lane Strikes +
     end-of-Round discards), mutating `rs`. Concede declaration / break /
     winner are the caller's responsibility."""
     rnd = BattleRound(index=rnd_i)
-    marchers, sallyers = rs.marchers, rs.sallyers
     def_front, def_rear = rs.def_front, rs.def_rear
     # Reposition (Round 2+): advance excess Reserve Defenders.
     if rnd_i >= 2 and rs.excess_ids:
@@ -2678,20 +2697,11 @@ def _relief_run_round(state: GameState, rs: _ReliefState,
     else:
         steps_this_round = _BATTLE_STEPS
     for step_id, actor_role, step_type, unit_class in steps_this_round:
-        if (def_front is not None
-                and (marchers.has_unrouted() or def_front.has_unrouted())):
+        for attacker, defender in _relief_strike_pairs(rs, actor_role):
             rnd.steps.append(_relief_lane_step(
-                state, rs, actor_role, marchers, def_front,
-                step_id=step_id, step_type=step_type, unit_class=unit_class))
-        if def_rear is not None:
-            run_step = (actor_role == "attacker"
-                        or (actor_role == "defender" and not rs.shared))
-            if run_step and (sallyers.has_unrouted()
-                             or def_rear.has_unrouted()):
-                rnd.steps.append(_relief_lane_step(
-                    state, rs, actor_role, sallyers, def_rear,
-                    step_id=step_id, step_type=step_type,
-                    unit_class=unit_class, walls_range=rs.walls))
+                state, rs, actor_role, attacker, defender,
+                step_id=step_id, step_type=step_type, unit_class=unit_class,
+                walls_range=rs.walls if attacker is rs.sallyers else None))
         if _relief_over(state, rs):
             break
     if rnd_i == 1:

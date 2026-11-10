@@ -6,6 +6,7 @@ from almoravid.actions import apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.state import GameState
 from almoravid.views import redacted_view
+from tests.combat_choices import apply_combat_choices
 from tests.test_cross_game_avoid_retreat_surrender import place, position, reject_unchanged
 from tests.test_cross_game_reaction_privacy import hold
 
@@ -131,3 +132,46 @@ def test_legacy_combat_hold_save_resumes_with_all_sallyers_already_committed():
     apply_action(state, {"type": "combat_holds", "side": "muslim"})
     assert state.pending.kind == "relief_concede"
     assert set(state.pending.payload["rs"]["sallyers"]["lord_ids"]) == set(INSIDE)
+
+
+def test_relief_retargets_the_front_after_the_rear_defender_routes():
+    def begin(interactive):
+        state = position(seed=7)
+        for lid, locale, forces in (
+            ("alfonso", "leon", {"militia": 1}),
+            ("alvar_fanez", "zamora", {"knights": 2}),
+            ("al_mutamid", "zamora", {"sergeants": 2}),
+            ("al_mundir", "zamora", {"militia": 1}),
+        ):
+            place(state, lid, locale)
+            state.lords[lid].forces = forces
+        state.lords["alvar_fanez"].in_stronghold = True
+        state.locales["zamora"].siege_green = 1
+        apply_action(state, {"type": "cmd_march", "side": "christian",
+                             "target_locale_id": "zamora", "way_type": "road"})
+        result = apply_combat_choices(
+            state, {**STAND, "interactive_concede": interactive},
+            sallyers=("alvar_fanez",))
+        return state, result
+
+    state, _ = begin(True)
+    for round_index in range(1, 9):
+        state = GameState.model_validate_json(state.model_dump_json())
+        apply_action(state, {"type": "relief_concede", "side": "christian"})
+        result = apply_action(state, {"type": "relief_concede", "side": "muslim"})
+        if round_index == 1:
+            forces = state.pending.payload["rs"]["lf"]
+            assert not forces["M"]["alfonso"]
+            assert not forces["DR"]["al_mundir"]
+            assert forces["S"]["alvar_fanez"] == {"knights": 2}
+            assert forces["DF"]["al_mutamid"] == {"sergeants": 2}
+        if "winner" in result:
+            break
+    else:
+        pytest.fail("Live opponents never finish the Relief Sally after the rear Rout")
+
+    synchronous, direct = begin(False)
+    assert result == direct
+    assert result["rounds"] > 1
+    assert state.meta.rng_state == synchronous.meta.rng_state
+    assert state.lords == synchronous.lords
