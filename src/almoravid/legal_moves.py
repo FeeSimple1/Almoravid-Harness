@@ -41,6 +41,10 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
+    if state.pending is not None and state.pending.kind == "storm_front":
+        return [{"type": "storm_front", "side": state.pending.waiting_on, "lord_id": lid}
+                for lid in state.pending.payload["defender_ids"]]
+
     if state.pending is not None and state.pending.kind == "relief_sally":
         from itertools import combinations
 
@@ -63,7 +67,7 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                 eligible = combat_hold_lord_ids(side, payload)
                 moves.extend({**play, "lord_ids": list(ids)}
                              for ids in combinations(eligible, min(2, len(eligible))))
-            elif card == "C8" and payload.get("relief"):
+            elif card == "C8":
                 moves.extend({**play, "lord_id": lid}
                              for lid in combat_hold_lord_ids(side, payload))
             else:

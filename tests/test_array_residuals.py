@@ -28,9 +28,9 @@ def _two_lord_battle(seed=7):
     chr_ = [lid for lid, lo in s.lords.items() if lo.side == "christian"][:2]
     mus = [lid for lid, lo in s.lords.items() if lo.side == "muslim"][:2]
     atk = BattleSide(side="christian", role="attacker", lord_ids=chr_,
-                     forces={"knights": 12})
-    atk.array = [_lp(chr_[0], "front_center", {"knights": 12}),
-                 _lp(chr_[1], "reserve", {"knights": 12})]
+                     forces={"knights": 2})
+    atk.array = [_lp(chr_[0], "front_center", {"knights": 1}),
+                 _lp(chr_[1], "reserve", {"knights": 1})]
     dfd = BattleSide(side="muslim", role="defender", lord_ids=mus,
                      forces={"sergeants": 6})
     dfd.array = [_lp(mus[0], "front_center", {"sergeants": 3}),

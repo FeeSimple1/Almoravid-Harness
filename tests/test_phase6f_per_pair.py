@@ -36,15 +36,14 @@ def _make_array_side(
 
 
 def test_per_pair_drains_paired_target_lord_not_pool() -> None:
-    """Attacker center strikes defender center; defender left's units
-    are untouched even if defender center is wiped out."""
+    """Attacker center's Hits go to defender center while it has units."""
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     christians = [lid for lid, l in s.lords.items()
                   if l.side == "christian"][:2]
     muslims = [lid for lid, l in s.lords.items()
                if l.side == "muslim"][:2]
     atk = _make_array_side(s, christians, "christian", "attacker", {
-        christians[0]: {"knights": 8},
+        christians[0]: {"knights": 1},
         christians[1]: {"serfs": 1},
     })
     dfd = _make_array_side(s, muslims, "muslim", "defender", {
@@ -54,15 +53,14 @@ def test_per_pair_drains_paired_target_lord_not_pool() -> None:
     # Attacker center strikes (2.b — Horse Melee).
     res = _resolve_step(s, "2.b", "attacker", "melee", "horse",
                         atk, dfd, round_index=1)
-    # Defender center had 2 Sergeants; many of them should be routed.
-    # Defender left had 10 Sergeants; should be UNTOUCHED by attacker
-    # center's Strike (only attacker left strikes defender left).
+    # Two Horse Hits stay with the directly-opposed Lord. There are no
+    # excess Hits to spill to the left Lord when those Hits are resolved.
     center_lp = next(lp for lp in dfd.array
                      if lp.position == "front_center")
     left_lp = next(lp for lp in dfd.array
                    if lp.position == "front_left")
     # Center took losses (started 2, may have 0-2 left).
-    assert center_lp.forces.get("sergeants", 0) <= 2
+    assert center_lp.forces.get("sergeants", 0) < 2
     # Left untouched because attacker.front_left has only 1 Serf (which
     # routs on the first hit anyway, but never crosses the pair line).
     assert left_lp.forces.get("sergeants", 0) == 10

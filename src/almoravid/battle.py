@@ -1930,7 +1930,7 @@ def _storm_defender_alive(ss: dict[str, Any], defender: BattleSide) -> bool:
 
 
 def _storm_melee_hits(state: GameState, ss: dict[str, Any],
-                      front_forces_list: list[dict[UnitType, int]],
+                      front_forces: dict[str, dict[UnitType, int]],
                       caps: list[Any], *, side_is_christian: bool,
                       round_idx: int,
                       garrison: dict[UnitType, int] | None = None) -> int:
@@ -1951,9 +1951,10 @@ def _storm_melee_hits(state: GameState, ss: dict[str, Any],
     # to the FIRST Front Lord (Q-004 note).
     garrison_raw = (_combined_melee_raw(state, {}, [], garrison=garrison)
                     if garrison else 0.0)
-    for i, f in enumerate(front_forces_list):
+    selected = state.meta.cantador_lord_id
+    for i, (lord_id, f) in enumerate(front_forces.items()):
         raw = _combined_melee_raw(state, f, caps)
-        if c8_budget > 0:
+        if c8_budget > 0 and (selected is None or lord_id == selected):
             add = min(c8_budget, _c8_bonus_for_forces(f))
             raw += float(add)
             c8_budget -= add
@@ -2060,7 +2061,7 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     # 2.a Defender Melee (+ Garrison) -> Attacker.
     if _storm_defender_front_alive(ss) or defender.garrison_forces:
         dmelee = _storm_melee_hits(
-            state, ss, [ss["d_lord_forces"][lid] for lid in ss["d_front"]],
+            state, ss, {lid: ss["d_lord_forces"][lid] for lid in ss["d_front"]},
             ss["d_caps"], side_is_christian=(defender.side == "christian"),
             round_idx=round_idx, garrison=defender.garrison_forces)
         before_a = dict(attacker.forces)
@@ -2074,7 +2075,7 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     if (_storm_attacker_front_alive(ss)
             and _storm_defender_alive(ss, defender)):
         amelee = _storm_melee_hits(
-            state, ss, [ss["a_lord_forces"][lid] for lid in ss["a_front"]],
+            state, ss, {lid: ss["a_lord_forces"][lid] for lid in ss["a_front"]},
             ss["a_caps"], side_is_christian=(attacker.side == "christian"),
             round_idx=round_idx)
         before_d = dict(defender.forces)
@@ -2097,12 +2098,16 @@ def _storm_setup(
     walls_range_override: tuple[int, int] | None = None,
     reposition_defender: bool = True,
     reposition_attacker: bool = True,
+    defender_front: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     """Build the serializable per-Lord Storm context `ss` (Locale walls,
     Garrison, Front/Reserve, per-Lord force/rout dicts). Shared by
     resolve_storm and the interactive Storm driver."""
     from almoravid.capabilities import any_lord_with_capability
     from almoravid.static_data import load_strongholds
+
+    if defender_front is not None and defender_front not in defender.lord_ids:
+        raise ValueError("defender_front must name a defending Storm Lord")
 
     # ---- Locale + Stronghold parameters -------------------------------
     locale_id = None
@@ -2161,8 +2166,8 @@ def _storm_setup(
     d_lord_forces = {lid: dict(state.lords[lid].forces)
                      for lid in defender.lord_ids}
     d_lord_routed: dict[str, Any] = {lid: {} for lid in defender.lord_ids}
-    d_front = [defender.lord_ids[0]] if defender.lord_ids else []
-    d_reserve = list(defender.lord_ids[1:])
+    d_front = [defender_front or defender.lord_ids[0]] if defender.lord_ids else []
+    d_reserve = [lid for lid in defender.lord_ids if lid not in d_front]
     d_caps = list(defender.capabilities_in_play)
     a_caps = list(attacker.capabilities_in_play)
 
@@ -2265,6 +2270,7 @@ def resolve_storm(
     reposition_defender: bool = True,
     reposition_attacker: bool = True,
     concede_after_round: int | None = None,
+    defender_front: str | None = None,
 ) -> BattleResult:
     """4.5.2 Storm with per-Lord Array (S8/S10/S11).
 
@@ -2289,7 +2295,8 @@ def resolve_storm(
         state, attacker, defender, max_rounds=max_rounds,
         walls_range_override=walls_range_override,
         reposition_defender=reposition_defender,
-        reposition_attacker=reposition_attacker)
+        reposition_attacker=reposition_attacker,
+        defender_front=defender_front)
     result = BattleResult(engagement="storm", attacker=attacker,
                           defender=defender)
     conceded = False
@@ -3927,8 +3934,8 @@ def _resolve_step_per_pair(
     Front Lord's raw contribution against its chosen target, accumulate
     per target, then round and apply once per target.
 
-    Absorption drains from the paired/Flanked target Lord's forces
-    only. Reserve Lords do NOT Strike and do NOT absorb Hits.
+    If that target Routs, remaining Hits follow the new Flanking
+    situation to another Front Lord. Reserve Lords do not absorb Hits.
     """
     actor = attacker if actor_role == "attacker" else defender
     target = defender if actor_role == "attacker" else attacker
@@ -4067,6 +4074,7 @@ def _resolve_step_per_pair(
     for key in target_order:
         entry = contributions[key]
         target_lp = entry["lp"]
+        target_slot = target_lp.position
         raw = entry["raw"]
         by_kind = entry["by_kind"]
         aggregate_raw += raw
@@ -4095,7 +4103,12 @@ def _resolve_step_per_pair(
             minus_armor = _ARMOR_PENALTIES.get(kind, 0)
             for _ in range(count):
                 if not target_lp.has_unrouted():
-                    break
+                    next_target = _pick_flank_target(
+                        target, target_slot,
+                        flank_choice=state.meta.array_flank_choice.get(actor.side, "larger"))
+                    if next_target is None:
+                        break
+                    target_lp = next_target
                 _, routed = _resolve_protection_roll_for_lp(
                     state, target, target_lp, protroll_kind,
                     context="battle",

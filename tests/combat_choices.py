@@ -10,7 +10,11 @@ def apply_combat_choices(state, action, *, cards=(), spear_wall_lords=(), sallye
         result = apply_action(state, {"type": "relief_sally", "side": state.pending.waiting_on,
                                       "lord_ids": list(sallyers)})
     played = set()
-    while state.pending is not None and state.pending.kind == "combat_holds":
+    while state.pending is not None and state.pending.kind in {"combat_holds", "storm_front"}:
+        if state.pending.kind == "storm_front":
+            result = apply_action(state, {"type": "storm_front", "side": state.pending.waiting_on,
+                                          "lord_id": state.pending.payload["defender_ids"][0]})
+            continue
         side = state.pending.waiting_on
         for card in cards:
             if card in state.decks.held.get(side, []):

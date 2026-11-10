@@ -65,13 +65,14 @@ after each response. The defender can inspect the attacker's played
 Events before choosing.
 
 ```json
-{"type": "combat_holds", "side": "christian", "card_id": "C8"}
+{"type": "combat_holds", "side": "christian", "card_id": "C8", "lord_id": "alfonso"}
 ```
 
-In a Relief Sally, the Cantador menu specifies a participating Christian
-Lord with `lord_id`. Up to four of that Lord's Knights and Sergeants
-gain one Melee Hit each in Round 1. Omitting `lord_id` assigns the card
-to the Lord with the most eligible units among those in the striking lanes.
+In Battle, Sally, Storm, and Relief Sally, the Cantador menu specifies a
+participating Christian Lord with `lord_id`. Up to four of that Lord's
+Knights and Sergeants gain one Melee Hit each in Round 1. In Storm the
+bonus applies when the selected holder Strikes at Front. Older calls
+that omit `lord_id` use the resolver's automatic holder selection.
 
 Playing M7 Spear Wall requires `lord_ids` with two distinct Muslim
 Lords participating in the Battle, or the sole Lord if only one is
@@ -92,6 +93,18 @@ for those decisions. The window supports save/load and keeps unplayed
 opponent cards hidden. Scripted callers also answer this decision.
 Direct combat-resolver callers can explicitly activate a Held Event
 with `almoravid.battle.play_combat_hold` before resolving combat.
+
+## Initial Storm Front
+
+After combat Holds, a Storm with multiple besieged Lords pauses for the
+defender's `storm_front` choice before any combat dice. The menu lists
+every besieged Lord. The selected Lord begins at Front and the others
+begin in Reserve. This choice works with synchronous and interactive
+Storms and survives save/load.
+
+```json
+{"type": "storm_front", "side": "muslim", "lord_id": "al_mutamid"}
+```
 
 ## Interactive Concede the Field
 

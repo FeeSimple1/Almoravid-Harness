@@ -3964,9 +3964,8 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     card = action.get("card_id")
     _require(card == "M7" or "lord_ids" not in action,
              "lord_ids are only used when playing Spear Wall", code="bad_arg")
-    relief_cantador = card == "C8" and payload.get("relief")
-    _require(relief_cantador or "lord_id" not in action,
-             "lord_id is used to play Cantador in a Relief Sally", code="bad_arg")
+    _require(card == "C8" or "lord_id" not in action,
+             "lord_id is used to choose Cantador's holder", code="bad_arg")
     if card is not None:
         _require(isinstance(card, str) and card in combat_hold_candidates(state, side, payload),
                  "choose one of your applicable Held combat Events", code="bad_combat_hold")
@@ -3980,7 +3979,7 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      f"Spear Wall requires {count} distinct Muslim Lords in this Battle",
                      code="bad_arg")
             state.meta.spear_wall_lord_ids = list(ids)
-        if relief_cantador and "lord_id" in action:
+        if card == "C8" and "lord_id" in action:
             lid = action["lord_id"]
             _require(isinstance(lid, str) and lid in combat_hold_lord_ids(side, payload),
                      "choose a participating Christian Lord for Cantador", code="bad_arg")
@@ -4339,6 +4338,7 @@ def _begin_interactive_storm(
     walls_range_override: tuple[int, int] | None = None,
     reposition_defender: bool = True,
     reposition_attacker: bool = True,
+    defender_front: str | None = None,
 ) -> dict[str, Any]:
     """Start a reactive Storm: build the per-Lord context, resolve Round 1
     immediately (S10 Concede is Attacker-only, Round 2+), then pause on a
@@ -4356,7 +4356,8 @@ def _begin_interactive_storm(
     ss, max_rounds = _storm_setup(
         state, atk, dfd, walls_range_override=walls_range_override,
         reposition_defender=reposition_defender,
-        reposition_attacker=reposition_attacker)
+        reposition_attacker=reposition_attacker,
+        defender_front=defender_front)
     result = BattleResult(engagement="storm", attacker=atk, defender=dfd)
     result.rounds.append(_storm_run_round(state, atk, dfd, ss, 1))
     pl = dict(pl)
@@ -4561,8 +4562,21 @@ def _finish_storm(
     return receipt
 
 
+def _h_storm_front(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "storm_front", side)
+    lord_id = action.get("lord_id")
+    _require(isinstance(lord_id, str) and lord_id in pd.payload["defender_ids"],
+             "choose a besieged Lord for the defending Storm Front", code="bad_arg")
+    resume = pd.payload["_storm_front_resume"]
+    state.pending = None
+    state.meta.active_player = resume["active_player"]
+    _record(state, action, f"{side} places {lord_id} in the defending Storm Front")
+    return _h_cmd_storm(state, resume["action"], _holds_chosen=True, _defender_front=lord_id)
+
+
 def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
-                 _holds_chosen: bool = False) -> dict[str, Any]:
+                 _holds_chosen: bool = False, _defender_front: str | None = None) -> dict[str, Any]:
     """4.5.2 Storm. Active Lord outside a Besieged Stronghold (i.e.,
     with at least one of our Siege markers at the Locale) assaults
     the defending Garrison + any besieged enemy Lords inside.
@@ -4664,6 +4678,15 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
         prompt = _begin_combat_holds(state, action, side, besieger_ids, enemy_inside, storm=True)
         if prompt is not None:
             return prompt
+    if len(enemy_inside) > 1 and _defender_front is None:
+        defender_side = _other(side)
+        state.pending = PendingDecision(kind="storm_front", waiting_on=defender_side, payload={
+            "attacker_ids": besieger_ids, "defender_ids": enemy_inside,
+            "_storm_front_resume": {"action": deepcopy(action),
+                                    "active_player": state.meta.active_player},
+        })
+        state.meta.active_player = defender_side
+        return {"pending": "storm_front", "waiting_on": defender_side}
     surprise_loc = state.meta.surprise_storm_pending_locale_id
     walls_override: tuple[int, int] | None = None
     if surprise_loc == here:
@@ -4690,13 +4713,15 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
             state, action, atk, dfd, pl,
             walls_range_override=walls_override,
             reposition_defender=reposition_defender,
-            reposition_attacker=reposition_attacker)
+            reposition_attacker=reposition_attacker,
+            defender_front=_defender_front)
     concede_after_round = action.get("concede_after_round")
     result = resolve_storm(
         state, atk, dfd, walls_range_override=walls_override,
         concede_after_round=concede_after_round,
         reposition_defender=reposition_defender,
-        reposition_attacker=reposition_attacker)
+        reposition_attacker=reposition_attacker,
+        defender_front=_defender_front)
     if surprise_loc == here:
         state.meta.surprise_storm_pending_locale_id = None
     return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
@@ -7925,6 +7950,7 @@ def _h_cap_bishoprics(state: GameState, action: dict[str, Any]) -> dict[str, Any
 
 CAMPAIGN_HANDLERS = {
     "combat_holds": _h_combat_holds,
+    "storm_front": _h_storm_front,
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
     "cap_fueros": _h_cap_fueros,

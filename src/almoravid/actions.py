@@ -2108,7 +2108,7 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
     if state.pending is not None and state.pending.kind in {
-        "combat_holds", "relief_sally", "oneround_timing",
+        "combat_holds", "relief_sally", "oneround_timing", "storm_front",
     }:
         _require(action_type in {state.pending.kind, "cap_bishoprics"},
                  "finish the pending combat choice before continuing", code="pending_decision")

@@ -134,6 +134,7 @@ def test_arrada_fires_from_defending_reserve_during_christian_storm(missile_step
     state.locales["zaragoza"].siege_yellow = 1
     state.lords["al_mutamid"].capabilities = ["M17"]
     apply_action(state, {"type": "cmd_storm", "side": "christian"})
+    apply_action(state, {"type": "storm_front", "side": "muslim", "lord_id": "al_mustain"})
     # Al-Mustain starts in Front. Arrada adds to the Garrison's three Hits.
     assert missile_steps[0].step == "1.a"
     assert missile_steps[0].rounded_hits == 6

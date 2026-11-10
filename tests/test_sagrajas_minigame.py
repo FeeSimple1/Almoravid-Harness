@@ -110,7 +110,7 @@ def test_defend_branch_makes_muslims_attacker():
 
 
 # --- Regression: 6-round safety cap must not decide the result -----------
-@pytest.mark.parametrize("seed", [3, 25, 67])
+@pytest.mark.parametrize("seed", [9, 34, 55])
 def test_defend_branch_resolves_past_six_rounds_no_colocation(seed):
     """ChatGPT-found bug: the defend branch could hit the resolver's 6-Round
     safety cap with winner=None, leaving Christian+Muslim Lords co-located at
@@ -120,8 +120,8 @@ def test_defend_branch_resolves_past_six_rounds_no_colocation(seed):
     Seeds recalibrated 2026-07-05: the 4.4.2 TOTAL HITS missile-overlap
     dedup (Bowmen+Javelins Militia fire x1 on the Javelin Round, not
     x1.5) shortened the original 57/96 runs to 5 Rounds.
-    Recalibrated 2026-10-20 after removing the cross-Lord missile-cap
-    leak: seeds 3/25/67 take 7/9/7 Rounds with the corrected profiles."""
+    Recalibrated after correcting remaining Hits on Rout. Seeds
+    9/34/55 take 8/7/8 Rounds with the corrected resolution."""
     s = load_scenario("sagrajas", seed=seed)
     apply_action(s, {"type": "sagrajas_defend", "side": "christian"})
     r = resolve_sagrajas(s)

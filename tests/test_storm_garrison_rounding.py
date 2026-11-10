@@ -24,7 +24,7 @@ def test_garrison_pools_with_lord_before_single_ceil() -> None:
     1 + 2 = 3."""
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     hits = _storm_melee_hits(
-        s, {}, [{"militia": 1}], [], side_is_christian=False,
+        s, {}, {"al_mustain": {"militia": 1}}, [], side_is_christian=False,
         round_idx=1, garrison={"men_at_arms": 1, "militia": 1})
     assert hits == 2
 
@@ -37,7 +37,7 @@ def test_bgbook_jativa_pool_is_five_dice() -> None:
     abu = {"sergeants": 1, "light_horse": 1, "men_at_arms": 1,
            "militia": 2}
     hits = _storm_melee_hits(
-        s, {}, [abu], [], side_is_christian=False, round_idx=1,
+        s, {}, {"abu_bakr": abu}, [], side_is_christian=False, round_idx=1,
         garrison={"men_at_arms": 1, "militia": 1})
     assert hits == 5
 
@@ -47,7 +47,7 @@ def test_combined_lane_subject_to_six_cap() -> None:
     -> capped at 6 (previously 6 + 2 = 8)."""
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     hits = _storm_melee_hits(
-        s, {}, [{"men_at_arms": 6}], [], side_is_christian=False,
+        s, {}, {"al_mustain": {"men_at_arms": 6}}, [], side_is_christian=False,
         round_idx=1, garrison={"men_at_arms": 1, "militia": 1})
     assert hits == 6
 
@@ -57,7 +57,7 @@ def test_garrison_alone_uncapped_single_ceil() -> None:
     Militia = 4.5 raw) -> 5 Hits."""
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     hits = _storm_melee_hits(
-        s, {}, [], [], side_is_christian=False, round_idx=1,
+        s, {}, {}, [], side_is_christian=False, round_idx=1,
         garrison={"men_at_arms": 3, "militia": 3})
     assert hits == 5
 
@@ -68,7 +68,7 @@ def test_second_front_lord_not_pooled_with_garrison() -> None:
     = 2 + 1 = 3."""
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     hits = _storm_melee_hits(
-        s, {}, [{"militia": 1}, {"militia": 1}], [],
+        s, {}, {"al_mustain": {"militia": 1}, "al_mutamid": {"militia": 1}}, [],
         side_is_christian=False, round_idx=1,
         garrison={"men_at_arms": 1, "militia": 1})
     assert hits == 3
