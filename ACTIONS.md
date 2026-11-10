@@ -68,6 +68,11 @@ Events before choosing.
 {"type": "combat_holds", "side": "christian", "card_id": "C8"}
 ```
 
+In a Relief Sally, the Cantador menu specifies a participating Christian
+Lord with `lord_id`. Up to four of that Lord's Knights and Sergeants
+gain one Melee Hit each in Round 1. Omitting `lord_id` assigns the card
+to the Lord with the most eligible units among those in the striking lanes.
+
 Playing M7 Spear Wall requires `lord_ids` with two distinct Muslim
 Lords participating in the Battle, or the sole Lord if only one is
 participating. The menu offers each legal selection. The choice stays
@@ -102,6 +107,17 @@ A concession resolves the current round with Pursuit and ends the
 engagement. If both sides pass, the round resolves normally and the
 attacker answers first again if combat continues. The synchronous
 `*_concede_round` arguments are for referee-controlled play and replays.
+
+For a Relief Sally, Stand & Fight also offers `interactive_concede` and
+`interactive_timing` together. Before Round 1, each side with Javelins
+gets an `oneround_timing` choice for its eligible Lords. `javelin_round`
+sets a shared default of Round 1 when omitted. `javelin_rounds` overrides
+the default by Lord. Use a positive round number or `null` to decline.
+The chosen timing persists through save and reload.
+
+```json
+{"type": "oneround_timing", "side": "muslim", "javelin_rounds": {"al_mutamid": 1, "al_mundir": 2}}
+```
 
 ## Choosing losing Lords' fates
 

@@ -63,6 +63,9 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                 eligible = combat_hold_lord_ids(side, payload)
                 moves.extend({**play, "lord_ids": list(ids)}
                              for ids in combinations(eligible, min(2, len(eligible))))
+            elif card == "C8" and payload.get("relief"):
+                moves.extend({**play, "lord_id": lid}
+                             for lid in combat_hold_lord_ids(side, payload))
             else:
                 moves.append(play)
         return moves + [{"type": "combat_holds", "side": side}]
@@ -241,6 +244,12 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
             for rnd_i in range(1, maxr + 1):
                 moves.append({"type": "oneround_timing", "side": side,
                               "javelin_round": rnd_i})
+        if "relief_javelin_lords" in pl:
+            moves.append({"type": "oneround_timing", "side": side, "javelin_round": None})
+            role = pl["timing_queue"][0]
+            moves.extend({"type": "oneround_timing", "side": side,
+                          "javelin_rounds": {lid: 2}}
+                         for lid in pl["relief_javelin_lords"][role])
         if effects.get("m7"):
             for rnd_i in range(1, maxr + 1):
                 moves.append({"type": "oneround_timing", "side": side,
@@ -1630,6 +1639,11 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
     # Stand & Fight is always available (Battle resolution is the
     # default outcome if nothing else fires).
     out.append({"type": "respond_stand_battle", "side": side, "interactive_retreat": True})
+    from almoravid.effective import is_besieged
+    if any(lord.side == active_side and lord.cylinder.kind == "locale"
+           and lord.cylinder.locale_id == locale_id and lord.in_stronghold
+           and is_besieged(state, lord.id) for lord in state.lords.values()):
+        out.append({**out[-1], "interactive_concede": True, "interactive_timing": True})
 
     # Withdraw: friendly stronghold present, capacity check.
     try:

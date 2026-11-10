@@ -3930,7 +3930,7 @@ def combat_hold_candidates(state: GameState, side: Side, payload: dict[str, Any]
 
 def _begin_combat_holds(state: GameState, action: dict[str, Any], attacker_side: Side,
                         attacker_ids: list[str], defender_ids: list[str], *,
-                        storm: bool = False) -> dict[str, Any] | None:
+                        storm: bool = False, relief: bool = False) -> dict[str, Any] | None:
     """Collect the owners' plays before committing any combat dice or effects."""
     if not action.get("interactive_concede"):
         keys = ("concede_after_round",) if storm else (
@@ -3941,6 +3941,8 @@ def _begin_combat_holds(state: GameState, action: dict[str, Any], attacker_side:
         "attacker_side": attacker_side, "attacker_ids": attacker_ids,
         "defender_ids": defender_ids, "storm": storm,
     }
+    if relief:
+        payload["relief"] = True
     # Window availability depends on Held-card counts, never their private identities.
     if not any(state.decks.held.get(side, [])
                for side in (attacker_side, _other(attacker_side))):
@@ -3962,6 +3964,9 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     card = action.get("card_id")
     _require(card == "M7" or "lord_ids" not in action,
              "lord_ids are only used when playing Spear Wall", code="bad_arg")
+    relief_cantador = card == "C8" and payload.get("relief")
+    _require(relief_cantador or "lord_id" not in action,
+             "lord_id is used to play Cantador in a Relief Sally", code="bad_arg")
     if card is not None:
         _require(isinstance(card, str) and card in combat_hold_candidates(state, side, payload),
                  "choose one of your applicable Held combat Events", code="bad_combat_hold")
@@ -3975,6 +3980,11 @@ def _h_combat_holds(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      f"Spear Wall requires {count} distinct Muslim Lords in this Battle",
                      code="bad_arg")
             state.meta.spear_wall_lord_ids = list(ids)
+        if relief_cantador and "lord_id" in action:
+            lid = action["lord_id"]
+            _require(isinstance(lid, str) and lid in combat_hold_lord_ids(side, payload),
+                     "choose a participating Christian Lord for Cantador", code="bad_arg")
+            state.meta.cantador_lord_id = lid
         play_combat_hold(state, side, card, defending=side != payload["attacker_side"],
                          storm=payload["storm"])
         _record(state, action, f"{side} plays {card} before combat")
@@ -4113,6 +4123,24 @@ def _h_oneround_timing(state: GameState,
     pd = _require_pending(state, "oneround_timing", side)
     pl = pd.payload
     role = pl["timing_queue"][0]
+    if "relief_javelin_lords" in pl:
+        eligible = pl["relief_javelin_lords"][role]
+        default_round = action.get("javelin_round", 1)
+        overrides = action.get("javelin_rounds", {})
+        _require(isinstance(overrides, dict) and all(lid in eligible for lid in overrides),
+                 "choose timing only for your participating Lords with Javelins", code="bad_arg")
+        _require(all(r is None or (type(r) is int and r >= 1)
+                     for r in [default_round, *overrides.values()]),
+                 "Javelin timing requires a positive round or null to decline", code="bad_arg")
+        _require("m7_round" not in action,
+                 "this Relief Sally choice is for Javelins", code="bad_arg")
+        pl["rs"]["javelin_rounds"].update(
+            (lid, overrides.get(lid, default_round)) for lid in eligible)
+        _record(state, action, f"{side} chooses Relief Sally Javelin timing")
+        pl["timing_queue"] = pl["timing_queue"][1:]
+        advance = (_pend_relief_timing(state, pl) if pl["timing_queue"]
+                   else _pend_field_concede(state, pl, kind="relief_concede"))
+        return {"oneround_timing": "set", "advance": advance}
     snap = pl["attacker"] if role == "attacker" else pl["defender"]
     maxr = pl.get("max_rounds")
     effects = pl.get("timing_effects", {"javelin": False, "m7": False})
@@ -5310,6 +5338,16 @@ def _finish_relief_sally(
     }
 
 
+def _pend_relief_timing(state: GameState, pl: dict[str, Any]) -> dict[str, Any]:
+    role = pl["timing_queue"][0]
+    side = pl["active_side"] if role == "attacker" else pl["other"]
+    pl["timing_effects"] = {"javelin": True, "m7": False}
+    state.pending = PendingDecision(kind="oneround_timing", waiting_on=side, payload=pl)
+    state.meta.active_player = side
+    return {"pending": "oneround_timing", "side": side, "role": role,
+            "javelin_lords": pl["relief_javelin_lords"][role]}
+
+
 def _begin_interactive_relief(
     state: GameState,
     action: dict[str, Any],
@@ -5318,9 +5356,8 @@ def _begin_interactive_relief(
     defender_lord_ids: list[str],
     pl: dict[str, Any],
 ) -> dict[str, Any]:
-    """Start a reactive Relief Sally: build the lane state and pause on a
-    relief_concede decision before Round 1 (either side may Concede)."""
-    from almoravid.battle import _relief_setup, _relief_to_snapshot
+    """Build the lanes and collect timing and Concede choices before Round 1."""
+    from almoravid.battle import _relief_setup, _relief_to_snapshot, relief_javelin_lords
     rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_lord_ids,
                        besieger_side=pl["other"], locale_id=pl["locale_id"],
                        max_rounds=None)
@@ -5329,6 +5366,14 @@ def _begin_interactive_relief(
     pl["interactive_retreat"] = bool(action.get("interactive_retreat"))
     pl["round_idx"] = 1
     pl["max_rounds"] = None
+    if action.get("interactive_timing"):
+        lords = {bs.role: relief_javelin_lords(state, bs)
+                 for bs in (rs.result.attacker, rs.result.defender)}
+        queue = [role for role, ids in lords.items() if ids]
+        if queue:
+            pl["relief_javelin_lords"] = lords
+            pl["timing_queue"] = queue
+            return _pend_relief_timing(state, pl)
     return _pend_field_concede(state, pl, kind="relief_concede")
 
 
@@ -5491,7 +5536,7 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
     if not _holds_chosen:
         prompt = _begin_combat_holds(
             state, action, active_side, marcher_ids + sallyer_ids,
-            defender_lord_ids)
+            defender_lord_ids, relief=bool(sallyer_ids))
         if prompt is not None:
             return prompt
     # B6 (4.4.1): the relieving Marchers and the Sallying (Besieged)

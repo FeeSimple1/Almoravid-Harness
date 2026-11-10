@@ -778,6 +778,8 @@ def _resolve_step(
     c8_ctx: dict[str, Any] | None = None,
     arrada_active: bool = False,
     target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
+    strike_rows: list[StrikeRow] | None = None,
+    cantador_forces: dict[UnitType, int] | None = None,
 ) -> StepResolution:
     # Rules of Play 4.4.1-.2: unequal armies still resolve Hits per Lord.
     # A singleton opposite a multi-Lord array occupies Front center.
@@ -808,14 +810,11 @@ def _resolve_step(
             walls_range, siege_markers, context, unit_class, result)
         return result
 
-    rows = build_strike_rows(state, actor, context=context)
-    # (a) Javelins / other one_round_only Strikes fire on only ONE Round.
-    # The owner may choose WHICH Round (Arts of War ref C7/M3 "any 1 Battle
-    # Round"); we default to Round 1 (full-strength, max effect) and drop
-    # one_round_only rows thereafter. (Owner round-choice TODO: a per-combat
-    # policy, consistent with the atomic resolver's Concede/Reposition.)
-    if round_index != actor.oneround_round:
-        rows = [r for r in rows if not r.one_round_only]
+    rows = strike_rows
+    if rows is None:
+        rows = build_strike_rows(state, actor, context=context)
+        if round_index != actor.oneround_round:
+            rows = [r for r in rows if not r.one_round_only]
     rows = _dedupe_missile_overlap(rows)
     raw, by_kind = _step_hits(rows, step_type, unit_class)
 
@@ -862,14 +861,15 @@ def _resolve_step(
             and round_index == 1
             and actor.side == "christian"
             and "C8" in state.decks.this_levy_events.get("christian", [])):
-        eligible = 0
-        for r in rows:
-            if r.kind == "melee" and r.unit_type in ("knights", "sergeants"):
-                if _unit_class(r.unit_type) == unit_class:
-                    eligible += r.count
-        # Shared per-Round budget: Knights (Horse step) and Sergeants
-        # (Foot step) draw from the SAME pool of 4 (combined cap). Falls
-        # back to a local cap of 4 only if no Round context was threaded.
+        if cantador_forces is not None:
+            eligible = sum(cantador_forces.get(ut, 0)
+                           for ut in ("knights", "sergeants")
+                           if _unit_class(ut) == unit_class)
+        else:
+            eligible = sum(r.count for r in rows
+                           if r.kind == "melee" and r.unit_type in ("knights", "sergeants")
+                           and _unit_class(r.unit_type) == unit_class)
+        # The chosen Lord's Knights and Sergeants share one four-unit budget.
         budget = c8_ctx["budget"] if c8_ctx is not None else 4
         eligible = min(eligible, budget)
         if eligible > 0:
@@ -2454,6 +2454,7 @@ class _ReliefState:
     other: Side
     max_rounds: int | None
     locale_id: str
+    javelin_rounds: dict[str, int | None] = field(default_factory=dict)
 
 
 def _relief_name_of(rs: _ReliefState, side_obj: BattleSide) -> str:
@@ -2523,18 +2524,51 @@ def _relief_cap_groups(state: GameState, rs: _ReliefState,
     return groups
 
 
+def relief_javelin_lords(state: GameState, side: BattleSide) -> list[str]:
+    """Relief participants with a Javelin Strike, including Reserves."""
+    return [lid for lid in side.lord_ids if any(
+        row.one_round_only for row in build_strike_rows(
+            state, _pooled_battleside(state, [lid], side.side, side.role)))]
+
+
+def _relief_missile_rows(state: GameState, rs: _ReliefState, actor: BattleSide,
+                         round_index: int) -> list[StrikeRow]:
+    lane_forces = rs.lf[_relief_name_of(rs, actor)]
+    rows: list[StrikeRow] = []
+    for group, lid in enumerate(actor.lord_ids):
+        lord = state.lords[lid]
+        single = BattleSide(side=actor.side, role=actor.role, lord_ids=[lid],
+                            forces=lane_forces[lid], capabilities_in_play=lord.capabilities)
+        timing = rs.javelin_rounds.get(lid, actor.oneround_round)
+        rows.extend(replace(row, group=group) if row.group >= 0 else row
+                    for row in build_strike_rows(state, single)
+                    if not row.one_round_only or round_index == timing)
+    return rows
+
+
 def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
-                      attacker_side: BattleSide, defender_side: BattleSide,
-                      **kw: Any) -> StepResolution:
+                      attacker_side: BattleSide, defender_side: BattleSide, *,
+                      step_id: str, step_type: str, unit_class: UnitClass | None,
+                      round_index: int, walls_range: tuple[int, int] | None,
+                      c8_ctx: dict[str, Any] | None) -> StepResolution:
     attacker_side.cap_groups = _relief_cap_groups(state, rs, attacker_side)
     defender_side.cap_groups = _relief_cap_groups(state, rs, defender_side)
-    target = defender_side if actor_role == "attacker" else attacker_side
+    actor, target = ((attacker_side, defender_side) if actor_role == "attacker"
+                     else (defender_side, attacker_side))
+    rows = None
+    if step_type == "missile" and any(
+            rs.javelin_rounds.get(lid, actor.oneround_round) != actor.oneround_round
+            for lid in actor.lord_ids):
+        rows = _relief_missile_rows(state, rs, actor, round_index)
+    cantador_forces = None
+    if c8_ctx is not None:
+        cantador_forces = rs.lf[_relief_name_of(rs, actor)].get(c8_ctx["lord_id"], {})
     before = dict(target.forces)
-    step = _resolve_step(state, kw["step_id"], actor_role,
-                         kw["step_type"], kw["unit_class"],
+    step = _resolve_step(state, step_id, actor_role, step_type, unit_class,
                          attacker_side, defender_side, context="battle",
-                         walls_range=kw.get("walls_range"),
-                         arrada_active=True,
+                         walls_range=walls_range, round_index=round_index,
+                         c8_ctx=c8_ctx, cantador_forces=cantador_forces,
+                         arrada_active=True, strike_rows=rows,
                          target_lord_forces=rs.lf[_relief_name_of(rs, target)])
     _relief_push_lane(rs, target, before)
     return step
@@ -2672,6 +2706,14 @@ def _relief_run_round(state: GameState, rs: _ReliefState,
     winner are the caller's responsibility."""
     rnd = BattleRound(index=rnd_i)
     def_front, def_rear = rs.def_front, rs.def_rear
+    c8_ctx = None
+    if rnd_i == 1 and "C8" in state.decks.this_levy_events.get("christian", []):
+        holder = state.meta.cantador_lord_id
+        if holder is None:
+            lanes = ("M", "S") if rs.active_side == "christian" else ("DF", "DR")
+            forces = {lid: units for lane in lanes for lid, units in rs.lf.get(lane, {}).items()}
+            holder = max(forces, key=lambda lid: _c8_bonus_for_forces(forces[lid]), default=None)
+        c8_ctx = {"lord_id": holder, "budget": 4}
     # Reposition (Round 2+): advance excess Reserve Defenders.
     if rnd_i >= 2 and rs.excess_ids:
         if def_front is not None:
@@ -2701,6 +2743,7 @@ def _relief_run_round(state: GameState, rs: _ReliefState,
             rnd.steps.append(_relief_lane_step(
                 state, rs, actor_role, attacker, defender,
                 step_id=step_id, step_type=step_type, unit_class=unit_class,
+                round_index=rnd_i, c8_ctx=c8_ctx,
                 walls_range=rs.walls if attacker is rs.sallyers else None))
         if _relief_over(state, rs):
             break
@@ -2789,6 +2832,7 @@ def _relief_to_snapshot(rs: _ReliefState) -> dict[str, Any]:
         "other": rs.other,
         "max_rounds": rs.max_rounds,
         "locale_id": rs.locale_id,
+        "javelin_rounds": dict(rs.javelin_rounds),
     }
 
 
@@ -2821,7 +2865,8 @@ def _relief_from_snapshot(state: GameState,
         defender_ids=list(snap["defender_ids"]),
         n_front=snap["n_front"], walls=walls,
         active_side=snap["active_side"], other=snap["other"],
-        max_rounds=snap["max_rounds"], locale_id=snap["locale_id"])
+        max_rounds=snap["max_rounds"], locale_id=snap["locale_id"],
+        javelin_rounds=dict(snap.get("javelin_rounds", {})))
 
 
 @reveal_combat_mats
