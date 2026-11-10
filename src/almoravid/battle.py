@@ -165,8 +165,8 @@ class BattleSide:
     # BATTLE path via side.array; Storm sides carry no array). When
     # set, build_strike_rows scopes capability-gated rows to these
     # (caps, forces) groups — one per Front Lord — instead of the
-    # pooled union. Recomputed by _storm_run_round each Round; never
-    # restored from snapshots.
+    # pooled union. Built before each side's Missile Strike and kept out
+    # of snapshots.
     cap_groups: list[Any] | None = None
     # None withholds the effect until the owner declares its use.
     m7_round: int | None = 1
@@ -1981,22 +1981,17 @@ def _storm_reserve_pick(reserve_ids: list[str],
 
 def _storm_cap_groups(state: GameState, ss: dict[str, Any], who: str,
                       side_obj: BattleSide) -> list[Any] | None:
-    """Per-Front-Lord (caps, forces) groups for pooled-Storm missile
-    scoping. A this_lord missile capability (C2/C4/C7/C9 and Muslim
-    twins) arms only its holder's units — the Background Book Játiva
-    Round 2 fires 2 Crossbow (Álvar) + 2 Bowmen (Alfonso) Hits, not a
-    pooled union. Single-Lord Fronts return None (pooled == that one
-    Lord; preserves caller-injected capabilities_in_play)."""
-    front = ss[f"{who}_front"]
-    if len(front) <= 1:
+    """Group Missile capabilities with their Front Lord's current Forces.
+
+    A side with one participant can use its BattleSide's capabilities
+    directly, including capabilities supplied by the caller.
+    """
+    if len(side_obj.lord_ids) <= 1:
         return None
-    pooled = list(side_obj.capabilities_in_play)
-    groups: list[Any] = []
-    for lid in front:
-        lord = state.lords.get(lid)
-        caps = list(lord.capabilities) if lord is not None else pooled
-        groups.append((caps, dict(ss[f"{who}_lord_forces"][lid])))
-    return groups
+    return [
+        (list(state.lords[lid].capabilities), dict(ss[f"{who}_lord_forces"][lid]))
+        for lid in ss[f"{who}_front"]
+    ]
 
 
 def _storm_run_round(state: GameState, attacker: BattleSide,
@@ -2010,6 +2005,11 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     wr = ss["walls_range"]
     walls_range = (int(wr[0]), int(wr[1])) if wr else None
     if round_idx >= 2:
+        # Remove Routed Lords before checking room for Reserve advances.
+        for who in ("a", "d"):
+            front = ss[f"{who}_front"]
+            unrouted = _unrouted_lord_ids(ss[f"{who}_lord_forces"])
+            front[:] = [lid for lid in front if lid in unrouted]
         d_prio = state.meta.array_reserve_priority.get(defender.side, [])
         a_prio = state.meta.array_reserve_priority.get(attacker.side, [])
         # Defender: forced commit if Front wiped, else the optional "may add
@@ -2035,7 +2035,6 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     defender.forces = _storm_front_agg(ss, "d")
     attacker.forces = _storm_front_agg(ss, "a")
     defender.cap_groups = _storm_cap_groups(state, ss, "d", defender)
-    attacker.cap_groups = _storm_cap_groups(state, ss, "a", attacker)
     # 1.a Defender Missile -> Attacker.
     before = dict(attacker.forces)
     rnd.steps.append(_resolve_step(
@@ -2047,6 +2046,7 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     attacker.forces = _storm_front_agg(ss, "a")
     # 1.b Attacker Missile -> Defender.
     if _storm_attacker_front_alive(ss):
+        attacker.cap_groups = _storm_cap_groups(state, ss, "a", attacker)
         before_d = dict(defender.forces)
         rnd.steps.append(_resolve_step(
             state, "1.b", "attacker", "missile", None, attacker, defender,
