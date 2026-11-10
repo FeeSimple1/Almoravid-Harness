@@ -61,7 +61,8 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
 
     With Hidden Mats on, the opponent's on-map Lords have their strength fields hidden
     (replaced by None) and a `hidden_mat: True` flag added, except for
-    Lords in Battle/Storm. Private cards and unused Plans are hidden
+    Lords in Battle/Storm. Opponent Muster choices are screened in history;
+    Advanced Vassal Service markers are public. Private cards and unused Plans are hidden
     regardless of the Hidden Mats option (1.9, 3.1.3, 4.1). The engine's
     full state remains available through GameState.model_dump()."""
     dump = state.model_dump()
@@ -109,13 +110,20 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     decks["held"][opp] = None
     # Neither player may inspect the order of undrawn Arts of War cards.
     decks["draw"] = None
-    # The action log must not provide a second route to the hidden cards.
+    # Screen private choices in the action log as well as on the mats.
     for entry in dump["history"]:
         # Scenario-loading history duplicates the seed even for the system
         # actor. Strip controller RNG inputs before any ownership filtering.
         entry["args"].pop("seed", None)
         entry["args"].pop("rng_state", None)
         if entry["actor"] != opp:
+            continue
+        if state.meta.hidden_mats and entry["action"] in {"levy_take_vassal", "levy_transport"}:
+            # The Lord's expenditure is public. For Advanced Vassal Service,
+            # the Calendar exposes the Vassal whose marker was placed there.
+            lord_id = entry["args"].get("lord_id")
+            entry["args"] = {"lord_id": lord_id} if lord_id is not None else {}
+            entry["summary"] = f"{opp}: {entry['action']} (private Muster)"
             continue
         event_card = entry["args"].get("card_id")
         private_event = (entry["action"] == "aow_implement_event"

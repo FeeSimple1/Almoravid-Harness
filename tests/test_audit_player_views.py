@@ -1,12 +1,15 @@
-"""Audit regressions: combat Mats stay visible and unused Plans stay private."""
+"""Audit regressions for player views and action history."""
+
 import pytest
 
 from almoravid.actions import apply_action
+from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
-from almoravid.state import HistoryEntry, PendingDecision, PlanEntry
+from almoravid.state import GameState, HistoryEntry, PendingDecision, PlanEntry
 from almoravid.views import redacted_view
-from tests.test_interactive_approach_battle import _march_into_battle
+from tests._plan_helpers import step_levy
 from tests.combat_choices import apply_combat_choices
+from tests.test_interactive_approach_battle import _march_into_battle
 
 
 def test_approach_mats_remain_visible_during_interactive_battle():
@@ -85,3 +88,53 @@ def test_implicit_drawn_card_id_is_not_leaked_through_history():
     view = redacted_view(state, "muslim")
     assert "C18" not in view["history"][-1]["summary"]
     assert view["history"][-1]["args"] == {}
+
+
+@pytest.mark.parametrize(("hidden_mats", "advanced_service"), [
+    (True, False), (False, False), (True, True),
+])
+def test_muster_history_screens_opponent_choices(hidden_mats, advanced_service):
+    state = load_scenario("scenario_a_toledo_beset", seed=0)
+    state.meta.hidden_mats = hidden_mats
+    state.meta.advanced_vassal_service = advanced_service
+    apply_action(state, {"type": "begin_levy"})
+    for _ in range(30):
+        if state.meta.levy_step == "muster":
+            break
+        step_levy(state)
+    assert (state.meta.levy_step, state.meta.active_player) == ("muster", "christian")
+
+    take = next(move for move in legal_moves(state)
+                if move["type"] == "levy_take_vassal" and move["lord_id"] == "alfonso")
+    vassal = state.lords["alfonso"].vassals[take["vassal_index"]]
+    apply_action(state, take)
+    transport = next(move for move in legal_moves(state) if move["type"] == "levy_transport"
+                     and move["lord_id"] == "alfonso" and move["transport"] == "cart")
+    apply_action(state, transport)
+
+    before = state.model_dump()
+    owner_history = redacted_view(state, "christian")["history"][-2:]
+    assert owner_history == before["history"][-2:]
+    assert owner_history[0]["args"]["vassal_index"] == take["vassal_index"]
+    assert vassal.name in owner_history[0]["summary"]
+    assert owner_history[1]["args"]["transport"] == "cart"
+
+    opponent = redacted_view(state, "muslim")
+    vassal_entry, transport_entry = opponent["history"][-2:]
+    if hidden_mats:
+        assert opponent["lords"]["alfonso"]["vassals"] is None
+        assert opponent["lords"]["alfonso"]["assets"] is None
+        assert vassal_entry["action"] == "levy_take_vassal"
+        assert transport_entry["action"] == "levy_transport"
+        assert vassal_entry["args"] == transport_entry["args"] == {"lord_id": "alfonso"}
+        assert vassal.name not in vassal_entry["summary"]
+        assert "cart" not in transport_entry["summary"].lower()
+    else:
+        assert [vassal_entry, transport_entry] == owner_history
+
+    markers = opponent["calendar"]["service_markers"]
+    assert any(marker["lord_id"] == "alfonso" and marker["vassal_id"] == vassal.id
+               for marker in markers) == advanced_service
+    assert state.model_dump() == before
+    restored = GameState.model_validate_json(state.model_dump_json())
+    assert redacted_view(restored, "muslim") == opponent
