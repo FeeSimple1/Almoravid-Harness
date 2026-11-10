@@ -4194,7 +4194,8 @@ def _h_battle_concede(state: GameState,
         (int(dwr_raw[0]), int(dwr_raw[1])) if dwr_raw else None)
     atk.conceded = declared and role == "attacker"
     dfd.conceded = declared and role == "defender"
-    _battle_one_round(state, atk, dfd, round_idx, defender_walls_range=dwr)
+    _battle_one_round(state, atk, dfd, round_idx,
+                      engagement=pl["engagement_label"], defender_walls_range=dwr)
     rounds_done: int = pl["rounds_done"] + 1
     # Rules of Play 4.4.2: ordinary Battle has no round limit.
     ended = atk.conceded or dfd.conceded or _battle_over(atk, dfd)

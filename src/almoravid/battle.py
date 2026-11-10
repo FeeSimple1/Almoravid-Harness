@@ -35,10 +35,11 @@ Bug-pattern preemption:
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
+from almoravid.capabilities import lord_has_capability
 from almoravid.rng import roll_d6
 from almoravid.state import AssetType, GameState, Lord, Side, UnitType
 from almoravid.static_data import load_forces
@@ -51,6 +52,8 @@ UnitClass = Literal["horse", "foot"]
 
 # Rate string -> (numerator, denominator) for Hit computation
 _RATE = {"x2": (2, 1), "x1": (1, 1), "x1/2": (1, 2)}
+_ARRADA_HITS = 3.0
+_ARMOR_PENALTIES = {"crossbows": 1, "arrada": 2}
 
 # Which side strikes in each substep
 _BATTLE_STEPS: list[tuple[str, Role, str, UnitClass | None]] = [
@@ -549,7 +552,7 @@ def _allocate_rounded_hits(total: float, by_kind: dict[str, float]) -> dict[str,
     leftover = rounded_total - floors_sum
     if leftover > 0:
         # Mixed-missile priority for the leftover half-Hit.
-        priority = ["crossbows", "bowmen", "javelins", "slingers", "missiles", "melee"]
+        priority = ["crossbows", "bowmen", "javelins", "slingers", "missiles", "melee", "arrada"]
         # Build candidates that contributed a fractional half (i.e.,
         # contrib > floor(contrib)).
         candidates = [k for k in priority
@@ -762,6 +765,10 @@ def _resolve_protection_roll(
     return (False, chosen)
 
 
+def _unrouted_lord_ids(forces_by_lord: dict[str, dict[UnitType, int]]) -> list[str]:
+    return [lid for lid, forces in forces_by_lord.items() if any(n > 0 for n in forces.values())]
+
+
 def _resolve_step(
     state: GameState,
     step_id: str,
@@ -776,7 +783,7 @@ def _resolve_step(
     round_index: int = 0,
     melee_hits_override: int | None = None,
     c8_ctx: dict[str, Any] | None = None,
-    arrada_active: bool = False,
+    arrada_lord_ids: Collection[str] | None = None,
     target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
     strike_rows: list[StrikeRow] | None = None,
     cantador_forces: dict[UnitType, int] | None = None,
@@ -791,7 +798,7 @@ def _resolve_step(
         return _resolve_step_per_pair(
             state, step_id, actor_role, step_type, unit_class,
             attacker, defender, round_index=round_index, c8_ctx=c8_ctx,
-            walls_range=walls_range,
+            walls_range=walls_range, sallying_lord_ids=arrada_lord_ids or (),
         )
 
     actor = attacker if actor_role == "attacker" else defender
@@ -878,6 +885,18 @@ def _resolve_step(
             raw += float(eligible)
             by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
+    # M17 Arrada is a separate Missile kind so its Hits roll separately
+    # for Walls and use -2 Enemy Armor. A Storm permits a holder in
+    # Reserve, while a Sally requires the holder to be Sallying.
+    if step_type == "missile" and actor.side == "muslim":
+        if arrada_lord_ids is None:
+            arrada_lord_ids = actor.lord_ids if context == "storm" else ()
+        if (context == "storm" or (actor_role == "attacker" and actor.has_unrouted())) and any(
+                lid in arrada_lord_ids and lord_has_capability(state, lid, "M17")
+                for lid in actor.lord_ids):
+            raw += _ARRADA_HITS
+            by_kind["arrada"] = _ARRADA_HITS
+
     # Phase 6e: Concede halves the Conceding side's Strikes this Round
     # (rule 4.4.2 concede_check + pursuit_marker — "halve first, then
     # round up by step").
@@ -905,22 +924,10 @@ def _resolve_step(
         # (only melee here so just attribute everything to melee).
         per_kind_hits = {"melee": rounded}
 
-    # M17 Arrada (Catapults): a Muslim Lord with Arrada at a Storm (or
-    # Sally) adds 3 Missile Hits to the Muslim Missiles step, resolved at
-    # -2 Enemy Armor (Arts of War ref M17; need not be the acting Lord).
-    arrada_n = 0
-    if (step_type == "missile" and actor.side == "muslim"
-            and (context == "storm" or arrada_active)):
-        from almoravid.capabilities import any_lord_with_capability as _alwc_m17
-        if set(_alwc_m17(state, "muslim", "M17")) & set(actor.lord_ids):
-            arrada_n = 3
-            per_kind_hits = dict(per_kind_hits)
-            per_kind_hits["arrada"] = per_kind_hits.get("arrada", 0) + 3
-    total_hits = rounded + arrada_n
     result = StepResolution(step=step_id, actor=actor_role,
-                            raw_hits=raw, rounded_hits=total_hits)
+                            raw_hits=raw, rounded_hits=rounded)
     _apply_step_cancellation_and_hits(
-        state, actor_role, target, per_kind_hits, total_hits,
+        state, actor_role, target, per_kind_hits, rounded,
         walls_range, siege_markers, context, unit_class, result,
         target_lord_forces=target_lord_forces)
     return result
@@ -987,7 +994,7 @@ def _apply_step_cancellation_and_hits(
             continue
         striker_selects_target = (kind == "crossbows")
         protroll_kind: StrikeKind = "melee" if kind == "melee" else "missiles"
-        minus_armor = 2 if kind == "arrada" else (1 if kind == "crossbows" else 0)
+        minus_armor = _ARMOR_PENALTIES.get(kind, 0)
         for _ in range(count):
             if not target.has_unrouted():
                 break
@@ -1097,6 +1104,7 @@ def _battle_one_round(
     defender: BattleSide,
     round_idx: int,
     *,
+    engagement: Literal["battle", "sally"] = "battle",
     defender_walls_range: tuple[int, int] | None = None,
     before_strike: Callable[[BattleSide, BattleSide, int, str], None] | None = None,
 ) -> BattleRound:
@@ -1161,6 +1169,7 @@ def _battle_one_round(
     else:
         steps_this_round = _BATTLE_STEPS
     c8_ctx = _build_c8_ctx(state, attacker, defender, round_idx)
+    sallying_lord_ids = attacker.lord_ids if engagement == "sally" else ()
     for step_id, actor_role, step_type, unit_class in steps_this_round:
         # 4.4.2 JAVELINS / Arts of War M7: owners may decide at the
         # moment of use, after Reposition and earlier Strikes. The hook
@@ -1176,7 +1185,8 @@ def _battle_one_round(
                                   unit_class, attacker, defender,
                                   round_index=round_idx,
                                   walls_range=defender_walls_range,
-                                  c8_ctx=c8_ctx)
+                                  c8_ctx=c8_ctx,
+                                  arrada_lord_ids=sallying_lord_ids)
         rnd.steps.append(step_res)
         if _battle_over(attacker, defender):
             break
@@ -1199,6 +1209,7 @@ def resolve_battle(
     attacker: BattleSide,
     defender: BattleSide,
     *,
+    engagement: Literal["battle", "sally"] = "battle",
     max_rounds: int | None = None,
     defender_walls_range: tuple[int, int] | None = None,
     attacker_concede_round: int | None = None,
@@ -1216,7 +1227,7 @@ def resolve_battle(
     the armies and the current round/step; combat still resolves here.
     """
     result = BattleResult(
-        engagement="battle",
+        engagement=engagement,
         attacker=attacker,
         defender=defender,
     )
@@ -1244,6 +1255,7 @@ def resolve_battle(
                 and round_idx >= defender_concede_round):
             defender.conceded = True
         rnd = _battle_one_round(state, attacker, defender, round_idx,
+                                engagement=engagement,
                                 defender_walls_range=defender_walls_range,
                                 before_strike=before_strike)
         result.rounds.append(rnd)
@@ -2029,7 +2041,8 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
     rnd.steps.append(_resolve_step(
         state, "1.a", "defender", "missile", None, attacker, defender,
         context="storm", walls_range=round_walls, siege_markers=sw,
-        round_index=round_idx))
+        round_index=round_idx,
+        arrada_lord_ids=_unrouted_lord_ids(ss["d_lord_forces"])))
     _storm_push_losses(ss, "a", attacker, before)
     attacker.forces = _storm_front_agg(ss, "a")
     # 1.b Attacker Missile -> Defender.
@@ -2038,7 +2051,8 @@ def _storm_run_round(state: GameState, attacker: BattleSide,
         rnd.steps.append(_resolve_step(
             state, "1.b", "attacker", "missile", None, attacker, defender,
             context="storm", walls_range=round_walls, siege_markers=sw,
-            round_index=round_idx))
+            round_index=round_idx,
+            arrada_lord_ids=_unrouted_lord_ids(ss["a_lord_forces"])))
         _storm_push_losses(ss, "d", defender, before_d)
         defender.forces = _storm_front_agg(ss, "d")
     # 2.a Defender Melee (+ Garrison) -> Attacker.
@@ -2329,15 +2343,13 @@ def resolve_sally(
                  else loc.siege_green)
         if siege > 0:
             defender_walls = (1, siege)
-    result = resolve_battle(state, attacker, defender,
-                            defender_walls_range=defender_walls,
-                            attacker_concede_round=attacker_concede_round,
-                            defender_concede_round=defender_concede_round)
-    result.engagement = "sally"
     # Sally-specific aftermath flag — actual Withdraw-back and Siege
     # marker reduction happen in apply_sally_aftermath called from the
     # cmd_sally handler.
-    return result
+    return resolve_battle(state, attacker, defender, engagement="sally",
+                          defender_walls_range=defender_walls,
+                          attacker_concede_round=attacker_concede_round,
+                          defender_concede_round=defender_concede_round)
 
 
 def apply_sally_aftermath(state: GameState, result: BattleResult,
@@ -2563,12 +2575,14 @@ def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
     cantador_forces = None
     if c8_ctx is not None:
         cantador_forces = rs.lf[_relief_name_of(rs, actor)].get(c8_ctx["lord_id"], {})
+    arrada_lord_ids = (_unrouted_lord_ids(rs.lf["S"])
+                       if step_type == "missile" and actor is rs.sallyers else ())
     before = dict(target.forces)
     step = _resolve_step(state, step_id, actor_role, step_type, unit_class,
                          attacker_side, defender_side, context="battle",
                          walls_range=walls_range, round_index=round_index,
                          c8_ctx=c8_ctx, cantador_forces=cantador_forces,
-                         arrada_active=True, strike_rows=rows,
+                         arrada_lord_ids=arrada_lord_ids, strike_rows=rows,
                          target_lord_forces=rs.lf[_relief_name_of(rs, target)])
     _relief_push_lane(rs, target, before)
     return step
@@ -3892,6 +3906,7 @@ def _resolve_step_per_pair(
     round_index: int = 0,
     c8_ctx: dict[str, Any] | None = None,
     walls_range: tuple[int, int] | None = None,
+    sallying_lord_ids: Collection[str] = (),
 ) -> StepResolution:
     """Per-pair Strike resolution (rule 4.4.2 multi-Lord Array).
 
@@ -4019,6 +4034,12 @@ def _resolve_step_per_pair(
                 raw += float(eligible)
                 by_kind["melee"] = by_kind.get("melee", 0.0) + float(eligible)
 
+        if (step_type == "missile" and actor.side == "muslim" and actor_role == "attacker"
+                and actor_lp.lord_id in sallying_lord_ids
+                and lord_has_capability(state, actor_lp.lord_id, "M17")):
+            raw += _ARRADA_HITS
+            by_kind["arrada"] = _ARRADA_HITS
+
         # Phase 6e Concede halving (applied to this Lord's contribution
         # before it is summed into the target's total -- rule 4.4.2
         # "halve first, then round up by step").
@@ -4069,7 +4090,7 @@ def _resolve_step_per_pair(
             striker_selects_target = (kind == "crossbows")
             protroll_kind: StrikeKind = ("melee" if kind == "melee"
                                          else "missiles")
-            minus_armor = 1 if kind == "crossbows" else 0
+            minus_armor = _ARMOR_PENALTIES.get(kind, 0)
             for _ in range(count):
                 if not target_lp.has_unrouted():
                     break
