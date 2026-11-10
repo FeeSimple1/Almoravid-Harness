@@ -629,10 +629,9 @@ def _resolve_protection_roll(
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
-    Phase 5e: defender picks the unit that takes the Hit (rule 4.4.2
-    ASSIGN HITS); for now we pick the first available unrouted unit
-    deterministically (highest-Protection first to maximize cancel
-    chance — a reasonable greedy default).
+    The receiving side's policy selects the unit for ordinary Hits.
+    Crossbows use the firing side's policy (4.4.2 ASSIGN HITS). A Storm
+    attacker must use its Armored units first under either policy (4.5.2).
 
     Pattern 9 audit fix (Bug H): Evade Protection (rule 4.4.2 + Forces
     table 'Evade range') is applied for units with an evade row in their
@@ -652,8 +651,8 @@ def _resolve_protection_roll(
         pools.append(("garrison", target_side.garrison_forces))
     pools.append(("forces", target_side.forces))
 
-    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, int, UnitType]]:
-        cs: list[tuple[int, int, UnitType]] = []
+    def _build_candidates(pool: dict[UnitType, int]) -> list[tuple[int, int, int, UnitType]]:
+        cs: list[tuple[int, int, int, UnitType]] = []
         for unit_type, count in pool.items():
             if count <= 0:
                 continue
@@ -665,6 +664,9 @@ def _resolve_protection_roll(
             if unit_rec is None:
                 continue
             ptype = unit_rec["protection"]["type"]
+            # Mandatory Storm eligibility precedes either side's policy.
+            armor_tier = int(context == "storm" and target_side.role == "attacker"
+                             and ptype != "armored")
             # Bug L (Pattern 7 audit) — Crossbow Hits: the FIRING side
             # selects the target unit (rule 1.3.1 / forces.json
             # firing_side_selects_target). DECISION-009: the pick
@@ -681,7 +683,7 @@ def _resolve_protection_roll(
                 # least-protected first to shield strong units (4.4.2).
                 prio, sec = {"auto_remove": 0, "unarmored": 1, "armored": 2,
                              "none": 3}.get(ptype, 4), 0
-            cs.append((prio, sec, unit_type))
+            cs.append((armor_tier, prio, sec, unit_type))
         cs.sort()
         return cs
 
@@ -690,7 +692,7 @@ def _resolve_protection_roll(
     for _pool_name, pool in pools:
         cands = _build_candidates(pool)
         if cands:
-            _, _, chosen = cands[0]
+            _, _, _, chosen = cands[0]
             chosen_pool = pool
             break
     if chosen is None:

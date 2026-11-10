@@ -44,10 +44,11 @@ def test_storm_ballesteros_arms_only_its_front_holder(holder):
     result = apply_combat_choices(state, {"type": "cmd_storm", "side": "christian"})
 
     assert result["rounds"] == 1
-    # In this seed, Alfonso's extra Crossbow Hit changes the later rolls
-    # and costs him his last unit. Only Ballesteros on his mat grants it.
+    # Garrison Crossbows hit Alfonso's Armored units before his Serf.
+    # His own extra Crossbow Hit changes the later rolls and costs him
+    # the remaining unit. Only Ballesteros on his mat grants that Hit.
     alfonso = state.lords["alfonso"]
-    assert alfonso.forces == ({} if holder == "alfonso" else {"men_at_arms": 1})
+    assert alfonso.forces == ({} if holder == "alfonso" else {"serfs": 1})
     assert alfonso.cylinder.kind == ("removed" if holder == "alfonso" else "locale")
 
 

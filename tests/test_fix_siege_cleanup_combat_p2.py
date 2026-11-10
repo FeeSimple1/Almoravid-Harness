@@ -20,7 +20,8 @@ def test_storm_loss_eliminating_sole_besieger_clears_siege_marker() -> None:
     """Drive a real Scenario-A Storm to the point where Álvar (the only
     besieger at Toledo) is wiped out, and assert the siege marker clears."""
     from almoravid.actions import apply_action
-    s = load_scenario("scenario_a_toledo_beset", seed=7)
+    # Seed 1 eliminates the besieger with Armored-first Storm targeting.
+    s = load_scenario("scenario_a_toledo_beset", seed=1)
     # Advance through Levy.
     apply_action(s, {"type": "begin_levy"})
     guard = 0
@@ -61,6 +62,7 @@ def test_storm_loss_eliminating_sole_besieger_clears_siege_marker() -> None:
     assert s.locales["toledo"].siege_yellow == 1
     res = apply_combat_choices(s, {"side": "christian", "type": "cmd_storm"})
     # Álvar's 4-unit army vs a City (walls 1-4) + 6-unit garrison is wiped.
+    assert res["winner"] == "muslim"
     assert s.lords["alvar_fanez"].cylinder.kind == "removed", res
     # The orphaned siege marker must be gone (4.5.4).
     assert s.locales["toledo"].siege_yellow == 0
