@@ -4816,7 +4816,7 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
     with at least one of our Siege markers at the Locale) assaults
     the defending Garrison + any besieged enemy Lords inside.
 
-    Uses entire card. Resolution via battle.resolve_storm.
+    Requires one remaining Command action and ends the card.
     """
     from almoravid.battle import (
         BattleSide,
@@ -4837,6 +4837,9 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
              code="wrong_side")
     _require(not is_besieged(state, lord_id),
              "Besieged Lord must Sally not Storm", code="besieged")
+    # Hold and defending Front continuations already validated the launch.
+    _require(_holds_chosen or state.meta.actions_remaining >= 1,
+             "Storm costs 1 Command action (4.5.2)", code="not_enough_actions")
     _apply_absorption_policy(state, side, action)
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
@@ -4967,8 +4970,8 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any], *,
                  _holds_chosen: bool = False) -> dict[str, Any]:
     """4.5.3 Sally. Besieged Lord attacks the besieger.
 
-    Uses entire card. If Sally loses, sallying Lords Withdraw back
-    inside; Siege markers reduce to 1.
+    Requires one remaining Command action and ends the card. If Sally loses,
+    sallying Lords Withdraw back inside and Siege markers reduce to 1.
     """
     from almoravid.battle import (
         _front_lord_count,
@@ -4980,6 +4983,9 @@ def _h_cmd_sally(state: GameState, action: dict[str, Any], *,
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
+    # A Hold continuation resumes the previously validated Sally.
+    _require(_holds_chosen or state.meta.actions_remaining >= 1,
+             "Sally costs 1 Command action (4.5.3)", code="not_enough_actions")
     _apply_absorption_policy(state, side, action)
     _require(state.meta.active_lord_id is not None,
              "no active Lord", code="no_active_lord")

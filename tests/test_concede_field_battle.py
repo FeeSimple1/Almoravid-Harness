@@ -481,6 +481,37 @@ def test_pending_storm_blocks_march_and_retains_losses_after_reload() -> None:
     assert state.model_dump() == restored.model_dump()
 
 
+@pytest.mark.parametrize(("command", "side", "setup"), [
+    ("cmd_storm", "christian", _storm_setup),
+    ("cmd_sally", "muslim", _sally_setup),
+])
+@pytest.mark.parametrize("hidden_mats", [False, True])
+def test_storm_and_sally_need_an_unspent_command_action(command, side, setup, hidden_mats):
+    from almoravid.legal_moves import legal_moves
+
+    state = setup()
+    state.meta.hidden_mats = hidden_mats
+    while state.meta.actions_remaining > 1:
+        apply_action(state, {"type": "cmd_pass", "side": side})
+    action = {"type": command, "side": side}
+    assert any(move["type"] == command for move in legal_moves(state))
+
+    exhausted = GameState.model_validate_json(state.model_dump_json())
+    apply_action(exhausted, {"type": "cmd_pass", "side": side})
+    restored = GameState.model_validate_json(exhausted.model_dump_json())
+    for candidate in (exhausted, restored):
+        assert not any(move["type"] == command for move in legal_moves(candidate))
+        before = candidate.model_dump()
+        with pytest.raises(IllegalAction) as error:
+            apply_action(candidate, {**action, "interactive_concede": True})
+        assert error.value.code == "not_enough_actions"
+        assert candidate.model_dump() == before
+
+    result = apply_combat_choices(state, action)
+    assert result["actions_consumed"] == 1
+    assert state.meta.actions_remaining == 0
+
+
 # ---- Interactive (reactive) Relief Sally (4.4.1) --------------------------
 #
 # Driven at the resolver level with a JSON snapshot round-trip between every
