@@ -245,7 +245,10 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         # (standing policies; mechanically relevant only with a multi-Lord
         # Array, harmless otherwise). Surface the enumerable directions;
         # reserve_priority takes an explicit lord_id list via the action.
-        for _fc in ("larger", "left", "right"):
+        flank_choices: tuple[str, ...] = ("larger", "left", "right")
+        if state.pending.kind == "relief_concede" and role == "attacker":
+            flank_choices += ("center",)
+        for _fc in flank_choices:
             moves.append({"type": "set_array_tactics", "side": side,
                           "flank_choice": _fc})
         for _cf in ("left", "right"):

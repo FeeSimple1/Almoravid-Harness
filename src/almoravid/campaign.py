@@ -7005,7 +7005,7 @@ def _h_set_absorption_policy(state: GameState, action: dict[str, Any]) -> dict[s
     return out
 
 
-_FLANK_CHOICES = ("larger", "left", "right")
+_FLANK_CHOICES = ("larger", "left", "right", "center")
 _CENTER_FILL = ("left", "right")
 _FLANK_ABSORB = ("opposed", "flanking")
 
@@ -7014,11 +7014,12 @@ def _h_set_array_tactics(state: GameState, action: dict[str, Any]) -> dict[str, 
     """Set a side's multi-Lord Array tactical choices (rule 4.4.2
     Reposition / Flanking) at any time — the owner's standing choices for
     how its Array resolves placement decisions the rules grant it. All
-    three keys are optional; an omitted key leaves that policy unchanged.
+    keys are optional; an omitted key leaves that policy unchanged.
 
       flank_choice    — center Front Lord with no opposite Enemy Flanks
                         'left' / 'right' / 'larger' (4.4.2 "center may
-                        choose left or right").
+                        choose left or right"). A Relief Sally may also
+                        choose 'center' when all Front targets are equally close.
       center_fill     — fill an empty Front-center from 'left' / 'right'
                         side Front slot (4.4.2 Center).
       reserve_priority — ordered list of lord_ids deciding which Reserve

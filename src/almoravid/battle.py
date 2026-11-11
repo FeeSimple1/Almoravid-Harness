@@ -610,27 +610,6 @@ def _striker_select_prio(state: GameState, target_side_name: Side,
     return (prio, 0)
 
 
-def _pooled_unit_owner(
-    target: BattleSide,
-    unit: UnitType,
-    lord_forces: dict[str, dict[UnitType, int]] | None,
-) -> str | None:
-    if len(target.lord_ids) == 1:
-        return target.lord_ids[0]
-    if lord_forces is None:
-        return None
-    # Match the lane's loss attribution in _relief_push_lane. The pool
-    # reflects earlier hits in this step. The per-Lord counts are updated
-    # together when the step finishes.
-    counts = [lord_forces[lid].get(unit, 0) for lid in target.lord_ids]
-    removed = sum(counts) - target.forces[unit]
-    for lid, count in zip(target.lord_ids, counts, strict=True):
-        if removed < count:
-            return lid
-        removed -= count
-    return None
-
-
 def _resolve_protection_roll(
     state: GameState,
     target_side: BattleSide,
@@ -641,7 +620,6 @@ def _resolve_protection_roll(
     striker_unit_class: UnitClass | None = None,
     absorb_policy: str = "weakest_first",
     striker_minus_armor: int = 0,
-    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
 ) -> tuple[bool, UnitType | None]:
     """Roll Protection for one Hit. Returns (canceled, unit_routed).
 
@@ -741,7 +719,7 @@ def _resolve_protection_roll(
                 and context == "battle"):
             selected = state.meta.spear_wall_lord_ids
             if selected is not None:
-                if _pooled_unit_owner(target_side, chosen, target_lord_forces) in selected:
+                if len(target_side.lord_ids) == 1 and target_side.lord_ids[0] in selected:
                     hi += 1
             elif target_side.m7_boosts_remaining > 0:
                 hi += 1
@@ -802,9 +780,8 @@ def _resolve_step(
     melee_hits_override: int | None = None,
     c8_ctx: dict[str, Any] | None = None,
     arrada_lord_ids: Collection[str] | None = None,
-    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
-    strike_rows: list[StrikeRow] | None = None,
-    cantador_forces: dict[UnitType, int] | None = None,
+    flank_all_targets: bool = False,
+    javelin_rounds: dict[str, int | None] | None = None,
 ) -> StepResolution:
     # Rules of Play 4.4.1-.2: unequal armies still resolve Hits per Lord.
     # A singleton opposite a multi-Lord array occupies Front center.
@@ -817,6 +794,7 @@ def _resolve_step(
             state, step_id, actor_role, step_type, unit_class,
             attacker, defender, round_index=round_index, c8_ctx=c8_ctx,
             walls_range=walls_range, sallying_lord_ids=arrada_lord_ids or (),
+            flank_all_targets=flank_all_targets, javelin_rounds=javelin_rounds,
         )
 
     actor = attacker if actor_role == "attacker" else defender
@@ -835,11 +813,9 @@ def _resolve_step(
             walls_range, siege_markers, context, unit_class, result)
         return result
 
-    rows = strike_rows
-    if rows is None:
-        rows = build_strike_rows(state, actor, context=context)
-        if round_index != actor.oneround_round:
-            rows = [r for r in rows if not r.one_round_only]
+    rows = build_strike_rows(state, actor, context=context)
+    if round_index != actor.oneround_round:
+        rows = [r for r in rows if not r.one_round_only]
     if step_type == "missile":
         rows = _hills_rows(state, actor, rows, context)
     rows = _dedupe_missile_overlap(rows)
@@ -856,14 +832,9 @@ def _resolve_step(
             and round_index == 1
             and actor.side == "christian"
             and "C8" in state.decks.this_levy_events.get("christian", [])):
-        if cantador_forces is not None:
-            eligible = sum(cantador_forces.get(ut, 0)
-                           for ut in ("knights", "sergeants")
-                           if _unit_class(ut) == unit_class)
-        else:
-            eligible = sum(r.count for r in rows
-                           if r.kind == "melee" and r.unit_type in ("knights", "sergeants")
-                           and _unit_class(r.unit_type) == unit_class)
+        eligible = sum(r.count for r in rows
+                       if r.kind == "melee" and r.unit_type in ("knights", "sergeants")
+                       and _unit_class(r.unit_type) == unit_class)
         # The chosen Lord's Knights and Sergeants share one four-unit budget.
         budget = c8_ctx["budget"] if c8_ctx is not None else 4
         eligible = min(eligible, budget)
@@ -916,8 +887,7 @@ def _resolve_step(
                             raw_hits=raw, rounded_hits=rounded)
     _apply_step_cancellation_and_hits(
         state, actor_role, target, per_kind_hits, rounded,
-        walls_range, siege_markers, context, unit_class, result,
-        target_lord_forces=target_lord_forces)
+        walls_range, siege_markers, context, unit_class, result)
     return result
 
 
@@ -952,8 +922,6 @@ def _apply_step_cancellation_and_hits(
     context: Literal["battle", "storm"],
     unit_class: UnitClass | None,
     result: StepResolution,
-    *,
-    target_lord_forces: dict[str, dict[UnitType, int]] | None = None,
 ) -> None:
     """Walls/Siegeworks cancellation then Protection-roll Hit
     application (shared by the normal and Storm-melee-override paths
@@ -993,7 +961,6 @@ def _apply_step_cancellation_and_hits(
                 striker_unit_class=unit_class,
                 absorb_policy=absorb_policy,
                 striker_minus_armor=minus_armor,
-                target_lord_forces=target_lord_forces,
             )
             if routed is not None:
                 result.losses[routed] = result.losses.get(routed, 0) + 1
@@ -2448,11 +2415,7 @@ def _pooled_battleside(state: GameState, lord_ids: list[str],
 
 @dataclass
 class _ReliefState:
-    """Mutable per-Round state of a Relief Sally (4.4.1), threaded through
-    the single-Round step so the resolution can run synchronously OR be
-    suspended/resumed for interactive reactive Concede. Per-Lord lane
-    Forces/Routed (lf/lr) are keyed by lane NAME ("M","S","DF","DR") rather
-    than object id() so the whole state is JSON-serializable."""
+    """Live Lord positions for both rows of a Relief Sally (4.4.1)."""
 
     marchers: BattleSide
     sallyers: BattleSide
@@ -2460,11 +2423,7 @@ class _ReliefState:
     def_rear: BattleSide | None
     shared: bool
     result: BattleResult
-    lf: dict[str, Any]
-    lr: dict[str, Any]
     excess_ids: list[str]
-    defender_ids: list[str]
-    n_front: int
     walls: tuple[int, int] | None
     active_side: Side
     other: Side
@@ -2472,17 +2431,24 @@ class _ReliefState:
     locale_id: str
     javelin_rounds: dict[str, int | None] = field(default_factory=dict)
 
+    def rows(self) -> dict[str, BattleSide]:
+        rows = {"M": self.marchers, "S": self.sallyers}
+        if self.def_front is not None:
+            rows["DF"] = self.def_front
+        if self.def_rear is not None and not self.shared:
+            rows["DR"] = self.def_rear
+        return rows
 
-def _relief_name_of(rs: _ReliefState, side_obj: BattleSide) -> str:
-    if side_obj is rs.marchers:
-        return "M"
-    if side_obj is rs.sallyers:
-        return "S"
-    if side_obj is rs.def_front:
-        return "DF"
-    if side_obj is rs.def_rear:
-        return "DF" if rs.shared else "DR"
-    raise KeyError("unknown relief-sally lane object")
+    @property
+    def lf(self) -> dict[str, dict[str, dict[UnitType, int]]]:
+        # Preserve the per-Lord Forces view in existing combat saves.
+        return {name: {lp.lord_id: dict(lp.forces) for lp in row.array or []}
+                for name, row in self.rows().items()}
+
+    @property
+    def lr(self) -> dict[str, dict[str, dict[UnitType, int]]]:
+        return {name: {lp.lord_id: dict(lp.routed_units) for lp in row.array or []}
+                for name, row in self.rows().items()}
 
 
 def _relief_atk_alive(rs: _ReliefState) -> bool:
@@ -2490,131 +2456,78 @@ def _relief_atk_alive(rs: _ReliefState) -> bool:
 
 
 def _relief_def_alive(state: GameState, rs: _ReliefState) -> bool:
-    a = rs.def_front.has_unrouted() if rs.def_front is not None else False
-    b = (rs.def_rear.has_unrouted()
-         if (rs.def_rear is not None and not rs.shared) else False)
-    c = any(bool(state.lords[r].forces) for r in rs.excess_ids)
-    return a or b or c
+    return (
+        any(row is not None and row.has_unrouted() for row in (rs.def_front, rs.def_rear))
+        or any(bool(state.lords[lid].forces) for lid in rs.excess_ids)
+    )
 
 
 def _relief_over(state: GameState, rs: _ReliefState) -> bool:
-    return (not _relief_atk_alive(rs)) or (not _relief_def_alive(state, rs))
+    return not _relief_atk_alive(rs) or not _relief_def_alive(state, rs)
 
 
-def _relief_push_lane(rs: _ReliefState, side_obj: BattleSide,
-                      before: dict[UnitType, int]) -> None:
-    nm = _relief_name_of(rs, side_obj)
-    lf = rs.lf[nm]
-    lr = rs.lr[nm]
-    now = side_obj.forces
-    for ut, b in before.items():
-        lost = b - now.get(ut, 0)
-        for lid in side_obj.lord_ids:
-            if lost <= 0:
-                break
-            have = lf[lid].get(ut, 0)
-            take = min(have, lost)
-            if take:
-                lf[lid][ut] = have - take
-                if lf[lid][ut] <= 0:
-                    lf[lid].pop(ut, None)
-                if ut != "serfs":  # 4.4.2: removed, not Routed.
-                    lr[lid][ut] = lr[lid].get(ut, 0) + take
-                lost -= take
+def _relief_front(row: BattleSide | None) -> list[LordPosition]:
+    if row is None:
+        return []
+    return [lp for lp in row.array or []
+            if lp.position.startswith("front_") and lp.has_unrouted()]
 
 
-def _relief_cap_groups(state: GameState, rs: _ReliefState,
-                       side_obj: BattleSide) -> list[Any] | None:
-    """Per-Lord (caps, forces) scoping for a Relief lane (this_lord
-    missile caps arm only their holder's units — mirror of the Storm
-    cap_groups fix). Lane forces come from the live rs.lf tracker."""
-    if len(side_obj.lord_ids) <= 1:
-        return None
-    nm = _relief_name_of(rs, side_obj)
-    groups: list[Any] = []
-    for lid in side_obj.lord_ids:
-        lord = state.lords.get(lid)
-        caps = (list(lord.capabilities) if lord is not None
-                else list(side_obj.capabilities_in_play))
-        groups.append((caps, dict(rs.lf[nm].get(lid, {}))))
-    return groups
+def _relief_row(
+    state: GameState, lord_ids: list[str], side: Side, role: Role,
+    *, active_lord_id: str | None = None,
+) -> BattleSide:
+    row = battleside_for_lords(
+        state, lord_ids, side, role, active_lord_id=active_lord_id,
+    )
+    if row.array is None:
+        row.array = [
+            LordPosition(lid, "front_center", dict(state.lords[lid].forces),
+                         list(state.lords[lid].capabilities))
+            for lid in lord_ids
+        ]
+    return row
+
+
+def _init_relief_spear_wall(state: GameState, rs: _ReliefState) -> None:
+    # The two selected Lords belong to one army, even when in different rows.
+    muslim = rs.result.attacker if rs.active_side == "muslim" else rs.result.defender
+    positions = [lp for row in rs.rows().values() if row.side == "muslim"
+                 for lp in row.array or []]
+    init_m7_cap(state, replace(muslim, array=positions))
 
 
 def relief_javelin_lords(state: GameState, side: BattleSide) -> list[str]:
     """Relief participants with a Javelin Strike, including Reserves."""
     return [lid for lid in side.lord_ids if any(
         row.one_round_only for row in build_strike_rows(
-            state, _pooled_battleside(state, [lid], side.side, side.role)))]
+            state, battleside_for_lord(state, lid, side.role)))]
 
 
-def _relief_missile_rows(state: GameState, rs: _ReliefState, actor: BattleSide,
-                         round_index: int) -> list[StrikeRow]:
-    lane_forces = rs.lf[_relief_name_of(rs, actor)]
-    rows: list[StrikeRow] = []
-    for group, lid in enumerate(actor.lord_ids):
-        lord = state.lords[lid]
-        single = BattleSide(side=actor.side, role=actor.role, lord_ids=[lid],
-                            forces=lane_forces[lid], capabilities_in_play=lord.capabilities)
-        timing = rs.javelin_rounds.get(lid, actor.oneround_round)
-        rows.extend(replace(row, group=group) if row.group >= 0 else row
-                    for row in build_strike_rows(state, single)
-                    if not row.one_round_only or round_index == timing)
-    return rows
+def _relief_reposition(state: GameState, rs: _ReliefState) -> None:
+    priority = state.meta.array_reserve_priority.get(rs.other, [])
+    if priority:
+        ranks = {lid: i for i, lid in enumerate(priority)}
+        rs.excess_ids.sort(key=lambda lid: ranks.get(lid, len(priority)))
 
-
-def _relief_lane_step(state: GameState, rs: _ReliefState, actor_role: Role,
-                      attacker_side: BattleSide, defender_side: BattleSide, *,
-                      step_id: str, step_type: str, unit_class: UnitClass | None,
-                      round_index: int, walls_range: tuple[int, int] | None,
-                      c8_ctx: dict[str, Any] | None) -> StepResolution:
-    attacker_side.cap_groups = _relief_cap_groups(state, rs, attacker_side)
-    defender_side.cap_groups = _relief_cap_groups(state, rs, defender_side)
-    actor, target = ((attacker_side, defender_side) if actor_role == "attacker"
-                     else (defender_side, attacker_side))
-    rows = None
-    if step_type == "missile" and any(
-            rs.javelin_rounds.get(lid, actor.oneround_round) != actor.oneround_round
-            for lid in actor.lord_ids):
-        rows = _relief_missile_rows(state, rs, actor, round_index)
-    cantador_forces = None
-    if c8_ctx is not None:
-        cantador_forces = rs.lf[_relief_name_of(rs, actor)].get(c8_ctx["lord_id"], {})
-    arrada_lord_ids = (_unrouted_lord_ids(rs.lf["S"])
-                       if step_type == "missile" and actor is rs.sallyers else ())
-    before = dict(target.forces)
-    step = _resolve_step(state, step_id, actor_role, step_type, unit_class,
-                         attacker_side, defender_side, context="battle",
-                         walls_range=walls_range, round_index=round_index,
-                         c8_ctx=c8_ctx, cantador_forces=cantador_forces,
-                         arrada_lord_ids=arrada_lord_ids, strike_rows=rows,
-                         target_lord_forces=rs.lf[_relief_name_of(rs, target)])
-    _relief_push_lane(rs, target, before)
-    return step
-
-
-def _relief_lane_alive(rs: _ReliefState, side_obj: BattleSide) -> int:
-    nm = _relief_name_of(rs, side_obj)
-    return sum(1 for lid in side_obj.lord_ids if rs.lf[nm][lid])
-
-
-def _relief_advance_reserve(state: GameState, rs: _ReliefState,
-                            side_obj: BattleSide, cap: int) -> list[str]:
-    nm = _relief_name_of(rs, side_obj)
-    advanced: list[str] = []
-    while _relief_lane_alive(rs, side_obj) < cap and rs.excess_ids:
-        lid = rs.excess_ids.pop(0)
-        side_obj.lord_ids.append(lid)
-        rs.lf[nm][lid] = dict(state.lords[lid].forces)
-        rs.lr[nm][lid] = {}
-        advanced.append(lid)
-    if advanced:
-        agg: dict[UnitType, int] = {}
-        for f in rs.lf[nm].values():
-            for ut, n in f.items():
-                if n > 0:
-                    agg[ut] = agg.get(ut, 0) + n
-        side_obj.forces = agg
-    return advanced
+    for name, row in rs.rows().items():
+        assert row.array is not None
+        if name in ("DF", "DR"):
+            # Defenders beyond the two opposing rows are available to fill
+            # empty Front slots at Reposition, in their owner's order.
+            vacancies = 3 - len(_relief_front(row))
+            for lid in rs.excess_ids[:vacancies]:
+                lord = state.lords[lid]
+                row.lord_ids.append(lid)
+                row.array.append(LordPosition(
+                    lid, "reserve", dict(lord.forces), list(lord.capabilities),
+                ))
+            del rs.excess_ids[:vacancies]
+        _reposition_array(
+            row, center_fill=state.meta.array_center_fill.get(row.side, "left"),
+            reserve_priority=state.meta.array_reserve_priority.get(row.side, []),
+        )
+        _sync_side_forces_from_array(row)
 
 
 def _relief_setup(
@@ -2628,116 +2541,76 @@ def _relief_setup(
     max_rounds: int | None,
 ) -> _ReliefState:
     active_side: Side = state.lords[(marcher_ids or sallyer_ids)[0]].side
-    other: Side = besieger_side
     loc = state.locales.get(locale_id)
     siege = 0
     if loc is not None:
-        siege = (loc.siege_yellow if besieger_side == "christian"
-                 else loc.siege_green)
-    walls = (1, siege) if siege > 0 else None
-    marchers = _pooled_battleside(state, marcher_ids, active_side, "attacker")
-    sallyers = _pooled_battleside(state, sallyer_ids, active_side, "attacker")
-    if marcher_ids:
-        n_front = max(1, min(len(marcher_ids), 3))
-        front_ids = defender_ids[:n_front]
-        rear_ids = defender_ids[n_front:n_front + 3]
-        excess_ids = defender_ids[n_front + 3:]
-    else:
-        n_front = 0
-        front_ids = []
-        rear_ids = defender_ids[:3]
-        excess_ids = defender_ids[3:]
-    def_front = (_pooled_battleside(state, front_ids, other, "defender")
-                 if front_ids else None)
-    shared = False
-    if rear_ids:
-        def_rear: BattleSide | None = _pooled_battleside(
-            state, rear_ids, other, "defender")
-    elif def_front is not None:
-        def_rear = def_front
-        shared = True
-    else:
-        def_rear = None
+        siege = loc.siege_yellow if besieger_side == "christian" else loc.siege_green
+    marchers = _relief_row(state, marcher_ids, active_side, "attacker",
+                           active_lord_id=state.meta.active_lord_id)
+    sallyers = _relief_row(state, sallyer_ids, active_side, "attacker",
+                           active_lord_id=state.meta.active_lord_id)
+    n_front = len(_relief_front(marchers))
+    front_ids = defender_ids[:n_front]
+    rear_ids = defender_ids[n_front:n_front + 3]
+    front = (_relief_row(state, front_ids, besieger_side, "defender")
+             if front_ids else None)
+    rear = (_relief_row(state, rear_ids, besieger_side, "defender")
+            if rear_ids else front)
     result = BattleResult(
         engagement="battle",
         attacker=_pooled_battleside(
-            state, list(marcher_ids) + list(sallyer_ids), active_side,
-            "attacker"),
-        defender=_pooled_battleside(state, list(defender_ids), other,
-                                    "defender"),
+            state, list(marcher_ids) + list(sallyer_ids), active_side, "attacker",
+        ),
+        defender=_pooled_battleside(state, list(defender_ids), besieger_side, "defender"),
     )
-    for ds in (def_front, def_rear):
-        if ds is not None and not (shared and ds is def_front
-                                   and def_rear is def_front):
-            init_m7_cap(state, ds)
-    if def_front is not None:
-        init_m7_cap(state, def_front)
     rs = _ReliefState(
-        marchers=marchers, sallyers=sallyers, def_front=def_front,
-        def_rear=def_rear, shared=shared, result=result, lf={}, lr={},
-        excess_ids=list(excess_ids), defender_ids=list(defender_ids),
-        n_front=n_front, walls=walls, active_side=active_side, other=other,
-        max_rounds=max_rounds, locale_id=locale_id)
-    # Init per-Lord lane tracking (name-keyed).
-    for nm, so in (("M", marchers), ("S", sallyers),
-                   ("DF", def_front), ("DR", def_rear)):
-        if so is None or nm in rs.lf:
-            continue
-        if shared and so is def_front and nm == "DR":
-            continue
-        if len(so.lord_ids) == 1:
-            rs.lf[nm] = {so.lord_ids[0]: dict(so.forces)}
-        else:
-            rs.lf[nm] = {lid: dict(state.lords[lid].forces)
-                         for lid in so.lord_ids}
-        rs.lr[nm] = {lid: {} for lid in so.lord_ids}
+        marchers=marchers, sallyers=sallyers, def_front=front, def_rear=rear,
+        shared=front is not None and rear is front, result=result,
+        excess_ids=defender_ids[n_front + 3:],
+        walls=(1, siege) if siege else None, active_side=active_side,
+        other=besieger_side, max_rounds=max_rounds, locale_id=locale_id,
+    )
+    _init_relief_spear_wall(state, rs)
     return rs
 
 
 def _relief_strike_pairs(rs: _ReliefState, role: Role) -> Iterator[tuple[BattleSide, BattleSide]]:
-    """Yield the live pair for each striking lane, in initiative order."""
+    """Pair live Front rows, rechecking their targets after each Strike."""
     front = rs.def_front
     rear = None if rs.shared else rs.def_rear
+    lanes: tuple[tuple[BattleSide | None, BattleSide | None, BattleSide | None], ...]
     if role == "attacker":
         lanes = ((rs.marchers, front, rear), (rs.sallyers, rear, front))
     else:
         lanes = ((front, rs.marchers, rs.sallyers), (rear, rs.sallyers, rs.marchers))
 
     for striker, opposed, flank in lanes:
-        if striker is None or not striker.has_unrouted():
+        if striker is None or not _relief_front(striker):
             continue
-        # Recheck after each Strike. A Rout can expose the other lane during
-        # this very step. In particular, Sallyers flank the Front when the
-        # rear has no remaining defenders (4.4.1).
-        target = opposed if opposed is not None and opposed.has_unrouted() else flank
-        if target is not None and target.has_unrouted():
+        target = opposed if _relief_front(opposed) else flank
+        if target is not None and _relief_front(target):
             yield (striker, target) if role == "attacker" else (target, striker)
 
 
 def _relief_run_round(state: GameState, rs: _ReliefState, rnd_i: int, *,
                       progress: dict[str, Any] | None = None,
                       pause_after_strike: bool = False) -> BattleRound:
-    """Resolve one Relief-Sally Round (Reposition + two-lane Strikes +
+    """Resolve one Relief-Sally Round (Reposition + paired Strikes +
     end-of-Round discards), mutating `rs`. Concede declaration / break /
     winner are the caller's responsibility."""
     rnd = BattleRound(index=rnd_i)
-    def_front, def_rear = rs.def_front, rs.def_rear
     offset = progress.get("next_step", 0) if progress is not None else 0
-    c8_ctx = progress["cantador"] if offset else None
+    c8_ctx = progress["cantador"] if progress is not None and offset else None
     if not offset and rnd_i == 1 and "C8" in state.decks.this_levy_events.get("christian", []):
         holder = state.meta.cantador_lord_id
         if holder is None:
-            lanes = ("M", "S") if rs.active_side == "christian" else ("DF", "DR")
-            forces = {lid: units for lane in lanes for lid, units in rs.lf.get(lane, {}).items()}
-            holder = max(forces, key=lambda lid: _c8_bonus_for_forces(forces[lid]), default=None)
+            fronts = [lp for row in rs.rows().values() if row.side == "christian"
+                      for lp in _relief_front(row)]
+            best = max(fronts, key=lambda lp: _c8_bonus_for_forces(lp.forces), default=None)
+            holder = best.lord_id if best is not None else None
         c8_ctx = {"lord_id": holder, "budget": 4}
-    # Reposition (Round 2+): advance excess Reserve Defenders.
-    if rnd_i >= 2 and rs.excess_ids:
-        if def_front is not None:
-            _relief_advance_reserve(state, rs, def_front, rs.n_front)
-        if def_rear is not None and not rs.shared:
-            _relief_advance_reserve(state, rs, def_rear,
-                                    min(3, len(rs.defender_ids)))
+    if rnd_i >= 2 and not offset:
+        _relief_reposition(state, rs)
     # M6 Feigned Retreat (Round 2) step reorder.
     if (rnd_i == 2
             and "M6" in state.decks.this_levy_events.get("muslim", [])):
@@ -2758,11 +2631,15 @@ def _relief_run_round(state: GameState, rs: _ReliefState, rnd_i: int, *,
     for index, (step_id, actor_role, step_type, unit_class) in enumerate(
             steps_this_round[offset:], start=offset):
         for attacker, defender in _relief_strike_pairs(rs, actor_role):
-            rnd.steps.append(_relief_lane_step(
-                state, rs, actor_role, attacker, defender,
-                step_id=step_id, step_type=step_type, unit_class=unit_class,
+            sallying = actor_role == "attacker" and attacker is rs.sallyers
+            rnd.steps.append(_resolve_step(
+                state, step_id, actor_role, step_type, unit_class, attacker, defender,
                 round_index=rnd_i, c8_ctx=c8_ctx,
-                walls_range=rs.walls if attacker is rs.sallyers else None))
+                walls_range=rs.walls if sallying else None,
+                arrada_lord_ids=attacker.lord_ids if sallying else (),
+                flank_all_targets=sallying and defender is rs.def_front,
+                javelin_rounds=rs.javelin_rounds,
+            ))
         if progress is not None:
             progress.update(next_step=index + 1, cantador=c8_ctx)
         if _relief_over(state, rs):
@@ -2781,21 +2658,20 @@ def _relief_run_round(state: GameState, rs: _ReliefState, rnd_i: int, *,
 def _relief_finalize(state: GameState, rs: _ReliefState) -> None:
     """Commit each Lord's exact post-battle Forces/Routed and set the
     winner (Concede before Rout; mutual Concede = no winner)."""
-    written: set[str] = set()
-    for nm, so in (("M", rs.marchers), ("S", rs.sallyers),
-                   ("DF", rs.def_front), ("DR", rs.def_rear)):
-        if so is None or nm not in rs.lf or nm in written:
-            continue
-        written.add(nm)
-        lf = rs.lf[nm]
-        lr = rs.lr[nm]
-        for lid in so.lord_ids:
-            if lid in state.lords:
-                state.lords[lid].forces = {ut: n for ut, n
-                                           in lf[lid].items() if n > 0}
-                state.lords[lid].routed_units = {ut: n for ut, n
-                                                 in lr[lid].items() if n > 0}
+    for row in rs.rows().values():
+        for lp in row.array or []:
+            lord = state.lords[lp.lord_id]
+            lord.forces = {unit: n for unit, n in lp.forces.items() if n > 0}
+            lord.routed_units = {unit: n for unit, n in lp.routed_units.items() if n > 0}
     result = rs.result
+    for side in (result.attacker, result.defender):
+        side.forces.clear()
+        side.routed_units.clear()
+        for lid in side.lord_ids:
+            lord = state.lords[lid]
+            for pool, units in ((side.forces, lord.forces), (side.routed_units, lord.routed_units)):
+                for unit, count in units.items():
+                    pool[unit] = pool.get(unit, 0) + count
     result.sallying_lord_ids = list(rs.sallyers.lord_ids)
     if result.attacker.conceded and not result.defender.conceded:
         result.winner = rs.other
@@ -2849,8 +2725,8 @@ def _relief_to_snapshot(rs: _ReliefState) -> dict[str, Any]:
         "lf": rs.lf,
         "lr": rs.lr,
         "excess_ids": list(rs.excess_ids),
-        "defender_ids": list(rs.defender_ids),
-        "n_front": rs.n_front,
+        "defender_ids": list(rs.result.defender.lord_ids),
+        "n_front": min(3, len(rs.marchers.lord_ids)),
         "walls": list(rs.walls) if rs.walls else None,
         "active_side": rs.active_side,
         "other": rs.other,
@@ -2862,16 +2738,44 @@ def _relief_to_snapshot(rs: _ReliefState) -> dict[str, Any]:
 
 def _relief_from_snapshot(state: GameState,
                           snap: dict[str, Any]) -> _ReliefState:
-    marchers = battle_side_from_snapshot(snap["marchers"])
-    sallyers = battle_side_from_snapshot(snap["sallyers"])
-    def_front = (battle_side_from_snapshot(snap["def_front"])
-                 if snap["def_front"] is not None else None)
+    migrated = False
+
+    def restore(key: str, lane: str) -> BattleSide:
+        nonlocal migrated
+        row = battle_side_from_snapshot(snap[key])
+        if row.array is not None:
+            return row
+        # Older saves stored lane pools plus per-Lord casualties. Rebuild
+        # the Front from the remaining Lords in Array order, preserving
+        # all saved Forces and Routed units rather than the pre-Battle mats.
+        migrated = True
+        forces = snap["lf"][lane]
+        routed = snap["lr"][lane]
+        living = [lid for lid in row.lord_ids if any(n > 0 for n in forces[lid].values())]
+        row.array = _relief_row(
+            state, living, row.side, row.role, active_lord_id=state.meta.active_lord_id,
+        ).array
+        assert row.array is not None
+        for lp in row.array:
+            lp.forces = dict(forces[lp.lord_id])
+            lp.routed_units = dict(routed[lp.lord_id])
+        for lid in row.lord_ids:
+            if lid not in living:
+                row.array.append(LordPosition(
+                    lid, "routed", {}, list(state.lords[lid].capabilities),
+                    routed_units=dict(routed[lid]),
+                ))
+        _sync_side_forces_from_array(row)
+        return row
+
+    marchers = restore("marchers", "M")
+    sallyers = restore("sallyers", "S")
+    def_front = restore("def_front", "DF") if snap["def_front"] is not None else None
     shared = snap["shared"]
     if shared:
         def_rear: BattleSide | None = def_front
     else:
-        def_rear = (battle_side_from_snapshot(snap["def_rear"])
-                    if snap["def_rear"] is not None else None)
+        def_rear = restore("def_rear", "DR") if snap["def_rear"] is not None else None
     result = BattleResult(
         engagement="battle",
         attacker=battle_side_from_snapshot(snap["result_attacker"]),
@@ -2881,16 +2785,17 @@ def _relief_from_snapshot(state: GameState,
                      for k in range(1, snap["rounds_done"] + 1)]
     wr = snap["walls"]
     walls = (int(wr[0]), int(wr[1])) if wr else None
-    return _ReliefState(
+    rs = _ReliefState(
         marchers=marchers, sallyers=sallyers, def_front=def_front,
         def_rear=def_rear, shared=shared, result=result,
-        lf=dict(snap["lf"]), lr=dict(snap["lr"]),
         excess_ids=list(snap["excess_ids"]),
-        defender_ids=list(snap["defender_ids"]),
-        n_front=snap["n_front"], walls=walls,
+        walls=walls,
         active_side=snap["active_side"], other=snap["other"],
         max_rounds=snap["max_rounds"], locale_id=snap["locale_id"],
         javelin_rounds=dict(snap.get("javelin_rounds", {})))
+    if migrated:
+        _init_relief_spear_wall(state, rs)
+    return rs
 
 
 @reveal_combat_mats
@@ -2909,7 +2814,7 @@ def resolve_relief_sally(
     BattleSide, BattleSide, BattleSide | None,
     BattleSide | None, bool]]:
     """Rule 4.4.1 RELIEF SALLY (synchronous). The relieving Marchers +
-    Sallyers (Attacker) fight the besieging Defenders across two lanes;
+    Sallyers (Attacker) fight the besieging Defenders in separate rows;
     either side may Concede (pre-declared here, reactive in the driver)."""
     rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_ids,
                        besieger_side=besieger_side, locale_id=locale_id,
@@ -3807,7 +3712,8 @@ def _resolve_protection_roll_for_lp(
 def _pick_flank_target(side: BattleSide,
                        actor_pos: ArrayPosition,
                        *,
-                       flank_choice: str = "larger") -> LordPosition | None:
+                       flank_choice: str = "larger",
+                       equal_distance: bool = False) -> LordPosition | None:
     """4.4.2 Flanking: a Front Lord with no Enemy directly opposite Strikes
     the CLOSEST Front Enemy Lord. Positional closeness on the 3-slot Front:
     a left/right Flanker prefers the center, then the far slot; a center
@@ -3823,6 +3729,13 @@ def _pick_flank_target(side: BattleSide,
     }
     if not fronts:
         return None
+    if equal_distance:
+        # Without Rearguard defenders, Sallying Lords flank all Front
+        # defenders at equal distance (4.4.1).
+        for slot, lp in fronts.items():
+            if slot == f"front_{flank_choice}":
+                return lp
+        return max(fronts.values(), key=lambda lp: sum(lp.forces.values()))
     if actor_pos == "front_left":
         order: list[ArrayPosition] = ["front_center", "front_right"]
     elif actor_pos == "front_right":
@@ -3894,6 +3807,8 @@ def _resolve_step_per_pair(
     c8_ctx: dict[str, Any] | None = None,
     walls_range: tuple[int, int] | None = None,
     sallying_lord_ids: Collection[str] = (),
+    flank_all_targets: bool = False,
+    javelin_rounds: dict[str, int | None] | None = None,
 ) -> StepResolution:
     """Per-pair Strike resolution (rule 4.4.2 multi-Lord Array).
 
@@ -3937,7 +3852,10 @@ def _resolve_step_per_pair(
     # a fallback so a single-step call still applies C8 correctly.
     if c8_ctx is None:
         c8_ctx = _build_c8_ctx(state, attacker, defender, round_index)
-    cantador_holder = c8_ctx["holder_id"] if c8_ctx is not None else None
+    cantador_holder = c8_ctx.get("holder_id") if c8_ctx is not None else None
+    # Relief can pause mid-Round, so its Cantador holder is a saved Lord ID.
+    cantador_lord = c8_ctx.get("lord_id") if c8_ctx is not None else None
+    flank_choice = state.meta.array_flank_choice.get(actor.side, "larger")
 
     for actor_pos in ("front_center", "front_left", "front_right"):
         actor_lp = next((lp for lp in actor.array
@@ -3947,15 +3865,15 @@ def _resolve_step_per_pair(
             continue
         # 4.4.2: Strike the directly-opposite Enemy if present, else
         # Flank to the closest Front Enemy Lord.
-        target_lp = next((lp for lp in target.array
-                          if lp.position == actor_pos
-                          and lp.has_unrouted()), None)
+        target_lp = None
+        if not flank_all_targets:
+            target_lp = next((lp for lp in target.array
+                              if lp.position == actor_pos and lp.has_unrouted()), None)
         directly_opposed = target_lp is not None
         if target_lp is None:
             target_lp = _pick_flank_target(
                 target, actor_pos,
-                flank_choice=state.meta.array_flank_choice.get(
-                    actor.side, "larger"))
+                flank_choice=flank_choice, equal_distance=flank_all_targets)
         if target_lp is None:
             continue
         # 4.4.2 APPLY HITS: the target side may absorb a directly-opposed
@@ -3974,6 +3892,8 @@ def _resolve_step_per_pair(
         javelin_round = (actor_lp.javelin_round
                         if actor_lp.javelin_round is not None
                         else actor.oneround_round)
+        if javelin_rounds is not None:
+            javelin_round = javelin_rounds.get(actor_lp.lord_id, javelin_round)
         if round_index != javelin_round:
             rows = [r for r in rows if not r.one_round_only]
         if step_type == "missile":
@@ -3988,6 +3908,7 @@ def _resolve_step_per_pair(
         if (step_type == "melee" and round_index == 1
                 and actor.side == "christian" and c8_ctx is not None
                 and (cantador_holder is None or id(actor_lp) == cantador_holder)
+                and (cantador_lord is None or actor_lp.lord_id == cantador_lord)
                 and "C8" in state.decks.this_levy_events.get("christian", [])):
             eligible = 0
             for r in rows:
@@ -4063,7 +3984,7 @@ def _resolve_step_per_pair(
                 if not target_lp.has_unrouted():
                     next_target = _pick_flank_target(
                         target, target_slot,
-                        flank_choice=state.meta.array_flank_choice.get(actor.side, "larger"))
+                        flank_choice=flank_choice, equal_distance=flank_all_targets)
                     if next_target is None:
                         break
                     target_lp = next_target

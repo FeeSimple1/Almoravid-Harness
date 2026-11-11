@@ -87,11 +87,14 @@ def test_relief_arrada_requires_an_unrouted_sallyer(holder, missile_steps):
     state.locales["zaragoza"].siege_yellow = 1
     state.lords["al_mundir" if holder == "marcher" else "al_mutamid"].capabilities = ["M17"]
     if holder == "routed_sallyer":
-        # The rear Defender's Missiles Rout the holder before the Sallyers fire.
+        # The owner sends the Rearguard's Missiles to the flanking holder,
+        # who Routs before the Sallyers fire.
         place(state, "alvar_fanez", "zaragoza")
         state.lords["alvar_fanez"].forces = {"men_at_arms": 2}
         state.lords["alvar_fanez"].capabilities = ["C2"]
         state.lords["al_mutamid"].forces = {"militia": 1}
+        apply_action(state, {"type": "set_array_tactics", "side": "muslim",
+                             "flank_absorb": "flanking"})
 
     apply_action(state, {"type": "cmd_march", "side": "muslim",
                          "target_locale_id": "zaragoza", "way_type": "road"})
