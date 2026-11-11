@@ -51,7 +51,7 @@ UnitClass = Literal["horse", "foot"]
 
 
 # Rate string -> (numerator, denominator) for Hit computation
-_RATE = {"x2": (2, 1), "x1": (1, 1), "x1/2": (1, 2)}
+_RATE = {"x2": (2, 1), "x3/2": (3, 2), "x1": (1, 1), "x1/2": (1, 2)}
 _ARRADA_HITS = 3.0
 _ARMOR_PENALTIES = {"crossbows": 1, "arrada": 2}
 
@@ -500,6 +500,22 @@ def _dedupe_missile_overlap(rows: list[StrikeRow]) -> list[StrikeRow]:
 # ---------------------------------------------------------------------------
 
 
+def _hills_rows(state: GameState, side: BattleSide, rows: list[StrikeRow],
+                context: str) -> list[StrikeRow]:
+    """C1/M1 changes eligible rates, never Javelins or a combined Hit pool.
+
+    Apply before overlap deduplication: a unit with Bowmen/Crossbows and
+    Javelins still fires once at x1, retaining any Crossbow properties.
+    """
+    card = "C1" if side.side == "christian" else "M1"
+    if (context != "battle" or side.role != "defender"
+            or card not in state.decks.this_levy_events.get(side.side, [])):
+        return rows
+    return [replace(row, rate="x3/2" if row.kind == "slingers" else "x1")
+            if row.kind in ("missiles", "crossbows", "bowmen", "slingers") else row
+            for row in rows]
+
+
 def _step_hits(
     rows: list[StrikeRow],
     step_type: str,
@@ -824,40 +840,10 @@ def _resolve_step(
         rows = build_strike_rows(state, actor, context=context)
         if round_index != actor.oneround_round:
             rows = [r for r in rows if not r.one_round_only]
+    if step_type == "missile":
+        rows = _hills_rows(state, actor, rows, context)
     rows = _dedupe_missile_overlap(rows)
     raw, by_kind = _step_hits(rows, step_type, unit_class)
-
-    # Per-card combat-event bonuses (Phase 6 / deferred-fix structural
-    # hook). Each effect inspects state.decks.this_levy_events for the
-    # relevant side and adjusts raw/by_kind.
-    #
-    # C1 / M1 Hills: 'Defending side's Slingers are x1.5 and other
-    # Missiles are x1 (not x1/2)' per AoW reference. Implementation:
-    # for the defending-actor missile step, add +0.5 Hits per Missile
-    # unit on actor's side.
-    if step_type == "missile":
-        hills_id = ("C1" if actor.side == "christian" else "M1")
-        held = state.decks.this_levy_events.get(actor.side, [])
-        if hills_id in held and actor.role == "defender":
-            bonus = 0.0
-            for r in rows:
-                if r.kind in ("missiles", "crossbows", "bowmen",
-                              "slingers", "javelins"):
-                    bonus += 0.5 * r.count
-            raw += bonus
-            # Distribute the bonus across kinds proportional to their
-            # existing contributions so per-kind allocation still works.
-            current_missile_total = sum(
-                v for k, v in by_kind.items()
-                if k in ("missiles", "crossbows", "bowmen",
-                         "slingers", "javelins")
-            )
-            if current_missile_total > 0:
-                for k in list(by_kind.keys()):
-                    if k in ("missiles", "crossbows", "bowmen",
-                             "slingers", "javelins"):
-                        share = bonus * by_kind[k] / current_missile_total
-                        by_kind[k] = by_kind[k] + share
 
     # C8 Cantador (Phase 6a) — Christian-side Round-1 Melee Strike +1
     # per Knight/Sergeant, up to 4 units total. Card text: "Round 1,
@@ -3998,30 +3984,10 @@ def _resolve_step_per_pair(
                         else actor.oneround_round)
         if round_index != javelin_round:
             rows = [r for r in rows if not r.one_round_only]
+        if step_type == "missile":
+            rows = _hills_rows(state, actor, rows, "battle")
         rows = _dedupe_missile_overlap(rows)
         raw, by_kind = _step_hits(rows, step_type, unit_class)
-
-        # Phase 6a Hills hook (per-Lord application: defender side's
-        # missile units get +0.5 Hit each when actor is defender and
-        # Hills card is held).
-        if step_type == "missile":
-            hills_id = ("C1" if actor.side == "christian" else "M1")
-            held = state.decks.this_levy_events.get(actor.side, [])
-            if hills_id in held and actor.role == "defender":
-                bonus = 0.0
-                for r in rows:
-                    if r.kind in ("missiles", "crossbows", "bowmen",
-                                  "slingers", "javelins"):
-                        bonus += 0.5 * r.count
-                raw += bonus
-                cmt = sum(v for k, v in by_kind.items()
-                          if k in ("missiles", "crossbows", "bowmen",
-                                   "slingers", "javelins"))
-                if cmt > 0:
-                    for k in list(by_kind.keys()):
-                        if k in ("missiles", "crossbows", "bowmen",
-                                 "slingers", "javelins"):
-                            by_kind[k] += bonus * by_kind[k] / cmt
 
         # C8 Cantador (Round 1, Christian, melee, up to 4 K+S). The
         # SIDE-WIDE cap of 4 is enforced exactly across the per-pair Lords
