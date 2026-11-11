@@ -23,8 +23,8 @@ def _put(state, lord_id, locale, *, inside=False):
     return lord
 
 
-def _plan():
-    state = load_scenario("scenario_a_toledo_beset", seed=1)
+def _plan(seed=1):
+    state = load_scenario("scenario_a_toledo_beset", seed=seed)
     state.meta.phase = "campaign"
     state.meta.campaign_step = "plan"
     return state

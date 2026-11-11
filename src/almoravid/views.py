@@ -67,6 +67,13 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     full state remains available through GameState.model_dump()."""
     dump = state.model_dump()
     if dump.get("pending") is not None:
+        if state.pending is not None and state.pending.kind == "battle_fate":
+            from almoravid.battle import available_battle_fates
+
+            pl = state.pending.payload
+            available, _ = available_battle_fates(
+                state, pl["options"], pl["withdraw_slots"], pl["fates"])
+            dump["pending"]["payload"]["options"] = available
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
                     "_retreat_provender_resume", "_combat_hold_resume", "_relief_sally_resume",

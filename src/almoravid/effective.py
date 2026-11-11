@@ -42,6 +42,18 @@ def lower_lord_for(state: GameState, upper_id: str) -> str | None:
                 None)
 
 
+def lieutenant_partner(state: GameState, lord_id: str) -> str | None:
+    """Return the other member of a live Lieutenant pair (4.1.3)."""
+    return lieutenant_for(state, state.lords[lord_id]) or lower_lord_for(state, lord_id)
+
+
+def includes_whole_lieutenant_pairs(
+    state: GameState, lord_ids: list[str] | tuple[str, ...],
+) -> bool:
+    return all((partner := lieutenant_partner(state, lid)) is None or partner in lord_ids
+               for lid in lord_ids)
+
+
 def effective_stronghold_type(state: GameState, locale_id: str) -> StrongholdType:
     """Return the effective Stronghold type at a Locale (Pattern 5).
 

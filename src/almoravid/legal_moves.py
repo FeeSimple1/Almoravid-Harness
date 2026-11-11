@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from almoravid.effective import lieutenant_for, lower_lord_for
+from almoravid.effective import includes_whole_lieutenant_pairs, lieutenant_for, lower_lord_for
 from almoravid.events import held_event_ids, held_event_moves
 from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
@@ -63,7 +63,8 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         minimum = 0 if payload["attacker_ids"] else 1
         return [{"type": "relief_sally", "side": state.pending.waiting_on, "lord_ids": list(ids)}
                 for count in range(minimum, len(eligible) + 1)
-                for ids in combinations(eligible, count)]
+                for ids in combinations(eligible, count)
+                if includes_whole_lieutenant_pairs(state, ids)]
 
     if state.pending is not None and state.pending.kind == "combat_holds":
         from itertools import combinations
@@ -214,10 +215,13 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
 
     # 4.4.3: the losing owner chooses a fate for any Lord with a choice.
     if state.pending is not None and state.pending.kind == "battle_fate":
-        from almoravid.battle import c7_retreat_assets
+        from almoravid.battle import available_battle_fates, c7_retreat_assets
 
-        for lid, choices in state.pending.payload["options"].items():
-            if len(choices) <= 1:
+        payload = state.pending.payload
+        available, electable = available_battle_fates(
+            state, payload["options"], payload["withdraw_slots"], payload["fates"])
+        for lid, choices in available.items():
+            if lid not in electable:
                 continue
             payments = c7_retreat_assets(state, state.lords[lid])
             for choice in choices:

@@ -32,7 +32,13 @@ from almoravid.actions import (
     _require_phase,
     _require_side,
 )
-from almoravid.effective import lieutenant_for, lower_lord_for, same_stack_position
+from almoravid.effective import (
+    includes_whole_lieutenant_pairs,
+    lieutenant_for,
+    lieutenant_partner,
+    lower_lord_for,
+    same_stack_position,
+)
 from almoravid.events import consume_held_event, held_event_ids
 from almoravid.state import (
     AssetType,
@@ -3827,6 +3833,7 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
                                result: Any, pl: dict[str, Any]) -> dict[str, Any]:
     """Commit strikes and, if requested, let the loser decide before Losses."""
     from almoravid.battle import (
+        available_battle_fates,
         battle_fate_options,
         battle_side_to_snapshot,
         commit_forces_after_battle,
@@ -3841,7 +3848,8 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
         options, slots = battle_fate_options(
             state, result, approach_from_locale=pl.get("from_locale_id"),
             approach_way_type=pl.get("via_way_type"))
-        if any(len(choices) > 1 for choices in options.values()):
+        _, electable = available_battle_fates(state, options, slots, {})
+        if electable:
             loser = (result.defender.side if result.winner == result.attacker.side
                      else result.attacker.side)
             context = {k: pl[k] for k in (
@@ -3869,23 +3877,77 @@ def _battle_aftermath_or_fates(state: GameState, action: dict[str, Any],
     return _complete_battle_aftermath(state, action, result, pl, interactive=interactive)
 
 
-def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    from almoravid.battle import (
-        BattleResult,
-        BattleRound,
-        battle_side_from_snapshot,
-        c7_retreat_assets,
+def _pending_battle_fate_result(payload: dict[str, Any]) -> Any:
+    from almoravid.battle import BattleResult, BattleRound, battle_side_from_snapshot
+
+    return BattleResult(
+        engagement=payload["engagement"],
+        attacker=battle_side_from_snapshot(payload["attacker"]),
+        defender=battle_side_from_snapshot(payload["defender"]),
+        rounds=[BattleRound(index=i) for i in range(1, payload["rounds"] + 1)],
+        winner=payload["winner"],
+        sallying_lord_ids=payload["sallying_lord_ids"],
     )
+
+
+def _restore_pending_lieutenant_choices(state: GameState) -> None:
+    """Recover old partial fate or Sally elections before play resumes."""
+    from almoravid.battle import available_battle_fates, battle_fate_options, fate_movement
+
+    pd = state.pending
+    if pd is None:
+        return
+    pl = pd.payload
+    if pd.kind == "combat_holds" and pl.get("relief"):
+        arrival = pl["_combat_hold_resume"].get("pending") or {}
+        selection = arrival.get("payload", {}).get("sallyer_ids", [])
+        partners = {
+            mate for lid in selection
+            if (mate := lieutenant_partner(state, lid)) is not None and mate not in selection
+        }
+        if partners:
+            # No Lord has left the Stronghold yet. Complete the pair selected
+            # by the legacy action, preserving Hold declarations already made.
+            sallyers = set(selection) | partners
+            ordered = [lid for lid in state.lords if lid in sallyers]
+            arrival["payload"]["sallyer_ids"] = ordered
+            marchers = [lid for lid in pl["attacker_ids"] if lid not in sallyers]
+            pl["attacker_ids"] = marchers + ordered
+    elif pd.kind == "battle_fate":
+        result = _pending_battle_fate_result(pl)
+        options, slots = battle_fate_options(
+            state, result, approach_from_locale=pl["context"].get("from_locale_id"),
+            approach_way_type=pl["context"].get("via_way_type"))
+        old_fates = pl["fates"]
+        kept = {}
+        # A declared Removal releases its partner, even if the saved JSON
+        # orders the other Lord's choice first. Keep every compatible election.
+        by_removal = sorted(old_fates.items(), key=lambda entry: entry[1]["fate"] != "removed")
+        for lid, choice in by_removal:
+            available, _ = available_battle_fates(state, options, slots, kept)
+            if fate_movement(choice) not in available.get(lid, []):
+                continue
+            if choice["fate"] == "withdraw" and len(options[lid]) > 1:
+                slots -= 1
+            kept[lid] = choice
+            del options[lid]
+        pl.update(options=options, withdraw_slots=slots,
+                  fates={lid: choice for lid, choice in old_fates.items() if lid in kept})
+
+
+def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.battle import available_battle_fates, c7_retreat_assets, fate_movement
 
     side = _require_side(action)
     pd = _require_pending(state, "battle_fate", side)
     pl = pd.payload
     lid = action.get("lord_id")
     options = pl["options"]
-    _require(isinstance(lid, str) and len(options.get(lid, [])) > 1,
+    available, electable = available_battle_fates(state, options, pl["withdraw_slots"], pl["fates"])
+    _require(isinstance(lid, str) and lid in electable,
              "choose a Lord with an outstanding fate", code="bad_arg")
-    choice = {k: action[k] for k in ("fate", "retreat_to", "retreat_way") if k in action}
-    _require(choice in options[lid], "illegal fate or Retreat route", code="bad_arg")
+    choice = fate_movement(action)
+    _require(choice in available[lid], "illegal fate or Retreat route", code="bad_arg")
     payable = c7_retreat_assets(state, state.lords[lid]) if choice["fate"] == "retreat" else ()
     payment = action.get("c7_pay")
     if "c7_pay" in action:
@@ -3900,23 +3962,13 @@ def _h_battle_fate(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         pl["withdraw_slots"] -= 1
     pl["fates"][lid] = choice
     del options[lid]
-    if pl["withdraw_slots"] == 0:
-        for other, choices in options.items():
-            if len(choices) > 1:
-                options[other] = [c for c in choices if c["fate"] != "withdraw"]
-    if any(len(choices) > 1 for choices in options.values()):
+    available, electable = available_battle_fates(state, options, pl["withdraw_slots"], pl["fates"])
+    if electable:
         _record(state, action, f"{lid} elects {choice['fate']}")
         return {"pending": "battle_fate", "waiting_on": side, "lord_id": lid, **choice}
 
-    fates = {**pl["fates"], **{other: choices[0] for other, choices in options.items()}}
-    result = BattleResult(
-        engagement=pl["engagement"],
-        attacker=battle_side_from_snapshot(pl["attacker"]),
-        defender=battle_side_from_snapshot(pl["defender"]),
-        rounds=[BattleRound(index=i) for i in range(1, pl["rounds"] + 1)],
-        winner=pl["winner"],
-        sallying_lord_ids=pl["sallying_lord_ids"],
-    )
+    fates = {**pl["fates"], **{other: choices[0] for other, choices in available.items()}}
+    result = _pending_battle_fate_result(pl)
     receipt = _complete_battle_aftermath(
         state, action, result, {**pl["context"], "fates": fates}, interactive=True)
     receipt["fates"] = fates
@@ -5634,6 +5686,8 @@ def _h_relief_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="bad_arg")
     _require(selected or pd.payload["attacker_ids"],
              "no attacker Lords at Battle locale", code="no_attacker")
+    _require(includes_whole_lieutenant_pairs(state, selected),
+             "Lieutenant and Lower Lord must Sally together (4.1.3)", code="lt_pair_split")
     sallyer_ids = [lid for lid in eligible if lid in selected]
     resume = pd.payload["_relief_sally_resume"]
     arrival = PendingDecision.model_validate(resume["arrival"])
@@ -5706,6 +5760,8 @@ def _h_respond_stand_battle(state: GameState, action: dict[str, Any], *,
 
     # Older combat_holds saves already committed every eligible Sallyer.
     sallyer_ids = payload.get("sallyer_ids", eligible)
+    _require(includes_whole_lieutenant_pairs(state, sallyer_ids),
+             "Lieutenant and Lower Lord must Sally together (4.1.3)", code="lt_pair_split")
     if not _holds_chosen:
         prompt = _begin_combat_holds(
             state, action, active_side, marcher_ids + sallyer_ids,

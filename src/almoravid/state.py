@@ -641,6 +641,9 @@ class GameState(StrictModel):
                 if lord.lieutenant_of is not None or lord.is_lieutenant:
                     lord.lieutenant_of = lieutenant_for(self, lord)
                     lord.is_lieutenant = lord.lieutenant_of is not None
+            if self.pending is not None and self.pending.kind in ("battle_fate", "combat_holds"):
+                from almoravid.campaign import _restore_pending_lieutenant_choices
+                _restore_pending_lieutenant_choices(self)
         return self
 
     @model_validator(mode="after")

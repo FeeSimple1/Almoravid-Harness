@@ -3063,7 +3063,7 @@ def battle_fate_options(
     approach_from_locale: str | None = None,
     approach_way_type: str | None = None,
 ) -> tuple[dict[str, list[dict[str, str]]], int]:
-    """Legal fates per losing Lord and slots for elective Withdrawals (4.4.3)."""
+    """Base fates per losing Lord and total elective Withdrawal slots (4.4.3)."""
     from almoravid.effective import is_friendly_locale
     from almoravid.map import neighbors_via
     from almoravid.static_data import load_strongholds
@@ -3109,6 +3109,52 @@ def battle_fate_options(
     }, slots
 
 
+def fate_movement(choice: dict[str, Any]) -> dict[str, str]:
+    return {key: choice[key] for key in ("fate", "retreat_to", "retreat_way") if key in choice}
+
+
+def available_battle_fates(
+    state: GameState,
+    options: dict[str, list[dict[str, str]]],
+    slots: int,
+    elected: dict[str, dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, str]]], set[str]]:
+    """Account for surviving pairs and reserve space for their pending Withdrawals."""
+    from almoravid.effective import lieutenant_partner
+
+    partners = {lid: lieutenant_partner(state, lid) for lid in options}
+    reserved = {
+        lid for lid, mate in partners.items()
+        if mate is not None and len(options[lid]) > 1
+        and elected.get(mate, {}).get("fate") == "withdraw"
+    }
+    available: dict[str, list[dict[str, str]]] = {}
+    electable: set[str] = set()
+    for lid, choices in options.items():
+        if len(choices) == 1:
+            available[lid] = choices  # Forced Sally Withdrawal or Removal.
+            continue
+        mate = partners[lid]
+        mate_choice = elected.get(mate) if mate is not None else None
+        shared_move = (fate_movement(mate_choice)
+                       if mate_choice and mate_choice["fate"] != "removed" else None)
+        mate_options = options.get(mate, []) if mate is not None else []
+        mate_pending = len(mate_options) > 1
+        free = slots - len(reserved - {lid})
+        available[lid] = [
+            choice for choice in choices
+            if (choice["fate"] == "removed" or shared_move in (None, choice))
+            and (choice["fate"] != "withdraw" or free >= (2 if mate_pending else 1))
+        ]
+        # With only one slot and no Retreat route, choosing which Lord to
+        # remove can still decide which partner is allowed to Withdraw.
+        removal_opens_withdrawal = (mate_pending and free == 1
+                                    and any(c["fate"] == "withdraw" for c in mate_options))
+        if len(available[lid]) > 1 or removal_opens_withdrawal:
+            electable.add(lid)
+    return available, electable
+
+
 def c7_retreat_assets(state: GameState, lord: Lord) -> tuple[AssetType, ...]:
     """Assets this Lord can pay for Baggage Parapet's Retreat protection."""
     if lord.side != "christian" or "C7" not in state.decks.this_levy_events.get("christian", []):
@@ -3142,14 +3188,33 @@ def apply_retreat_aftermath(
     battle_locale = state.lords[next(iter(options))].cylinder.locale_id
     if fates is None:
         fates = {}
-        for lid, choices in options.items():
-            choice = choices[0]
-            if choice["fate"] == "withdraw" and len(choices) > 1:
-                if slots:
-                    slots -= 1
-                else:
-                    choice = choices[1]
+        remaining = dict(options)
+        while remaining:
+            available, _ = available_battle_fates(state, remaining, slots, fates)
+            lid = next(iter(remaining))
+            choice = available[lid][0]
+            if choice["fate"] == "withdraw" and len(remaining[lid]) > 1:
+                slots -= 1
             fates[lid] = choice
+            del remaining[lid]
+    else:
+        from almoravid.actions import _require
+        from almoravid.effective import lieutenant_partner
+
+        _require(fates.keys() == options.keys(),
+                 "choose a fate for every losing Lord", code="bad_arg")
+        withdrawals = sum(choice["fate"] == "withdraw" and len(options[lid]) > 1
+                          for lid, choice in fates.items())
+        _require(withdrawals <= slots, "losing Lords exceed Withdrawal capacity (4.4.3)",
+                 code="exceeds_capacity")
+        for lid, choice in fates.items():
+            move = fate_movement(choice)
+            _require(move in options[lid], "illegal fate or Retreat route", code="bad_arg")
+            mate_id = lieutenant_partner(state, lid)
+            mate = fates.get(mate_id) if mate_id is not None else None
+            _require(mate is None or "removed" in (choice["fate"], mate["fate"])
+                     or move == fate_movement(mate),
+                     "Lieutenant and Lower Lord must move together (4.1.3)", code="lt_pair_split")
 
     # Phase 7f: winner-side Lords at the Battle Locale receive Spoils
     # (rule 4.4.3). The losing side conceded iff its BattleSide flag
