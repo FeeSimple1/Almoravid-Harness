@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from almoravid.actions import apply_action
+import pytest
+
+from almoravid.actions import IllegalAction, apply_action
 from almoravid.scenarios import load_scenario
-from almoravid.state import Cylinder, PendingDecision
+from almoravid.state import Cylinder, GameState, PendingDecision
 
 
 def _setup_withdraw_pending(s, seed=1):
@@ -76,3 +78,25 @@ def test_enumerator_offers_only_besiege_and_bypass_when_pending() -> None:
     apply_action(s, {"type": "respond_withdraw", "side": "muslim"})
     types = {m["type"] for m in legal_moves(s)}
     assert types == {"respond_besiege", "respond_bypass"}
+
+
+def test_pending_besiege_or_bypass_blocks_departure_after_reload() -> None:
+    state = load_scenario("scenario_a_toledo_beset", seed=1)
+    _setup_withdraw_pending(state)
+    apply_action(state, {"type": "respond_withdraw", "side": "muslim"})
+    restored = GameState.model_validate_json(state.model_dump_json())
+    march = {"type": "cmd_march", "side": "christian",
+             "target_locale_id": "lerida", "way_type": "road"}
+    for candidate in (state, restored):
+        before = candidate.model_dump()
+        with pytest.raises(IllegalAction) as error:
+            apply_action(candidate, march)
+        assert error.value.code == "pending_decision"
+        assert candidate.model_dump() == before
+
+    apply_action(state, {"type": "respond_besiege", "side": "christian"})
+    assert state.locales["zaragoza"].siege_yellow == 1
+    assert state.meta.actions_remaining == 0
+    apply_action(restored, {"type": "respond_bypass", "side": "christian"})
+    assert restored.locales["zaragoza"].bypass_yellow
+    assert restored.meta.actions_remaining == 2

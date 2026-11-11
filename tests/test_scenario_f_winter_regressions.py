@@ -211,7 +211,8 @@ def test_bishoprics_placement_is_free_and_enumerated_throughout_play(phase, step
 
 
 @pytest.mark.parametrize("active", ["christian", "muslim"])
-def test_bishoprics_preserves_pending_decision_and_opponents_turn(active):
+@pytest.mark.parametrize("kind", ["battle_concede", "storm_concede", "besiege_or_bypass"])
+def test_bishoprics_preserves_pending_decision_and_opponents_turn(active, kind):
     s = _state()
     _deploy_bishoprics(s)
     s.meta.phase = "campaign"
@@ -219,7 +220,7 @@ def test_bishoprics_preserves_pending_decision_and_opponents_turn(active):
     s.meta.active_player = active
     s.meta.active_lord_id = "al_mutamid"
     s.meta.actions_remaining = 2
-    s.pending = PendingDecision(kind="battle_concede", waiting_on=active, payload={"round": 1})
+    s.pending = PendingDecision(kind=kind, waiting_on=active, payload={"round": 1})
     pending = s.pending.model_dump()
     if active == "christian":
         assert any(m["type"] == "cap_bishoprics" for m in legal_moves(s))

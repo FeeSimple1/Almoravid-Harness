@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import json as _json
 
+import pytest
+
 import almoravid.battle as _battle
-from almoravid.actions import apply_action
+from almoravid.actions import IllegalAction, apply_action
 from almoravid.battle import BattleSide, resolve_battle
 from almoravid.scenarios import load_scenario
-from almoravid.state import Cylinder
+from almoravid.state import Cylinder, GameState
 from tests._plan_helpers import legal_pad, step_levy
 from tests.combat_choices import apply_combat_choices
 
@@ -453,6 +455,30 @@ def test_interactive_storm_attacker_reactive_concede() -> None:
                          "attacker_concede": True})
     assert r["winner"] == "muslim"      # defender wins; attacker conceded
     assert r["rounds"] == 1             # only Round 1 ran
+
+
+def test_pending_storm_blocks_march_and_retains_losses_after_reload() -> None:
+    state = _storm_setup(seed=3, siege=3)
+    apply_combat_choices(state, {"type": "cmd_storm", "side": "christian",
+                                 "interactive_concede": True})
+    assert state.pending.kind == "storm_concede"
+    assert state.pending.payload["ss"]["a_lord_routed"]["alvar_fanez"] == {
+        "knights": 1, "men_at_arms": 1}
+    restored = GameState.model_validate_json(state.model_dump_json())
+    march = {"type": "cmd_march", "side": "christian",
+             "target_locale_id": "huesca", "way_type": "road"}
+    concede = {"type": "storm_concede", "side": "christian", "attacker_concede": True}
+    for candidate in (state, restored):
+        before = candidate.model_dump()
+        with pytest.raises(IllegalAction) as error:
+            apply_action(candidate, march)
+        assert error.value.code == "pending_decision"
+        assert candidate.model_dump() == before
+        assert apply_action(candidate, concede)["winner"] == "muslim"
+        assert candidate.lords["alvar_fanez"].forces == {
+            "men_at_arms": 1, "sergeants": 1, "serfs": 1}
+        assert candidate.meta.actions_remaining == 0
+    assert state.model_dump() == restored.model_dump()
 
 
 # ---- Interactive (reactive) Relief Sally (4.4.1) --------------------------

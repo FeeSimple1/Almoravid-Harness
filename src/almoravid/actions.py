@@ -2102,6 +2102,10 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     }:
         _require(action_type in {state.pending.kind, "cap_bishoprics"},
                  "finish the pending combat choice before continuing", code="pending_decision")
+    if state.pending is not None and state.pending.kind == "besiege_or_bypass":
+        _require(action_type in {"respond_besiege", "respond_bypass", "cap_bishoprics",
+                                 "set_absorption_policy", "set_array_tactics"},
+                 "choose Besiege or Bypass before continuing", code="pending_decision")
     reset_pending = (state.pending is not None and (
         state.pending.kind == "reset_discard"
         or "_reset_discard_resume" in state.pending.payload))
@@ -2114,7 +2118,7 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(action_type in {"play_severed_heads", "decline_severed_heads",
                                  "cap_bishoprics"},
                  "resolve Severed Heads before continuing", code="pending_decision")
-    if state.pending is not None and state.pending.kind in FIELD_CONCEDE_KINDS:
+    if state.pending is not None and state.pending.kind in (*FIELD_CONCEDE_KINDS, "storm_concede"):
         _require(action_type in {state.pending.kind, "set_absorption_policy",
                                  "set_array_tactics", "cap_bishoprics"},
                  "resolve Concede before continuing", code="pending_decision")
