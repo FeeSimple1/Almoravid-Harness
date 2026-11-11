@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 Side = Literal["christian", "muslim"]
 FIELD_CONCEDE_KINDS = ("battle_concede", "relief_concede")
@@ -410,9 +410,8 @@ class Lord(StrictModel):
     # 2 Knights "attached" (modeled by adding 2 Knights to forces
     # on placement). Removed when the marker is consumed.
     crusader_markers: int = 0
-    # Phase 7c: Lieutenant stacking (rule 4.1.3). When True this Lord
-    # is a Lower Lord stacked on `lieutenant_of` (an Upper Lord at the
-    # same Locale). Set/cleared by the Lieutenant designation action.
+    # 4.1.3: only the Lower Lord points to his Lieutenant. The misleading
+    # is_lieutenant flag mirrors that link for compatibility with old saves.
     is_lieutenant: bool = False
     lieutenant_of: str | None = None
 
@@ -632,6 +631,17 @@ class GameState(StrictModel):
     cathedral_seat_locales: list[str] = Field(default_factory=list)
     history: list[HistoryEntry] = Field(default_factory=list)
     score: Score = Field(default_factory=Score)
+
+    @model_validator(mode="after")
+    def _restore_lieutenant_links(self, info: ValidationInfo) -> GameState:
+        """Resume saves with stale links without changing any Lord's position."""
+        if info.field_name is None:
+            from almoravid.effective import lieutenant_for
+            for lord in self.lords.values():
+                if lord.lieutenant_of is not None or lord.is_lieutenant:
+                    lord.lieutenant_of = lieutenant_for(self, lord)
+                    lord.is_lieutenant = lord.lieutenant_of is not None
+        return self
 
     @model_validator(mode="after")
     def _resume_legacy_concede(self) -> GameState:

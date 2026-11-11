@@ -39,6 +39,13 @@ branch the state. Exit codes: 0 success, 1 usage error, 2 IllegalAction
 (or malformed action JSON) — agents should branch on exit code 2 to
 re-pick from the legal-moves palette.
 
+## Alférez
+
+The active Lord with C15 may spend one Command action to become the
+Lieutenant of an eligible Lord at the same Locale. Use
+`toggle_lieutenant` with `mode: "stack"` and `lower_lord_id`, or
+`mode: "unstack"` to dissolve the active Lord's stack.
+
 ## Relief Sally
 
 When a defender Stands & Fights against an Approach to a Locale with

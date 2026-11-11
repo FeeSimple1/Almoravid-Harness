@@ -16,7 +16,30 @@ Per BRIEF and FUTURE_PROJECTS_LESSONS.md Pattern 5:
 
 from __future__ import annotations
 
-from almoravid.state import GameState, Side, StrongholdType
+from almoravid.state import GameState, Lord, Side, StrongholdType
+
+
+def same_stack_position(lower: Lord, upper: Lord) -> bool:
+    return (lower.id != upper.id and lower.side == upper.side
+            and lower.cylinder.kind == upper.cylinder.kind == "locale"
+            and lower.cylinder.locale_id == upper.cylinder.locale_id
+            and lower.in_stronghold == upper.in_stronghold)
+
+
+def lieutenant_for(state: GameState, lord: Lord) -> str | None:
+    """Identify a Lower Lord by its live link to the upper Lord (4.1.3)."""
+    upper_id = lord.lieutenant_of
+    if upper_id is None:
+        return None
+    upper = state.lords.get(upper_id)
+    return upper_id if upper is not None and same_stack_position(lord, upper) else None
+
+
+def lower_lord_for(state: GameState, upper_id: str) -> str | None:
+    """The upper Lord is a Lieutenant while another Lord is stacked beneath him."""
+    return next((lord.id for lord in state.lords.values()
+                 if lord.lieutenant_of == upper_id and lieutenant_for(state, lord) is not None),
+                None)
 
 
 def effective_stronghold_type(state: GameState, locale_id: str) -> StrongholdType:

@@ -12,9 +12,11 @@ from __future__ import annotations
 import pytest
 
 from almoravid.actions import IllegalAction, apply_action
-from almoravid.capabilities import (CHRISTIAN_CAPTAINS_FOUR,
-                                    capability_eligible_lords,
-                                    lord_has_capability)
+from almoravid.capabilities import (
+    CHRISTIAN_CAPTAINS_FOUR,
+    capability_eligible_lords,
+    lord_has_capability,
+)
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import CardInPlay, Cylinder
@@ -81,15 +83,18 @@ def test_alferez_toggle_stack_then_unstack_offered_and_applies() -> None:
     assert lord_has_capability(s, "alvar_fanez", "C15")
     stack = [m for m in legal_moves(s) if m["type"] == "toggle_lieutenant"]
     assert stack == [{"type": "toggle_lieutenant", "side": "christian",
-                      "mode": "stack", "commander_id": "garcia_ordonez"}]
-    apply_action(s, stack[0])
-    assert s.lords["alvar_fanez"].lieutenant_of == "garcia_ordonez"
+                      "mode": "stack", "lower_lord_id": "garcia_ordonez"}]
+    result = apply_action(s, stack[0])
+    assert result["lieutenant"] == "alvar_fanez"
+    assert result["lower_lord"] == "garcia_ordonez"
+    assert s.lords["alvar_fanez"].lieutenant_of is None
+    assert s.lords["garcia_ordonez"].lieutenant_of == "alvar_fanez"
     # Now stacked -> only unstack is offered.
     unstk = [m for m in legal_moves(s) if m["type"] == "toggle_lieutenant"]
     assert unstk == [{"type": "toggle_lieutenant", "side": "christian",
                       "mode": "unstack"}]
     apply_action(s, unstk[0])
-    assert s.lords["alvar_fanez"].lieutenant_of is None
+    assert s.lords["garcia_ordonez"].lieutenant_of is None
 
 
 def test_alferez_not_offered_to_alfonso_marshal_as_target() -> None:
@@ -98,6 +103,6 @@ def test_alferez_not_offered_to_alfonso_marshal_as_target() -> None:
     s = _bearer_with_alferez(commander_at_same=False)
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="toledo")
     s.lords["alfonso"].in_stronghold = False
-    targets = [m.get("commander_id") for m in legal_moves(s)
+    targets = [m.get("lower_lord_id") for m in legal_moves(s)
                if m["type"] == "toggle_lieutenant" and m["mode"] == "stack"]
     assert "alfonso" not in targets

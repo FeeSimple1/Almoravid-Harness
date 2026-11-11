@@ -26,11 +26,13 @@ from almoravid.actions import (
     ACTOR_ORDER,
     IllegalAction,
     _record,
+    _release_lieutenant_pair,
     _require,
     _require_active,
     _require_phase,
     _require_side,
 )
+from almoravid.effective import lieutenant_for, lower_lord_for, same_stack_position
 from almoravid.events import consume_held_event, held_event_ids
 from almoravid.state import (
     AssetType,
@@ -347,7 +349,7 @@ def _h_command_reveal(state: GameState, action: dict[str, Any]) -> dict[str, Any
             auto_pass = True
         # Rule 4.2.3 / 4.1.3: a Lower Lord's own Command card is passed
         # (he moves only when his Lieutenant activates).
-        elif lord.is_lieutenant and lord.lieutenant_of is not None:
+        elif lieutenant_for(state, lord) is not None:
             auto_pass = True
 
     if auto_pass:
@@ -2096,6 +2098,7 @@ def combat_removal_politics(state: GameState,
     lord = state.lords.get(lord_id)
     if lord is None:
         return None
+    _release_lieutenant_pair(state, lord_id)
     for loc2 in state.locales.values():
         if lord_id in loc2.seat_marker_lord_ids:
             loc2.seat_marker_lord_ids.remove(lord_id)
@@ -2247,13 +2250,12 @@ def _unladen_prov_capacity(state: GameState, lord_ids: list[str],
 
 def _marching_lords(state: GameState, lord_id: str,
                     group_lord_ids: list[str] | None = None) -> list[str]:
-    """Include mandatory Lower Lords in a March group (4.1.3/4.3.1)."""
-    here = state.lords[lord_id].cylinder.locale_id
+    """Keep each Lieutenant and Lower Lord together during March (4.1.3)."""
     moving = {lord_id, *(group_lord_ids or [])}
     for mover in list(moving):
-        moving.update(lo.id for lo in state.lords.values()
-                      if lo.lieutenant_of == mover and lo.cylinder.kind == "locale"
-                      and lo.cylinder.locale_id == here)
+        partner = lieutenant_for(state, state.lords[mover]) or lower_lord_for(state, mover)
+        if partner is not None:
+            moving.add(partner)
     return sorted(moving)
 
 
@@ -3124,10 +3126,7 @@ def _apply_ravage_effect(state: GameState, lord: Lord, side: Side,
     loc.ravaged = color  # type: ignore[assignment]
     if side == "muslim":
         state.meta.severed_heads_trigger = "ravage"
-    war_drums_bonus = 0
-    if (side == "muslim" and side_has_capability(state, "muslim", "M22")
-            and (lord.id in ("yusuf", "sir") or lord.is_lieutenant)):
-        war_drums_bonus = 1
+    war_drums_bonus = int(_war_drums_active(state, lord.id, side))
     if loc.base_type == "region":
         new_loot = lord.assets.get("loot", 0) + 1
         lord.assets["loot"] = new_loot
@@ -5111,21 +5110,27 @@ def _require_pending(state: GameState, kind: str, side: Side) -> PendingDecision
     return pd
 
 
-def _approach_subset(payload: dict[str, Any],
+def _approach_subset(state: GameState, payload: dict[str, Any],
                      action: dict[str, Any]) -> list[str]:
     """C2 (4.3.4): the Inactive side may partition its Lords across
     Avoid / Withdraw / Battle. An avoid/withdraw response acts on the
     `lord_ids` subset of the still-pending defenders (default: ALL of
     them, preserving the whole-group behavior)."""
     pending = list(payload["defender_lord_ids"])
-    subset = action.get("lord_ids")
+    subset = action.get("lord_ids", pending)
     if subset is None:
-        return pending
+        subset = pending
     _require(isinstance(subset, (list, tuple)) and bool(subset)
              and all(isinstance(lid, str) and lid in pending for lid in subset)
              and len(set(subset)) == len(subset),
              "lord_ids must name distinct pending defenders (4.3.4)",
              code="bad_subset")
+    for lid in subset:
+        lord = state.lords[lid]
+        partner = lieutenant_for(state, lord) or lower_lord_for(state, lid)
+        _require(partner is None or partner in subset,
+                 f"{lid} and {partner} must respond together (4.1.3)",
+                 code="lt_pair_split")
     return list(subset)
 
 
@@ -5219,7 +5224,7 @@ def _h_respond_avoid_battle(state: GameState, action: dict[str, Any], *,
     # Provender, so only Mules (one each) may. All discarded Loot and
     # Provender go to the Approaching Enemy Lords as Spoils (4.4.3),
     # divided among them.
-    avoiding = _approach_subset(payload, action)   # C2 partition subset
+    avoiding = _approach_subset(state, payload, action)
     # Always offer the Approaching side a reaction window, even with no
     # Swollen River Held. The window itself must not disclose a private card.
     # Validate the declared Avoid first, before parking its continuation.
@@ -5337,7 +5342,7 @@ def _h_respond_withdraw(state: GameState, action: dict[str, Any]) -> dict[str, A
              f"{locale_id} not Friendly to {side} — Withdraw impossible",
              code="stronghold_not_friendly")
     capacity = load_strongholds()["strongholds"][loc.base_type]["capacity"]
-    withdrawing = _approach_subset(payload, action)   # C2 partition subset
+    withdrawing = _approach_subset(state, payload, action)
     # Count Lords already inside the Stronghold + the withdrawing group.
     already_inside = sum(
         1 for lord in state.lords.values()
@@ -5346,27 +5351,6 @@ def _h_respond_withdraw(state: GameState, action: dict[str, Any]) -> dict[str, A
         and lord.in_stronghold
     )
     incoming = len(withdrawing)
-    # C9 (4.1.3): a Lieutenant and his Lower Lord always move together,
-    # so both must Withdraw together — and since they are two Lords they
-    # can never Withdraw into a Castle (Capacity 1; enforced by the
-    # capacity check below). Reject a Withdraw that would separate a
-    # Lt/Lower pair (one withdraws, the partner stays outside).
-    wset = set(withdrawing)
-    for lid in withdrawing:
-        lord = state.lords.get(lid)
-        if lord is None:
-            continue
-        partner = None
-        if lord.lieutenant_of is not None:
-            partner = lord.lieutenant_of
-        elif lord.is_lieutenant:
-            partner = next((x.id for x in state.lords.values()
-                            if x.lieutenant_of == lid), None)
-        if partner is not None and partner not in wset:
-            _require(False,
-                     f"{lid} and partner {partner} are a Lieutenant/Lower "
-                     f"pair and must Withdraw together (4.1.3)",
-                     code="lt_pair_split")
     _require(already_inside + incoming <= capacity,
              f"Siege Capacity {capacity} at {locale_id} would be "
              f"exceeded ({already_inside} inside + {incoming} withdrawing)",
@@ -5613,6 +5597,18 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
                           waiting_on=defender_side,
                           payload=p["march_payload"])
     state.meta.active_player = defender_side
+    avoid = dict(p["avoid_action"])
+    # Older saves could already have parked an Avoid with repeated IDs
+    # or only one member of a Lieutenant pair.
+    if isinstance(avoid.get("lord_ids"), list):
+        avoid["lord_ids"] = list(dict.fromkeys(avoid["lord_ids"]))
+    try:
+        _approach_subset(state, p["march_payload"], avoid)
+    except IllegalAction as exc:
+        if exc.code != "lt_pair_split":
+            raise
+        _record(state, action, "Defender must reselect an Avoid for the full Lieutenant pair")
+        return {"pending": "march_arrival_response", "waiting_on": defender_side}
     if play:
         consume_held_event(state, side, blocker_card)
         state.decks.discard.append(blocker_card)
@@ -5623,10 +5619,6 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
                     "interactive_retreat": action.get("interactive_retreat", False)})
         result["swollen_river_played"] = blocker_card
         return result
-    avoid = dict(p["avoid_action"])
-    # Older saves could already have parked an Avoid with repeated IDs.
-    if isinstance(avoid.get("lord_ids"), list):
-        avoid["lord_ids"] = list(dict.fromkeys(avoid["lord_ids"]))
     return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
 
 
@@ -6450,7 +6442,7 @@ def _counts_as_marshal_for_march(state: GameState, lord_id: str, side: Side,
         return True
     from almoravid.capabilities import lord_has_capability
     lord = state.lords.get(lord_id)
-    if (lord is not None and lord.lieutenant_of is None
+    if (lord is not None and lieutenant_for(state, lord) is None
             and lord_has_capability(state, lord_id, "C8")
             and (_is_taifa_locale(state, from_loc)
                  or _is_taifa_locale(state, target))):
@@ -6458,107 +6450,101 @@ def _counts_as_marshal_for_march(state: GameState, lord_id: str, side: Side,
     return False
 
 
-def _h_designate_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """4.1.3 (Plan step): stack `lord_id` as a Lower Lord with
-    `commander_id` (its Lieutenant) at the same Locale.
+def _require_lieutenant_pair(state: GameState, lower: Lord, upper: Lord, side: Side) -> None:
+    _require(lower.id != upper.id, "a Lord cannot be his own Lieutenant",
+             code="bad_arg")
+    _require(lower.side == upper.side == side,
+             "both Lords must be on the acting side", code="wrong_side")
+    _require(not _is_marshal(lower.id, side),
+             f"{lower.id} is the Marshal — cannot be a Lower Lord (4.1.3)",
+             code="marshal_cannot_subordinate")
+    _require(not _is_marshal(upper.id, side),
+             f"{upper.id} is the Marshal — cannot be a Lieutenant (4.1.3)",
+             code="marshal_cannot_subordinate")
+    _require(same_stack_position(lower, upper),
+             "both Lords must be together at the same Locale (4.1.3)",
+             code="not_same_locale")
+    _require(lieutenant_for(state, upper) is None,
+             f"{upper.id} is itself a Lower Lord — cannot lead (4.1.3)",
+             code="commander_is_subordinate")
+    _require(lower_lord_for(state, upper.id) is None,
+             f"{upper.id} already has a Lower Lord (4.1.3)",
+             code="lieutenant_full")
+    _require(lieutenant_for(state, lower) is None and lower_lord_for(state, lower.id) is None,
+             f"{lower.id} is already in a Lieutenant pair (4.1.3)",
+             code="lord_already_stacked")
 
-    Restrictions:
-      - both same side, both on the map at the same Locale;
-      - neither is the Marshal;
-      - the commander isn't itself a Lower Lord;
-      - a Lieutenant has at most one Lower Lord.
-    """
+
+def _lieutenant_candidates(state: GameState, upper: Lord, side: Side) -> list[str]:
+    candidates = []
+    for lower in state.lords.values():
+        if not same_stack_position(lower, upper):
+            continue
+        try:
+            _require_lieutenant_pair(state, lower, upper, side)
+        except IllegalAction:
+            continue
+        candidates.append(lower.id)
+    return candidates
+
+
+def _h_designate_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """4.1.3 (Plan): stack commander_id above lord_id."""
     side = _require_side(action)
     _require(state.meta.campaign_step == "plan",
              "Lieutenants are designated during the Plan step (4.1.3)",
              code="wrong_step")
-    lord_id = action.get("lord_id")
-    lord_id = cast(str, lord_id)
-    commander_id = action.get("commander_id")
-    commander_id = cast(str, commander_id)
-    _require(lord_id in state.lords and commander_id in state.lords,
+    lord_id = cast(str, action.get("lord_id"))
+    commander_id = cast(str, action.get("commander_id"))
+    _require(isinstance(lord_id, str) and lord_id in state.lords
+             and isinstance(commander_id, str) and commander_id in state.lords,
              "lord_id and commander_id required", code="bad_arg")
-    _require(lord_id != commander_id, "a Lord cannot be his own Lieutenant",
-             code="bad_arg")
-    lord = state.lords[lord_id]
-    cmd = state.lords[commander_id]
-    _require(lord.side == side and cmd.side == side,
-             "both Lords must be on the acting side", code="wrong_side")
-    _require(not _is_marshal(lord_id, side),
-             f"{lord_id} is the Marshal — cannot be a Lower Lord (4.1.3)",
-             code="marshal_cannot_subordinate")
-    _require(not _is_marshal(commander_id, side),
-             f"{commander_id} is the Marshal — cannot be a Lieutenant",
-             code="marshal_cannot_subordinate")
-    _require(lord.cylinder.kind == "locale"
-             and cmd.cylinder.kind == "locale"
-             and lord.cylinder.locale_id == cmd.cylinder.locale_id,
-             "both Lords must be at the same Locale", code="not_same_locale")
-    _require(cmd.lieutenant_of is None,
-             f"{commander_id} is itself a Lower Lord — cannot lead",
-             code="commander_is_subordinate")
-    existing = [lord_obj.id for lord_obj in state.lords.values()
-                if lord_obj.lieutenant_of == commander_id]
-    _require(not existing,
-             f"{commander_id} already has Lower Lord {existing}",
-             code="lieutenant_full")
-    lord.is_lieutenant = True
-    lord.lieutenant_of = commander_id
+    lower = state.lords[lord_id]
+    _require_lieutenant_pair(state, lower, state.lords[commander_id], side)
+    lower.is_lieutenant = True
+    lower.lieutenant_of = commander_id
     _record(state, action,
             f"{side} designates {lord_id} as Lower Lord of {commander_id}")
     return {"lower_lord": lord_id, "lieutenant": commander_id}
 
 
 def _h_toggle_lieutenant(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """C15 Alferez (capability): a Lord with Alferez may spend 1 Command
-    action to become, or stop being, a Lower Lord stacked on another
-    Christian Lord at the same Locale (rule 4.1.3 exception).
-
-    Args:
-      side, lord_id (must hold C15 cap), commander_id (to stack onto),
-      or mode='unstack' to detach.
-    """
+    """C15: the bearer spends one action to become or stop being the upper Lord."""
     from almoravid.capabilities import lord_has_capability
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
     lord_id = state.meta.active_lord_id
-    assert lord_id is not None
     _require(lord_id is not None, "no active Lord", code="no_active_lord")
+    assert lord_id is not None
     _require(lord_has_capability(state, lord_id, "C15"),
              f"{lord_id} lacks Alferez (C15)", code="no_alferez")
     _require(state.meta.actions_remaining >= 1,
              "toggle costs 1 Command action", code="not_enough_actions")
     lord = state.lords[lord_id]
     mode = action.get("mode", "stack")
+    _require(mode in ("stack", "unstack"), "mode must be stack or unstack",
+             code="bad_arg")
     if mode == "unstack":
-        lord.is_lieutenant = False
-        lord.lieutenant_of = None
+        _require(lower_lord_for(state, lord_id) is not None,
+                 f"{lord_id} is not a Lieutenant (4.1.3)", code="not_lieutenant")
+        _release_lieutenant_pair(state, lord_id)
         state.meta.actions_remaining -= 1
         _record(state, action, f"{lord_id} unstacks (Alferez)")
         return {"unstacked": lord_id,
                 "actions_remaining": state.meta.actions_remaining}
-    commander_id = action.get("commander_id")
-    commander_id = cast(str, commander_id)
-    _require(commander_id in state.lords, "commander_id required",
-             code="bad_arg")
-    cmd = state.lords[commander_id]
-    _require(cmd.side == side and not _is_marshal(commander_id, side),
-             "invalid commander", code="bad_arg")
-    _require(lord.cylinder.kind == "locale"
-             and cmd.cylinder.kind == "locale"
-             and lord.cylinder.locale_id == cmd.cylinder.locale_id,
-             "must be at the same Locale", code="not_same_locale")
-    existing = [lord_obj.id for lord_obj in state.lords.values()
-                if lord_obj.lieutenant_of == commander_id]
-    _require(not existing, f"{commander_id} already has a Lower Lord",
-             code="lieutenant_full")
-    lord.is_lieutenant = True
-    lord.lieutenant_of = commander_id
+    # Older callers use commander_id for the other Lord on the card action.
+    lower_id = cast(str, action.get("lower_lord_id", action.get("commander_id")))
+    _require(isinstance(lower_id, str) and lower_id in state.lords,
+             "lower_lord_id required", code="bad_arg")
+    lower = state.lords[lower_id]
+    _require_lieutenant_pair(state, lower, lord, side)
+    lower.is_lieutenant = True
+    lower.lieutenant_of = lord_id
     state.meta.actions_remaining -= 1
     _record(state, action,
-            f"{lord_id} stacks as Lower Lord of {commander_id} (Alferez)")
-    return {"lower_lord": lord_id, "lieutenant": commander_id,
+            f"{lord_id} stacks as Lieutenant above {lower_id} (Alferez)")
+    return {"lower_lord": lower_id, "lieutenant": lord_id,
             "actions_remaining": state.meta.actions_remaining}
 
 
@@ -6860,29 +6846,22 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(state.meta.actions_remaining >= 1,
              "Sortie costs 1 March action (4.3.6)", code="not_enough_actions")
 
-    # Group Sortie: only a Marshal or a Lieutenant may take a group
-    # (4.3.1). Members must be same-side, inside this Stronghold.
-    sortie_ids = [lord_id]
+    # A Marshal may bring other Lords. A Lieutenant always brings his Lower Lord.
+    lower = lower_lord_for(state, lord_id)
     group_req = list(action.get("group_lord_ids", []) or [])
-    if group_req:
-        # 4.3.1/4.3.6: a group is led by a Marshal or a Lieutenant. NOTE
-        # the internal `is_lieutenant` flag marks the LOWER Lord; the
-        # actual Lieutenant (upper Lord, the eligible leader) is the Lord
-        # referenced by some other Lord's `lieutenant_of`.
-        _is_lt_leader = any(o.lieutenant_of == lord_id
-                            for o in state.lords.values())
-        _require(_is_marshal(lord_id, side) or _is_lt_leader,
-                 "only a Marshal or Lieutenant may Sortie a group (4.3.1)",
-                 code="not_group_leader")
-        for gid in group_req:
-            _require(gid in state.lords and gid != lord_id,
-                     f"bad group member {gid!r}", code="bad_group")
-            g = state.lords[gid]
-            _require(g.side == side and g.cylinder.kind == "locale"
-                     and g.cylinder.locale_id == here and g.in_stronghold,
-                     f"{gid} is not inside {here} with the leader (4.3.6)",
-                     code="bad_group")
-            sortie_ids.append(gid)
+    _require(_is_marshal(lord_id, side) or all(gid == lower for gid in group_req),
+             "only a Marshal or Lieutenant may Sortie a group, and a Lieutenant "
+             "may bring only his Lower Lord (4.3.1)",
+             code="not_group_leader")
+    for gid in group_req:
+        _require(isinstance(gid, str) and gid in state.lords and gid != lord_id,
+                 f"bad group member {gid!r}", code="bad_group")
+        g = state.lords[gid]
+        _require(same_stack_position(g, lord),
+                 f"{gid} is not inside {here} with the leader (4.3.6)",
+                 code="bad_group")
+    marching = _marching_lords(state, lord_id, group_req)
+    sortie_ids = [lord_id, *(lid for lid in marching if lid != lord_id)]
 
     # Come out of the Stronghold and mark Moved (4.3.6).
     for sid in sortie_ids:
@@ -7593,16 +7572,16 @@ def _bypass_without_stopping(state: GameState, lord_id: str, side: Side) -> bool
     then March on the SAME Command card (Arts of War ref). Adalides is a
     this_lord cap (not Eudes); War Drums (side_wide) covers Yusuf, Sir, and
     Muslim Lieutenants (upper Lords)."""
-    from almoravid.capabilities import lord_has_capability, side_has_capability
-    if (lord_has_capability(state, lord_id, "C3")
-            or lord_has_capability(state, lord_id, "C10")):
-        return True
-    if side == "muslim" and side_has_capability(state, "muslim", "M22"):
-        if lord_id in ("yusuf", "sir"):
-            return True
-        if any(o.lieutenant_of == lord_id for o in state.lords.values()):
-            return True
-    return False
+    from almoravid.capabilities import lord_has_capability
+    return (lord_has_capability(state, lord_id, "C3")
+            or lord_has_capability(state, lord_id, "C10")
+            or _war_drums_active(state, lord_id, side))
+
+
+def _war_drums_active(state: GameState, lord_id: str, side: Side) -> bool:
+    from almoravid.capabilities import side_has_capability
+    return (side == "muslim" and side_has_capability(state, side, "M22")
+            and (lord_id in ("yusuf", "sir") or lower_lord_for(state, lord_id) is not None))
 
 
 def _fueros_targets(state: GameState) -> list[str]:

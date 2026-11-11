@@ -883,6 +883,7 @@ def _reconcile_rodrigo_effect(state: GameState, vp: float) -> int:
     state.taifas_box_vp += vp
     state.score.muslim += vp
     if sayyid.cylinder.kind == "locale":
+        _release_lieutenant_pair(state, sayyid.id)
         for field_name in sayyid.cleanup_on_removal_fields:
             try:
                 setattr(sayyid, field_name,
@@ -1592,6 +1593,14 @@ def _award_parias_coin(state: GameState, amount: int,
     return {"amount": amount, "placed": placed, "unplaced": 0}
 
 
+def _release_lieutenant_pair(state: GameState, lord_id: str) -> None:
+    """Clear all links to and from a Lord who unstacks or leaves the map."""
+    for lord in state.lords.values():
+        if lord.id == lord_id or lord.lieutenant_of == lord_id:
+            lord.lieutenant_of = None
+            lord.is_lieutenant = False
+
+
 def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """3.3 Disband. Lords are Disbanded by the POSITION of their Service
     marker relative to the Levy/Campaign marker — Disband is mandatory,
@@ -1744,26 +1753,7 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     lord.raiders_used_this_card = False
     lord.routed_units = {}
     lord.crusader_markers = 0
-    # C8 (4.1.3): if a Lieutenant or his Lower Lord Disbands while the
-    # other does not, the remaining Lord becomes a normal Lord.
-    if lord.is_lieutenant:
-        # Disbanding Lord was the Lieutenant -> free its Lower Lord(s).
-        for other_l in state.lords.values():
-            if other_l.id != lord_id and other_l.lieutenant_of == lord_id:
-                other_l.lieutenant_of = None
-    if lord.lieutenant_of is not None:
-        # Disbanding Lord was a Lower Lord -> its Lieutenant, if it has
-        # no other Lower Lord, reverts to a normal Lord.
-        upper_id = lord.lieutenant_of
-        upper = state.lords.get(upper_id)
-        if upper is not None:
-            still_has_lower = any(
-                x.id != lord_id and x.lieutenant_of == upper_id
-                for x in state.lords.values())
-            if not still_has_lower:
-                upper.is_lieutenant = False
-    lord.is_lieutenant = False
-    lord.lieutenant_of = None
+    _release_lieutenant_pair(state, lord_id)
 
     # Locale being vacated, for the 4.3.5 Siege/Bypass-marker cleanup.
     if beyond:

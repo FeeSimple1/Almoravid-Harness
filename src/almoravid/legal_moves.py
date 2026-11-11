@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from almoravid.effective import lieutenant_for, lower_lord_for
 from almoravid.events import held_event_ids, held_event_moves
 from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
@@ -1129,29 +1130,14 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             and not _ib_dn(state, lid)):
                         out.append({"type": "dinars_deposit", "side": side,
                                     "lord_id": lid})
-            # 4.1.3 Designate Lieutenant: stack a Lower Lord under a
-            # Lieutenant at the same Locale (Plan step). Both same-side on
-            # the map, neither the Marshal, the commander not itself a Lower
-            # Lord and not already leading one. (Working handler, no menu
-            # entry -> under-enumeration; mirrors _h_designate_lieutenant.)
-            from almoravid.campaign import _is_marshal as _ismar
-            side_on_map = [(lid, lord_obj) for lid, lord_obj in state.lords.items()
-                           if lord_obj.side == side and lord_obj.cylinder.kind == "locale"]
-            for lid, lord_obj in side_on_map:
-                if _ismar(lid, side):
+            # 4.1.3: stack a Lower Lord under an eligible Lieutenant.
+            from almoravid.campaign import _lieutenant_candidates
+            for upper in state.lords.values():
+                if upper.side != side or upper.cylinder.kind != "locale":
                     continue
-                for cid, cl in side_on_map:
-                    if cid == lid or _ismar(cid, side):
-                        continue
-                    if cl.cylinder.locale_id != lord_obj.cylinder.locale_id:
-                        continue
-                    if cl.lieutenant_of is not None:
-                        continue
-                    if any(x.lieutenant_of == cid
-                           for x in state.lords.values()):
-                        continue
+                for lower_id in _lieutenant_candidates(state, upper, side):
                     out.append({"type": "designate_lieutenant", "side": side,
-                                "lord_id": lid, "commander_id": cid})
+                                "lord_id": lower_id, "commander_id": upper.id})
             already_fin = (state.meta.plan_finalized_christian
                            if side == "christian"
                            else state.meta.plan_finalized_muslim)
@@ -1242,32 +1228,18 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                 lord_id = state.meta.active_lord_id
                 lord = state.lords[lord_id]
                 out.append({"type": "cmd_pass", "side": active})
-                # C15 Alferez (This-Lord capability): the bearer may spend
-                # 1 Command action to stack as a Lieutenant onto a same-Locale
-                # Christian Lord, or unstack -- the 4.1.3 exception allowing
-                # (un)stacking outside the Plan step, repeatable within a card.
-                # Q-001 resolved (scope=this_lord; eligible bearers = the four
-                # captains, enforced at Levy/deploy), so lord_has_capability is
-                # now reachable. Mirrors _h_toggle_lieutenant's 4.1.3 gates.
+                # C15 lets its bearer become or stop being the upper Lord.
+                from almoravid.campaign import _lieutenant_candidates
                 from almoravid.capabilities import lord_has_capability as _lhc_al
                 if _lhc_al(state, lord_id, "C15"):
-                    if lord.lieutenant_of is not None:
+                    if lower_lord_for(state, lord_id) is not None:
                         out.append({"type": "toggle_lieutenant",
                                     "side": active, "mode": "unstack"})
                     else:
-                        from almoravid.campaign import _is_marshal as _ism_al
-                        _here_al = lord.cylinder.locale_id
-                        assert _here_al is not None
-                        for _cid, _cl in state.lords.items():
-                            if (_cid != lord_id and _cl.side == active
-                                    and not _ism_al(_cid, active)
-                                    and _cl.cylinder.kind == "locale"
-                                    and _cl.cylinder.locale_id == _here_al
-                                    and not any(x.lieutenant_of == _cid
-                                                for x in state.lords.values())):
-                                out.append({"type": "toggle_lieutenant",
-                                            "side": active, "mode": "stack",
-                                            "commander_id": _cid})
+                        for lower_id in _lieutenant_candidates(state, lord, active):
+                            out.append({"type": "toggle_lieutenant",
+                                        "side": active, "mode": "stack",
+                                        "lower_lord_id": lower_id})
                 # M9 Emir al-Muslimin: Yusuf, if closer than any Christian
                 # to a Jihad-eligible Locale (1.4.4), may use his entire
                 # Command card to add 1 Jihad there (Arts of War ref M9).
@@ -1308,7 +1280,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             if lo.side == active and lo.id != lord_id
                             and lo.cylinder.kind == "locale"
                             and lo.cylinder.locale_id == lord.cylinder.locale_id
-                            and lo.lieutenant_of is None
+                            and lieutenant_for(state, lo) is None
                             and not _isb_m19(state, lo.id)
                             and not lo.bypassed_this_card
                         ]
@@ -1366,7 +1338,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             if lo.side == active and lo.id != lord_id
                             and lo.cylinder.kind == "locale"
                             and lo.cylinder.locale_id == from_loc
-                            and lo.lieutenant_of is None
+                            and lieutenant_for(state, lo) is None
                             and not is_besieged(state, lo.id)
                             and not lo.bypassed_this_card
                         ]

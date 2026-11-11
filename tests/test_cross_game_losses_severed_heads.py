@@ -51,6 +51,16 @@ def _ravage(state):
     return apply_action(state, {"type": "cmd_ravage", "side": "muslim"})
 
 
+def _designate_ravaging_lieutenant(state):
+    lower = state.lords["abu_bakr"]
+    lower.cylinder = state.lords["al_mutamid"].cylinder.model_copy()
+    lower.forces = {"men_at_arms": 1}
+    state.meta.campaign_step = "plan"
+    apply_action(state, {"type": "designate_lieutenant", "side": "muslim",
+                         "lord_id": lower.id, "commander_id": "al_mutamid"})
+    state.meta.campaign_step = "activation"
+
+
 def _retreat(state, christian_active=False):
     state.lords["alfonso"].cylinder.locale_id = "transduero"
     if christian_active:
@@ -341,7 +351,7 @@ def test_caballeria_failed_ravage_does_not_allow_m13_or_war_drums(monkeypatch, r
     state.decks.capabilities_in_play = [
         CardInPlay(card_id="C19", scope="side_wide", owner_side="christian"),
         CardInPlay(card_id="M22", scope="side_wide", owner_side="muslim")]
-    state.lords["al_mutamid"].is_lieutenant = True
+    _designate_ravaging_lieutenant(state)
     monkeypatch.setattr("almoravid.rng.roll_d6", lambda _: roll)
     result = _ravage(state)
     assert result["caballeria_roll"] == roll
@@ -442,7 +452,7 @@ def test_ravage_and_war_drums_do_not_cap_assets_at_eight(locale, war_drums, expe
     state.lords["al_mutamid"].cylinder.locale_id = locale
     state.lords["al_mutamid"].assets = {"loot": 8, "prov": 8}
     if war_drums:
-        state.lords["al_mutamid"].is_lieutenant = True
+        _designate_ravaging_lieutenant(state)
         state.decks.capabilities_in_play = [
             CardInPlay(card_id="M22", scope="side_wide", owner_side="muslim")]
     _ravage(state)
