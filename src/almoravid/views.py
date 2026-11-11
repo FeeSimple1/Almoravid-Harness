@@ -37,13 +37,13 @@ def _combat_revealed_lords(state: GameState) -> set[str]:
         return revealed
     if pd is None or pd.kind not in {
             "battle_concede", "storm_concede", "relief_concede", "oneround_timing",
-            "battle_fate"}:
+            "battle_fate", "camp_attack"}:
         return revealed
     payload = pd.payload
     snapshots = [payload.get("attacker"), payload.get("defender")]
     relief = payload.get("rs", {})
     snapshots.extend(relief.get(key) for key in (
-        "marchers", "sallyers", "def_front", "def_rear"))
+        "result_attacker", "result_defender"))
     participants = {lid for snap in snapshots if isinstance(snap, dict)
                     for lid in snap.get("lord_ids", [])}
     if participants:

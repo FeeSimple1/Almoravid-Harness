@@ -50,18 +50,30 @@ def test_relief_camp_attack_targets_all_lords_once(card, besiegers, parapet):
     relief = state.pending.payload["rs"]
     assert relief["shared"] == (besiegers == 1)
     assert len(relief["excess_ids"]) == max(0, besiegers - 4)
-    assert state.decks.discard.count(card) == 1
-    for lid in victims:
-        assert state.lords[lid].assets["coin"] == (5 if parapet else 1)
-    coins = [state.lords[lid].assets.get("coin", 0) for lid in recipients]
-    assert sum(coins) == (0 if parapet else 2 * len(victims))
-    if not parapet:
-        assert all(coins)
+    assert state.decks.discard.count(card) == int(parapet)
+    assert all(state.lords[lid].assets["coin"] == 5 for lid in victims)
 
     state = GameState.model_validate_json(state.model_dump_json())
     stepped = apply_action(state, {"type": "relief_concede", "side": "christian",
                                   "attacker_concede": True})
+    if not parapet:
+        owner = "christian" if card == "C2" else "muslim"
+        assert state.pending.kind == "camp_attack" and state.pending.waiting_on == owner
+        if card == "C2" and besiegers == 2:
+            waited = []
+            while delay := next((m for m in legal_moves(state) if m.get("mode") == "wait"), None):
+                waited.append(apply_action(state, delay)["after"])
+                state = GameState.model_validate_json(state.model_dump_json())
+            assert waited[0] == "1.a" and len(waited) > 1
+            assert state.pending.payload["camp_attack_round"]["finished"]
+        stepped = apply_action(state, {"type": "camp_attack", "side": owner, "mode": "auto"})
+        camp = stepped["camp_attack"]
+        assert camp["taken"] == camp["removed"] == {lid: {"coin": 2} for lid in victims}
+        assert set(camp["spoils_awarded"]) == set(recipients[:2 * len(victims)])
+        assert sum(award["coin"] for award in camp["spoils_awarded"].values()) == 2 * len(victims)
+    assert state.decks.discard.count(card) == 1
     resolved = result
     assert (stepped["winner"], stepped["rounds"]) == (resolved["winner"], resolved["rounds"])
     assert state.lords == synchronous.lords
     assert state.decks == synchronous.decks
+    assert state.meta.rng_state == synchronous.meta.rng_state

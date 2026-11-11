@@ -6,7 +6,8 @@ from almoravid.actions import IllegalAction, apply_action
 from almoravid.legal_moves import legal_moves
 from almoravid.state import GameState
 from almoravid.views import redacted_view
-from tests.test_cross_game_avoid_retreat_surrender import place, position
+from playtest_harness import Harness
+from tests.test_cross_game_avoid_retreat_surrender import place, position, reject_unchanged
 from tests.test_cross_game_reaction_privacy import hold
 
 
@@ -81,10 +82,69 @@ def test_selected_subset_is_public_and_invalid_plays_are_atomic():
     assert state.lords["al_mutamid"].assets["coin"] == 5
     _choose(state)
     assert state.pending.kind == "battle_concede"
-    assert state.lords["al_mutamid"].assets["coin"] == 1
+    assert state.lords["al_mutamid"].assets["coin"] == 5
+    apply_action(state, {"type": "battle_concede", "side": "christian", "attacker_concede": True})
+    assert state.pending.kind == "camp_attack" and state.pending.waiting_on == "christian"
+    outcome = apply_action(state, {"type": "camp_attack", "side": "christian", "mode": "auto"})
+    assert outcome["camp_attack"]["taken"] == {"al_mutamid": {"coin": 2}}
+    assert outcome["camp_attack"]["removed"] == {"al_mutamid": {"coin": 2}}
     assert state.decks.discard.count("C2") == 1
     assert state.decks.held["christian"] == ["C8", "C1"]
     assert state.decks.held["muslim"] == ["M6"]
+
+
+def test_camp_attack_owner_can_wait_take_carts_and_assign_all_spoils(tmp_path):
+    harness = Harness("scenario_f_reconquista", seed=7)
+    harness.state = state = _battle()
+    place(state, "alfonso", "transduero")
+    place(state, "alvar_fanez", "transduero")
+    place(state, "al_mutamid", "transduero", coin=3, cart=2, mule=1)
+    hold(state, "christian", "C2")
+    rng = state.meta.rng_state
+
+    def move(kind, **params):
+        return next(m for m in harness.legal() if m["type"] == kind
+                    and all(m.get(k) == v for k, v in params.items()))
+
+    harness.apply(move("cmd_battle", interactive_concede=True))
+    harness.apply(move("combat_holds", card_id="C2"))
+    for _ in range(2):
+        harness.apply(move("combat_holds", card_id=None))
+    harness.apply(move("battle_concede", side="christian", attacker_concede=None))
+    result = harness.apply(move("battle_concede", side="muslim", defender_concede=True))
+    assert result["after"] == "concede" and result["waiting_on"] == "christian"
+    assert state.meta.rng_state == rng
+    assert state.lords["al_mutamid"].assets == {"coin": 3, "cart": 2, "mule": 1}
+    for step in ("1.a", "1.b", "2.a", "2.b", "2.c"):
+        result = harness.apply(move("camp_attack", mode="wait"))
+        assert result["after"] == step
+    assert state.meta.rng_state != rng
+    assert state.lords["al_mutamid"].assets["cart"] == 2
+    assert result["last_strikes"][0]["rounded_hits"] > 0
+
+    harness.apply(move("camp_attack", mode="choose"))
+    take = move("camp_attack", lord_id="al_mutamid", asset="cart", amount=2)
+    reject_unchanged(state, {**take, "side": "muslim"}, "not_responder")
+    reject_unchanged(state, {**take, "amount": 3}, "bad_arg")
+    assert harness.apply(take)["camp_attack_take"] == {"al_mutamid": {"cart": 2}}
+
+    path = tmp_path / "camp-attack.json"
+    harness.save(str(path))
+    harness = Harness.load(str(path))
+    state = harness.state
+    rng = state.meta.rng_state
+    harness.apply(move("camp_attack", asset="coin", amount=1))
+    harness.apply(move("camp_attack", asset="mule", amount=1))
+    assert state.meta.rng_state == rng
+    assert state.lords["al_mutamid"].assets == {"coin": 2}
+    award = move("camp_attack", lord_id="alvar_fanez", asset="cart", amount=2)
+    reject_unchanged(state, {**award, "lord_id": "al_mutamid"}, "bad_arg")
+    result = harness.apply(award)
+    assert result["camp_attack_award"] == {"alvar_fanez": {"cart": 2}}
+    assert state.lords["alvar_fanez"].assets["cart"] == 2
+    assert state.lords["alfonso"].assets.get("cart", 0) == 0
+    assert state.decks.discard.count("C2") == 1
+    assert not harness.findings
 
 
 def test_defender_can_retain_m2_after_attacker_plays_baggage_parapet():

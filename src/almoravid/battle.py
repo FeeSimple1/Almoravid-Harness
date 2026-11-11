@@ -1095,6 +1095,8 @@ def _battle_one_round(
     engagement: Literal["battle", "sally"] = "battle",
     defender_walls_range: tuple[int, int] | None = None,
     before_strike: Callable[[BattleSide, BattleSide, int, str], None] | None = None,
+    progress: dict[str, Any] | None = None,
+    pause_after_strike: bool = False,
 ) -> BattleRound:
     """Resolve a single open-field Battle Round: Reposition (Round 2+),
     the Strike steps (M6 Feigned-Retreat reorder on Round 2), and the
@@ -1156,9 +1158,11 @@ def _battle_one_round(
         ]
     else:
         steps_this_round = _BATTLE_STEPS
-    c8_ctx = _build_c8_ctx(state, attacker, defender, round_idx)
+    offset = progress.get("next_step", 0) if progress is not None else 0
+    c8_ctx = progress["cantador"] if offset else _build_c8_ctx(state, attacker, defender, round_idx)
     sallying_lord_ids = attacker.lord_ids if engagement == "sally" else ()
-    for step_id, actor_role, step_type, unit_class in steps_this_round:
+    for index, (step_id, actor_role, step_type, unit_class) in enumerate(
+            steps_this_round[offset:], start=offset):
         # 4.4.2 JAVELINS / Arts of War M7: owners may decide at the
         # moment of use, after Reposition and earlier Strikes. The hook
         # receives live armies, but no seed, RNG counter or future dice.
@@ -1176,8 +1180,12 @@ def _battle_one_round(
                                   c8_ctx=c8_ctx,
                                   arrada_lord_ids=sallying_lord_ids)
         rnd.steps.append(step_res)
+        if progress is not None:
+            progress.update(next_step=index + 1, cantador=c8_ctx)
         if _battle_over(attacker, defender):
             break
+        if pause_after_strike and index + 1 < len(steps_this_round):
+            return rnd
     # End-of-Round discards: C8 Cantador (Round 1 only, per card text);
     # M7 Spear Wall after its owner-chosen Round (default 1).
     if round_idx == 1:
@@ -1188,6 +1196,8 @@ def _battle_one_round(
     # End-of-Round-2 discard: M6 Feigned Retreat (Round 2 only).
     if round_idx == 2:
         _discard_round1_events(state, ["M6"])
+    if progress is not None:
+        progress["finished"] = True
     return rnd
 
 
@@ -1223,9 +1233,6 @@ def resolve_battle(
     # Bug T: initialize M7 Spear Wall cap.
     init_m7_cap(state, attacker)
     init_m7_cap(state, defender)
-    # Camp Attack (C2/M2) consumed at Battle start (before Round 1).
-    # C7 Baggage Parapet on the Christian side cancels Muslim M2.
-    _consume_camp_attack(state, attacker, defender, result)
     round_idx = 0
     while not _battle_over(attacker, defender):
         if max_rounds is not None and round_idx >= max_rounds:
@@ -1242,6 +1249,8 @@ def resolve_battle(
         if (defender_concede_round is not None
                 and round_idx >= defender_concede_round):
             defender.conceded = True
+        if round_idx == 1:
+            _consume_camp_attack(state, attacker, defender, result)
         rnd = _battle_one_round(state, attacker, defender, round_idx,
                                 engagement=engagement,
                                 defender_walls_range=defender_walls_range,
@@ -2663,9 +2672,6 @@ def _relief_setup(
             init_m7_cap(state, ds)
     if def_front is not None:
         init_m7_cap(state, def_front)
-    if marcher_ids and def_front is not None:
-        # Camp Attack covers every Lord in the Battle, across both lanes and Reserve.
-        _consume_camp_attack(state, result.attacker, result.defender, result)
     rs = _ReliefState(
         marchers=marchers, sallyers=sallyers, def_front=def_front,
         def_rear=def_rear, shared=shared, result=result, lf={}, lr={},
@@ -2708,15 +2714,17 @@ def _relief_strike_pairs(rs: _ReliefState, role: Role) -> Iterator[tuple[BattleS
             yield (striker, target) if role == "attacker" else (target, striker)
 
 
-def _relief_run_round(state: GameState, rs: _ReliefState,
-                      rnd_i: int) -> BattleRound:
+def _relief_run_round(state: GameState, rs: _ReliefState, rnd_i: int, *,
+                      progress: dict[str, Any] | None = None,
+                      pause_after_strike: bool = False) -> BattleRound:
     """Resolve one Relief-Sally Round (Reposition + two-lane Strikes +
     end-of-Round discards), mutating `rs`. Concede declaration / break /
     winner are the caller's responsibility."""
     rnd = BattleRound(index=rnd_i)
     def_front, def_rear = rs.def_front, rs.def_rear
-    c8_ctx = None
-    if rnd_i == 1 and "C8" in state.decks.this_levy_events.get("christian", []):
+    offset = progress.get("next_step", 0) if progress is not None else 0
+    c8_ctx = progress["cantador"] if offset else None
+    if not offset and rnd_i == 1 and "C8" in state.decks.this_levy_events.get("christian", []):
         holder = state.meta.cantador_lord_id
         if holder is None:
             lanes = ("M", "S") if rs.active_side == "christian" else ("DF", "DR")
@@ -2747,19 +2755,26 @@ def _relief_run_round(state: GameState, rs: _ReliefState,
         ]
     else:
         steps_this_round = _BATTLE_STEPS
-    for step_id, actor_role, step_type, unit_class in steps_this_round:
+    for index, (step_id, actor_role, step_type, unit_class) in enumerate(
+            steps_this_round[offset:], start=offset):
         for attacker, defender in _relief_strike_pairs(rs, actor_role):
             rnd.steps.append(_relief_lane_step(
                 state, rs, actor_role, attacker, defender,
                 step_id=step_id, step_type=step_type, unit_class=unit_class,
                 round_index=rnd_i, c8_ctx=c8_ctx,
                 walls_range=rs.walls if attacker is rs.sallyers else None))
+        if progress is not None:
+            progress.update(next_step=index + 1, cantador=c8_ctx)
         if _relief_over(state, rs):
             break
+        if pause_after_strike and index + 1 < len(steps_this_round):
+            return rnd
     if rnd_i == 1:
         _discard_round1_events(state, ["C8", "M7"])
     if rnd_i == 2:
         _discard_round1_events(state, ["M6"])
+    if progress is not None:
+        progress["finished"] = True
     return rnd
 
 
@@ -2910,6 +2925,8 @@ def resolve_relief_sally(
                         and rnd_i >= defender_concede_round)
         _relief_declare_concede(rs, atk_concedes=atk_concedes,
                                 dfd_concedes=dfd_concedes)
+        if rnd_i == 1 and marcher_ids and rs.def_front is not None:
+            _consume_camp_attack(state, rs.result.attacker, rs.result.defender, rs.result)
         rs.result.rounds.append(_relief_run_round(state, rs, rnd_i))
         if atk_concedes or dfd_concedes:
             rs.result.notes.append(
@@ -3000,105 +3017,80 @@ def _discard_round1_events(state: GameState, card_ids: list[str]) -> None:
             state.decks.this_levy_events.pop(side_key, None)
 
 
+CAMP_ATTACK_ASSETS: tuple[AssetType, ...] = ("coin", "loot", "prov", "cart", "mule")
+
+
+def camp_attack_card(state: GameState, side: Side) -> str | None:
+    card = "C2" if side == "christian" else "M2"
+    return card if card in state.decks.this_campaign_events.get(side, []) else None
+
+
+def discard_camp_attack(state: GameState, side: Side) -> None:
+    card = camp_attack_card(state, side)
+    assert card is not None
+    bucket = state.decks.this_campaign_events[side]
+    bucket.remove(card)
+    state.decks.discard.append(card)
+    if not bucket:
+        del state.decks.this_campaign_events[side]
+
+
+def cancel_camp_attack(state: GameState) -> bool:
+    """C7 cancels M2 and stays available for its Retreat effect."""
+    parapet = "C7" in state.decks.this_levy_events.get("christian", [])
+    if parapet and camp_attack_card(state, "muslim"):
+        discard_camp_attack(state, "muslim")
+        return True
+    return False
+
+
+def debit_camp_attack_asset(lord: Lord, asset: AssetType, amount: int) -> None:
+    lord.assets[asset] -= amount
+    if not lord.assets[asset]:
+        del lord.assets[asset]
+
+
+def default_camp_attack(state: GameState, recipients: list[str],
+                        enemies: list[str]) -> dict[str, Any]:
+    """Resolve the existing deterministic Asset and allocation policy."""
+    taken: dict[str, dict[AssetType, int]] = {}
+    removed: dict[str, dict[AssetType, int]] = {}
+    spoils: dict[AssetType, int] = {}
+    for lid in enemies:
+        lord = state.lords[lid]
+        for selection in (taken, removed):
+            remaining = 2
+            for asset in CAMP_ATTACK_ASSETS:
+                amount = min(remaining, lord.assets.get(asset, 0))
+                if amount:
+                    debit_camp_attack_asset(lord, asset, amount)
+                    selection.setdefault(lid, {})[asset] = amount
+                    if selection is taken:
+                        spoils[asset] = spoils.get(asset, 0) + amount
+                    remaining -= amount
+                if not remaining:
+                    break
+    awards = award_battle_spoils(state, recipients, [spoils])
+    return {"taken": taken, "removed": removed, "spoils": spoils, "spoils_awarded": awards}
+
+
 def _consume_camp_attack(
     state: GameState,
     attacker: BattleSide,
     defender: BattleSide,
     result: BattleResult,
 ) -> None:
-    """Consume Camp Attack (C2/M2) at the outset of Battle.
-
-    Rule (card-text fidelity, Pattern 7):
-      * Each side may have played its own Camp Attack into
-        this_campaign_events before combat. Both fire at Battle start.
-      * C7 Baggage Parapet (in this_levy_events on the Christian side)
-        CANCELS Muslim Camp Attack (M2) only. C7 does NOT cancel
-        Christian Camp Attack (C2). C2 is never cancelled.
-      * Effect: take 2 Assets from each Enemy Lord as Spoils,
-        remove 2 more from each. Assets are transferred to the
-        friendly side; Spoils distribution among friendly Lords is
-        a Phase 6 follow-up (full Spoils mechanics couple with
-        Retreat/Aftermath in Phase 6c).
-      * Camp Attack does NOT apply in Storm — resolve_storm does not
-        call this helper.
-    """
-    for side_key in ("christian", "muslim"):
-        ca_id = "C2" if side_key == "christian" else "M2"
-        camp_bucket = state.decks.this_campaign_events.get(side_key, [])
-        if ca_id not in camp_bucket:
+    """Apply the deterministic default after Concede in synchronous Round 1."""
+    if cancel_camp_attack(state):
+        result.notes.append("Camp Attack (M2) cancelled by Baggage Parapet (C7)")
+    for side in ("christian", "muslim"):
+        card = camp_attack_card(state, side)
+        if card is None:
             continue
-        # Check for Baggage Parapet cancellation (Muslim CA only).
-        cancelled = False
-        if side_key == "muslim":
-            christian_hold = state.decks.this_levy_events.get("christian", [])
-            if "C7" in christian_hold:
-                cancelled = True
-                # Bug P fix (Pattern 9): C7 has TWO effects per card
-                # text — "Cancel Muslim Camp Attack" AND "If Christians
-                # Retreat, pay 1 Asset per Lord to skip Spoils and
-                # Service shift". Don't discard C7 here; leave it in
-                # this_levy_events so apply_retreat_aftermath can
-                # consult it. apply_aftermath will discard it at
-                # engagement end like any other Hold event.
-                result.notes.append(
-                    "Camp Attack (M2) cancelled by Baggage Parapet (C7)"
-                )
-        # Discard Camp Attack regardless (it triggered or was cancelled).
-        camp_bucket.remove(ca_id)
-        state.decks.discard.append(ca_id)
-        if not camp_bucket:
-            state.decks.this_campaign_events.pop(side_key, None)
-        if cancelled:
-            continue
-        # Apply the effect: transfer up to 2 Assets per Enemy Lord as
-        # Spoils to the friendly side, then remove 2 more per Enemy
-        # Lord. We drain in a deterministic preference order so the
-        # behavior is reproducible under self-play.
-        friendly = attacker if attacker.side == side_key else defender
-        enemy = defender if friendly is attacker else attacker
-        asset_drain_order: tuple[AssetType, ...] = (
-            "coin", "loot", "prov", "cart", "mule")
-        total_spoils: dict[AssetType, int] = {}
-        for elid in enemy.lord_ids:
-            elord = state.lords.get(elid)
-            if elord is None:
-                continue
-            # Phase 1: take 2 as Spoils.
-            taken = 0
-            for atype in asset_drain_order:
-                if taken >= 2:
-                    break
-                have = elord.assets.get(atype, 0)
-                take = min(have, 2 - taken)
-                if take > 0:
-                    elord.assets[atype] = have - take
-                    if elord.assets[atype] == 0:
-                        elord.assets.pop(atype, None)
-                    total_spoils[atype] = total_spoils.get(atype, 0) + take
-                    taken += take
-            # Phase 2: remove 2 more.
-            removed = 0
-            for atype in asset_drain_order:
-                if removed >= 2:
-                    break
-                have = elord.assets.get(atype, 0)
-                take = min(have, 2 - removed)
-                if take > 0:
-                    elord.assets[atype] = have - take
-                    if elord.assets[atype] == 0:
-                        elord.assets.pop(atype, None)
-                    removed += take
-        # Phase 6g: distribute Spoils round-robin across all friendly
-        # Lords at the Battle (rule 4.4.3 "winning player distributes
-        # among winning Lords at Locale").
-        if total_spoils and friendly.lord_ids:
-            distribute_spoils_round_robin(
-                state, list(friendly.lord_ids), total_spoils
-            )
-        result.notes.append(
-            f"Camp Attack ({ca_id}) fired by {side_key}: "
-            f"spoils={total_spoils}"
-        )
+        discard_camp_attack(state, side)
+        friendly, enemy = (attacker, defender) if attacker.side == side else (defender, attacker)
+        outcome = default_camp_attack(state, friendly.lord_ids, enemy.lord_ids)
+        result.notes.append(f"Camp Attack ({card}) fired by {side}: spoils={outcome['spoils']}")
 
 
 # ---------------------------------------------------------------------------

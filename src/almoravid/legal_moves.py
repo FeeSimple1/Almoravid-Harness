@@ -23,6 +23,15 @@ from almoravid.events import held_event_ids, held_event_moves
 from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
 
+def _spoils_moves(base: dict[str, Any], choice: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {**base, "lord_id": lid, "asset": asset, "amount": amount}
+        for asset, total in choice["pool"].items()
+        for lid in choice["recipients"]
+        for amount in ((1, total) if total > 1 else (1,))
+    ]
+
+
 def legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Return legal actions, including free at-any-time Bishop placement."""
     moves = _phase_legal_moves(state)
@@ -128,8 +137,8 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         w = state.pending.waiting_on
         options = [{"type": "respond_swollen_river_block", "side": w, "play": False}]
         if state.pending.payload["blocker_card"] in held_event_ids(state, w):
-            options.insert(0, {"type": "respond_swollen_river_block", "side": w, "play": True,
-                               "interactive_retreat": True})
+            play = {**options[0], "play": True, "interactive_retreat": True}
+            options[:0] = [play, {**play, "interactive_concede": True, "interactive_timing": True}]
         return options
 
     # C1 (4.3.5): after a Withdraw, the Active side must choose Besiege
@@ -155,15 +164,30 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                       "choices": {lid: "add" for lid in locs}})
         return moves
 
+    if state.pending is not None and state.pending.kind == "camp_attack":
+        from almoravid.battle import CAMP_ATTACK_ASSETS
+
+        pd = state.pending
+        choice = pd.payload["camp_attack_choice"]
+        base = {"type": "camp_attack", "side": pd.waiting_on}
+        if choice["stage"] == "timing":
+            modes = ["auto", "choose"]
+            if not pd.payload["camp_attack_round"].get("finished"):
+                modes.append("wait")
+            return [{**base, "mode": mode} for mode in modes]
+        if choice["stage"] == "award":
+            return _spoils_moves(base, choice)
+        lid = choice["enemies"][choice["enemy_index"]]
+        assets = state.lords[lid].assets
+        return [
+            {**base, "lord_id": lid, "asset": asset, "amount": amount}
+            for asset in CAMP_ATTACK_ASSETS
+            for amount in range(1, min(choice["remaining"], assets.get(asset, 0)) + 1)
+        ]
+
     if state.pending is not None and state.pending.kind == "battle_spoils":
         pd = state.pending
-        return [
-            {"type": "battle_spoils", "side": pd.waiting_on,
-             "lord_id": lid, "asset": asset, "amount": amount}
-            for asset, total in pd.payload["pool"].items()
-            for lid in pd.payload["recipients"]
-            for amount in ((1, total) if total > 1 else (1,))
-        ]
+        return _spoils_moves({"type": "battle_spoils", "side": pd.waiting_on}, pd.payload)
 
     if state.pending is not None and state.pending.kind == "betrayal_of_terms":
         modes = ["decline"]
@@ -1552,6 +1576,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                             if our_here and enemy_here:
                                 out.append({"type": "cmd_battle",
                                             "side": active, "interactive_retreat": True})
+                                out.append({**out[-1], "interactive_concede": True,
+                                            "interactive_timing": True})
                             # Storm: at ENEMY Stronghold with our Siege.
                             if (loc.base_type != "region"
                                     and _iel(state, here, active)):
@@ -1575,6 +1601,8 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         if besiegers:
                             out.append({"type": "cmd_sally",
                                         "side": active, "interactive_retreat": True})
+                            out.append({**out[-1], "interactive_concede": True,
+                                        "interactive_timing": True})
                     # Encamp (4.3.6): a Bypassing Lord (our Bypass marker
                     # here) may replace it with 1 Siege marker.
                     if (lord.cylinder.kind == "locale"
@@ -1643,11 +1671,7 @@ def _march_response_moves(state: GameState) -> list[dict[str, Any]]:
     # Stand & Fight is always available (Battle resolution is the
     # default outcome if nothing else fires).
     out.append({"type": "respond_stand_battle", "side": side, "interactive_retreat": True})
-    from almoravid.effective import is_besieged
-    if any(lord.side == active_side and lord.cylinder.kind == "locale"
-           and lord.cylinder.locale_id == locale_id and lord.in_stronghold
-           and is_besieged(state, lord.id) for lord in state.lords.values()):
-        out.append({**out[-1], "interactive_concede": True, "interactive_timing": True})
+    out.append({**out[-1], "interactive_concede": True, "interactive_timing": True})
 
     # Withdraw: friendly stronghold present, capacity check.
     try:

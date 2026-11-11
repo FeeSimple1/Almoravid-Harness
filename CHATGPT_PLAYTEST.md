@@ -58,6 +58,15 @@ h.save("game.json"); h2 = Harness.load("game.json")
 - After every `apply`, the harness runs cheap **invariants** and logs any
   violation as `kind: "invariant_violation"`.
 
+Select the Battle, Stand, or Sally action with `interactive_concede: true`
+to make the Round-by-Round choices. If a player used C2 or M2 at the outset,
+their first `camp_attack` decision follows Concede in Round 1. Choose
+`wait` to see the next Strike, or `choose` to take and remove Assets from
+each enemy participant and assign Spoils among friendly participants.
+The last window of the Round requires using the card. The `auto` option
+uses the standard deterministic Asset order and round-robin allocation.
+These decisions can be saved and resumed like other pending choices.
+
 ## 2. What a finding looks like
 
 `h.findings` is a list of dicts. Empty is good. Kinds:

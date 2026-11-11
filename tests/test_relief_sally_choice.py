@@ -101,7 +101,15 @@ def test_relief_choice_sets_camp_attack_targets_and_hidden_mats():
     apply_action(state, {"type": "combat_holds", "side": "muslim"})
     assert state.pending.kind == "relief_concede"
     assert state.pending.payload["rs"]["sallyers"]["lord_ids"] == ["alvar_fanez"]
-    assert state.lords["alfonso"].assets["coin"] == state.lords["alvar_fanez"].assets["coin"] == 1
+    assert state.lords["alfonso"].assets["coin"] == state.lords["alvar_fanez"].assets["coin"] == 5
+    apply_action(state, {"type": "relief_concede", "side": "christian", "attacker_concede": True})
+    assert state.pending.kind == "camp_attack" and state.pending.waiting_on == "muslim"
+    view = redacted_view(state, "muslim")
+    assert view["lords"]["alvar_fanez"]["forces"] is not None
+    assert view["lords"]["pedro_ansurez"]["forces"] is None
+    result = apply_action(state, {"type": "camp_attack", "side": "muslim", "mode": "auto"})
+    assert result["camp_attack"]["taken"] == {"alfonso": {"coin": 2}, "alvar_fanez": {"coin": 2}}
+    assert result["camp_attack"]["taken"] == result["camp_attack"]["removed"]
     assert state.lords["pedro_ansurez"].assets["coin"] == 5
     assert state.lords["pedro_ansurez"].in_stronghold
 

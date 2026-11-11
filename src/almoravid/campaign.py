@@ -19,6 +19,7 @@ Architectural choices driven by FUTURE_PROJECTS_LESSONS.md:
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from typing import Any, cast
 
 from almoravid.actions import (
@@ -3703,14 +3704,12 @@ def _settle_battle_spoils(
     return receipt
 
 
-def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    side = _require_side(action)
-    pd = _require_pending(state, "battle_spoils", side)
-    pool = pd.payload["pool"]
+def _allocate_spoils(state: GameState, action: dict[str, Any], recipients: list[str],
+                     pool: dict[AssetType, int]) -> dict[str, dict[AssetType, int]]:
     lid = action.get("lord_id")
     asset = action.get("asset")
     amount = action.get("amount")
-    _require(lid in pd.payload["recipients"],
+    _require(isinstance(lid, str) and lid in recipients,
              "choose an eligible Lord at the Spoils Locale", code="bad_arg")
     _require(isinstance(asset, str) and asset in pool,
              "choose an Asset from the remaining Spoils", code="bad_arg")
@@ -3723,14 +3722,22 @@ def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]
     pool[asset] -= amount
     if not pool[asset]:
         del pool[asset]
+    _record(state, action, f"{lid} receives {amount} {asset} as Spoils")
+    return {lid: {asset: amount}}
+
+
+def _h_battle_spoils(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    pd = _require_pending(state, "battle_spoils", side)
+    pool = pd.payload["pool"]
+    award = _allocate_spoils(state, action, pd.payload["recipients"], pool)
     if not pool:
         resume = pd.payload["_battle_spoils_resume"]
         pending = resume["pending"]
         state.pending = PendingDecision.model_validate(pending) if pending else None
         state.meta.active_player = resume["active_player"]
-    _record(state, action, f"{lid} receives {amount} {asset} as Spoils")
     result: dict[str, Any] = {
-        "spoils_awarded": {lid: {asset: amount}}, "remaining_spoils": dict(pool),
+        "spoils_awarded": award, "remaining_spoils": dict(pool),
     }
     if state.pending is not None:
         result.update(pending=state.pending.kind, waiting_on=state.pending.waiting_on)
@@ -4020,19 +4027,15 @@ def _begin_interactive_battle(
     start consumption, snapshot both sides into a `battle_concede` pending
     decision, and pause for the Round-1 Concede declaration (4.4.2)."""
     from almoravid.battle import (
-        BattleResult,
-        _consume_camp_attack,
         _ensure_battle_arrays,
         battle_side_to_snapshot,
+        cancel_camp_attack,
         init_m7_cap,
     )
     _ensure_battle_arrays(atk, dfd)
     init_m7_cap(state, atk)
     init_m7_cap(state, dfd)
-    _consume_camp_attack(
-        state, atk, dfd,
-        BattleResult(engagement=pl["engagement_label"], attacker=atk,
-                     defender=dfd))
+    cancel_camp_attack(state)
     pl = dict(pl)
     pl["interactive_retreat"] = bool(action.get("interactive_retreat"))
     pl["round_idx"] = 1
@@ -4167,63 +4170,244 @@ def _h_oneround_timing(state: GameState,
             "advance": _pend_field_concede(state, pl, kind="battle_concede")}
 
 
-def _h_battle_concede(state: GameState,
-                      action: dict[str, Any]) -> dict[str, Any]:
-    """Collect each owner's Concede in order, then resolve the Round."""
+def _h_field_concede(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Collect Concede declarations in order before opening the Strikes."""
+    kind = action["type"]
+    side = _require_side(action)
+    pd = _require_pending(state, kind, side)
+    role, declared = _field_concede_choice(pd, action)
+    if role == "attacker" and not declared:
+        return _pend_field_concede(state, pd.payload, kind=kind, role="defender")
+    return _continue_field_round(
+        state, action, pd.payload, kind,
+        concede=(declared and role == "attacker", declared and role == "defender"))
+
+
+def _continue_field_round(state: GameState, action: dict[str, Any], pl: dict[str, Any],
+                          kind: str, *, concede: tuple[bool, bool] | None = None) -> dict[str, Any]:
     from almoravid.battle import (
         BattleResult,
         BattleRound,
         _battle_one_round,
         _battle_over,
+        _relief_declare_concede,
+        _relief_finalize,
+        _relief_from_snapshot,
+        _relief_over,
+        _relief_run_round,
+        _relief_to_snapshot,
         _side_all_lords_routed,
         battle_side_from_snapshot,
         battle_side_to_snapshot,
+        camp_attack_card,
     )
-    side = _require_side(action)
-    pd = _require_pending(state, "battle_concede", side)
-    pl = pd.payload
-    role, declared = _field_concede_choice(pd, action)
-    if role == "attacker" and not declared:
-        return _pend_field_concede(state, pl, kind=pd.kind, role="defender")
-    atk = battle_side_from_snapshot(pl["attacker"])
-    dfd = battle_side_from_snapshot(pl["defender"])
+
+    pl = dict(pl)
+    rs = _relief_from_snapshot(state, pl["rs"]) if kind == "relief_concede" else None
+    if rs is not None:
+        atk, dfd = rs.result.attacker, rs.result.defender
+        if concede is not None:
+            _relief_declare_concede(rs, atk_concedes=concede[0], dfd_concedes=concede[1])
+    else:
+        atk = battle_side_from_snapshot(pl["attacker"])
+        dfd = battle_side_from_snapshot(pl["defender"])
+        if concede is not None:
+            atk.conceded, dfd.conceded = concede
     round_idx: int = pl["round_idx"]
-    dwr_raw = pl.get("defender_walls_range")
-    dwr: tuple[int, int] | None = (
-        (int(dwr_raw[0]), int(dwr_raw[1])) if dwr_raw else None)
-    atk.conceded = declared and role == "attacker"
-    dfd.conceded = declared and role == "defender"
-    _battle_one_round(state, atk, dfd, round_idx,
-                      engagement=pl["engagement_label"], defender_walls_range=dwr)
-    rounds_done: int = pl["rounds_done"] + 1
-    # Rules of Play 4.4.2: ordinary Battle has no round limit.
-    ended = atk.conceded or dfd.conceded or _battle_over(atk, dfd)
+    queued = []
+    if round_idx == 1 and (rs is None or (rs.marchers.lord_ids and rs.def_front is not None)):
+        for owner, enemy in sorted(((atk, dfd), (dfd, atk)), key=lambda pair: pair[0].side):
+            card = camp_attack_card(state, owner.side)
+            if card:
+                queued.append((owner, enemy, card))
+
+    def snapshot():
+        if rs is not None:
+            pl["rs"] = _relief_to_snapshot(rs)
+        else:
+            pl["attacker"] = battle_side_to_snapshot(atk)
+            pl["defender"] = battle_side_to_snapshot(dfd)
+
+    progress = pl.get("camp_attack_round")
+    if queued:
+        progress = pl.setdefault("camp_attack_round", {"kind": kind, "waited": []})
+        for owner, enemy, card in queued:
+            if owner.side not in progress["waited"]:
+                snapshot()
+                return _offer_camp_attack(state, pl, owner, enemy, card)
+
+    rnd = BattleRound(index=round_idx)
+    if progress is None or not progress.get("finished"):
+        step_options = ({"progress": progress, "pause_after_strike": bool(queued)}
+                        if progress is not None else {})
+        if rs is not None:
+            rnd = _relief_run_round(state, rs, round_idx, **step_options)
+        else:
+            walls = pl.get("defender_walls_range")
+            rnd = _battle_one_round(
+                state, atk, dfd, round_idx, engagement=pl["engagement_label"],
+                defender_walls_range=tuple(walls) if walls else None,
+                **step_options)
+
+    if queued:
+        assert progress is not None
+        progress.update(waited=[], last_strikes=[asdict(step) for step in rnd.steps])
+        snapshot()
+        return _offer_camp_attack(state, pl, *queued[0])
+    pl.pop("camp_attack_round", None)
+
+    if rs is not None:
+        rs.result.rounds.append(rnd)
+        rounds_done = len(rs.result.rounds)
+        ended = atk.conceded or dfd.conceded or _relief_over(state, rs)
+    else:
+        rounds_done = pl["rounds_done"] + 1
+        ended = atk.conceded or dfd.conceded or _battle_over(atk, dfd)
+
     if not ended:
-        pl = dict(pl)
-        pl["attacker"] = battle_side_to_snapshot(atk)
-        pl["defender"] = battle_side_to_snapshot(dfd)
-        pl["round_idx"] = round_idx + 1
-        pl["rounds_done"] = rounds_done
-        _pend_field_concede(state, pl, kind=pd.kind)
-        return {"battle": "in_progress", "round_resolved": round_idx,
-                "rounds_done": rounds_done}
-    # Battle ended this Round -> winner + aftermath.
-    result = BattleResult(engagement=pl["engagement_label"],
-                          attacker=atk, defender=dfd)
+        snapshot()
+        pl.update(round_idx=round_idx + 1, rounds_done=rounds_done)
+        _pend_field_concede(state, pl, kind=kind)
+        key = "relief_sally" if rs is not None else "battle"
+        return {key: "in_progress", "round_resolved": round_idx, "rounds_done": rounds_done}
+    if rs is not None:
+        if atk.conceded or dfd.conceded:
+            rs.result.notes.append(f"Round {round_idx} ended with Concede; Relief Sally ends")
+        _relief_finalize(state, rs)
+        return _battle_aftermath_or_fates(state, action, rs.result, {**pl, "finish": "relief"})
+
+    result = BattleResult(engagement=pl["engagement_label"], attacker=atk, defender=dfd)
     result.rounds = [BattleRound(index=i) for i in range(1, rounds_done + 1)]
     if atk.conceded and not dfd.conceded:
         result.winner = dfd.side
     elif dfd.conceded and not atk.conceded:
         result.winner = atk.side
-    elif (not _side_all_lords_routed(atk)
-          and _side_all_lords_routed(dfd)):
+    elif not _side_all_lords_routed(atk) and _side_all_lords_routed(dfd):
         result.winner = atk.side
-    elif (not _side_all_lords_routed(dfd)
-          and _side_all_lords_routed(atk)):
+    elif not _side_all_lords_routed(dfd) and _side_all_lords_routed(atk):
         result.winner = dfd.side
-    else:
-        result.winner = None
     return _battle_aftermath_or_fates(state, action, result, pl)
+
+
+def _offer_camp_attack(state: GameState, pl: dict[str, Any], owner: Any,
+                       enemy: Any, card: str) -> dict[str, Any]:
+    pl["camp_attack_choice"] = {
+        "stage": "timing", "card": card, "enemies": list(enemy.lord_ids),
+        "recipients": list(owner.lord_ids),
+    }
+    return _pend_camp_attack(state, pl, owner.side)
+
+
+def _pend_camp_attack(state: GameState, pl: dict[str, Any], side: Side) -> dict[str, Any]:
+    state.pending = PendingDecision(kind="camp_attack", waiting_on=side, payload=pl)
+    state.meta.active_player = side
+    progress = pl["camp_attack_round"]
+    choice = pl["camp_attack_choice"]
+    strikes = progress.get("last_strikes", [])
+    return {"pending": "camp_attack", "waiting_on": side, "card": choice["card"],
+            "stage": choice["stage"], "after": strikes[-1]["step"] if strikes else "concede",
+            "last_strikes": strikes}
+
+
+def _finish_camp_attack(state: GameState, action: dict[str, Any], side: Side,
+                         pl: dict[str, Any], *, waited: bool = False) -> dict[str, Any]:
+    progress = pl["camp_attack_round"]
+    if waited:
+        progress["waited"].append(side)
+    else:
+        # An opposing Camp Attack may have changed this side's decision.
+        progress["waited"].clear()
+    del pl["camp_attack_choice"]
+    return _continue_field_round(state, action, pl, progress["kind"])
+
+
+def _next_camp_attack_asset(state: GameState, action: dict[str, Any], side: Side,
+                            pl: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.battle import CAMP_ATTACK_ASSETS, award_battle_spoils
+
+    choice = pl["camp_attack_choice"]
+    enemies = choice["enemies"]
+    while choice["enemy_index"] < len(enemies):
+        lord = state.lords[enemies[choice["enemy_index"]]]
+        if not any(lord.assets.get(asset, 0) > 0 for asset in CAMP_ATTACK_ASSETS):
+            choice["enemy_index"] += 1
+            choice.update(stage="take", remaining=2)
+        elif choice["remaining"]:
+            return _pend_camp_attack(state, pl, side)
+        elif choice["stage"] == "take":
+            choice.update(stage="remove", remaining=2)
+        else:
+            choice["enemy_index"] += 1
+            choice.update(stage="take", remaining=2)
+
+    pool = choice["pool"]
+    if pool and len(choice["recipients"]) > 1:
+        choice["stage"] = "award"
+        return _pend_camp_attack(state, pl, side)
+    awards = award_battle_spoils(state, choice["recipients"], [pool])
+    result = _finish_camp_attack(state, action, side, pl)
+    if awards:
+        result["camp_attack_award"] = awards
+    return result
+
+
+def _h_camp_attack(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.battle import (
+        CAMP_ATTACK_ASSETS,
+        debit_camp_attack_asset,
+        default_camp_attack,
+        discard_camp_attack,
+    )
+
+    side = _require_side(action)
+    pd = _require_pending(state, "camp_attack", side)
+    pl = pd.payload
+    choice = pl["camp_attack_choice"]
+    stage = choice["stage"]
+    if stage == "timing":
+        mode = action.get("mode")
+        _require(mode in ("choose", "auto", "wait"),
+                 "choose how to use Camp Attack or wait for the next Strike", code="bad_arg")
+        card = choice["card"]
+        if mode == "wait":
+            _require(not pl["camp_attack_round"].get("finished"),
+                     "Camp Attack must be used in Round 1", code="bad_arg")
+            _record(state, action, f"{side} delays {card}")
+            return _finish_camp_attack(state, action, side, pl, waited=True)
+        discard_camp_attack(state, side)
+        _record(state, action, f"{side} uses {card} Camp Attack")
+        if mode == "auto":
+            outcome = default_camp_attack(state, choice["recipients"], choice["enemies"])
+            result = _finish_camp_attack(state, action, side, pl)
+            result["camp_attack"] = outcome
+            return result
+        choice.update(stage="take", enemy_index=0, remaining=2, pool={})
+        return _next_camp_attack_asset(state, action, side, pl)
+    if stage == "award":
+        pool = choice["pool"]
+        award = _allocate_spoils(state, action, choice["recipients"], pool)
+        result = (_pend_camp_attack(state, pl, side) if pool
+                  else _finish_camp_attack(state, action, side, pl))
+        result["camp_attack_award"] = award
+        return result
+
+    lid = choice["enemies"][choice["enemy_index"]]
+    asset = action.get("asset")
+    amount = action.get("amount")
+    lord = state.lords[lid]
+    _require(action.get("lord_id") == lid and asset in CAMP_ATTACK_ASSETS
+             and type(amount) is int
+             and 1 <= amount <= min(choice["remaining"], lord.assets.get(asset, 0)),
+             "choose an available Asset and amount from the current enemy Lord", code="bad_arg")
+    debit_camp_attack_asset(lord, cast(AssetType, asset), amount)
+    choice["remaining"] -= amount
+    if stage == "take":
+        pool = choice["pool"]
+        pool[asset] = pool.get(asset, 0) + amount
+    _record(state, action, f"{side} uses Camp Attack to {stage} {amount} {asset} from {lid}")
+    result = _next_camp_attack_asset(state, action, side, pl)
+    result[f"camp_attack_{stage}"] = {lid: {asset: amount}}
+    return result
 
 
 def _h_cmd_battle(state: GameState, action: dict[str, Any], *,
@@ -5383,11 +5567,17 @@ def _begin_interactive_relief(
     pl: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the lanes and collect timing and Concede choices before Round 1."""
-    from almoravid.battle import _relief_setup, _relief_to_snapshot, relief_javelin_lords
+    from almoravid.battle import (
+        _relief_setup,
+        _relief_to_snapshot,
+        cancel_camp_attack,
+        relief_javelin_lords,
+    )
     rs = _relief_setup(state, marcher_ids, sallyer_ids, defender_lord_ids,
                        besieger_side=pl["other"], locale_id=pl["locale_id"],
                        max_rounds=None)
     pl = dict(pl)
+    cancel_camp_attack(state)
     pl["rs"] = _relief_to_snapshot(rs)
     pl["interactive_retreat"] = bool(action.get("interactive_retreat"))
     pl["round_idx"] = 1
@@ -5401,43 +5591,6 @@ def _begin_interactive_relief(
             pl["timing_queue"] = queue
             return _pend_relief_timing(state, pl)
     return _pend_field_concede(state, pl, kind="relief_concede")
-
-
-def _h_relief_concede(state: GameState,
-                      action: dict[str, Any]) -> dict[str, Any]:
-    """Collect each owner's Concede in order, then resolve the Relief Sally Round."""
-    from almoravid.battle import (
-        _relief_declare_concede,
-        _relief_finalize,
-        _relief_from_snapshot,
-        _relief_over,
-        _relief_run_round,
-        _relief_to_snapshot,
-    )
-    side = _require_side(action)
-    pd = _require_pending(state, "relief_concede", side)
-    pl = pd.payload
-    role, declared = _field_concede_choice(pd, action)
-    if role == "attacker" and not declared:
-        return _pend_field_concede(state, pl, kind=pd.kind, role="defender")
-    rs = _relief_from_snapshot(state, pl["rs"])
-    rnd_i: int = pl["round_idx"]
-    _relief_declare_concede(rs, atk_concedes=declared and role == "attacker",
-                            dfd_concedes=declared and role == "defender")
-    rs.result.rounds.append(_relief_run_round(state, rs, rnd_i))
-    ended = declared or _relief_over(state, rs)
-    if not ended:
-        pl = dict(pl)
-        pl["rs"] = _relief_to_snapshot(rs)
-        pl["round_idx"] = rnd_i + 1
-        _pend_field_concede(state, pl, kind=pd.kind)
-        return {"relief_sally": "in_progress", "round_resolved": rnd_i,
-                "rounds_done": len(rs.result.rounds)}
-    if declared:
-        rs.result.notes.append(
-            f"Round {rnd_i} ended with Concede; Relief Sally ends")
-    _relief_finalize(state, rs)
-    return _battle_aftermath_or_fates(state, action, rs.result, {**pl, "finish": "relief"})
 
 
 def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -5465,6 +5618,8 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
         state.decks.discard.append(blocker_card)
         result = _h_respond_stand_battle(
             state, {"type": "respond_stand_battle", "side": defender_side,
+                    "interactive_concede": action.get("interactive_concede", False),
+                    "interactive_timing": action.get("interactive_timing", False),
                     "interactive_retreat": action.get("interactive_retreat", False)})
         result["swollen_river_played"] = blocker_card
         return result
@@ -7997,12 +8152,13 @@ CAMPAIGN_HANDLERS = {
     "relief_sally": _h_relief_sally,
     "respond_besiege": _h_respond_besiege,
     "respond_bypass": _h_respond_bypass,
-    "battle_concede": _h_battle_concede,
+    "battle_concede": _h_field_concede,
+    "camp_attack": _h_camp_attack,
     "battle_fate": _h_battle_fate,
     "retreat_provender": _h_retreat_provender,
     "battle_spoils": _h_battle_spoils,
     "storm_concede": _h_storm_concede,
-    "relief_concede": _h_relief_concede,
+    "relief_concede": _h_field_concede,
     "play_pope_gregory": _h_play_pope_gregory,
     "play_cluniacs": _h_play_cluniacs,
     "play_al_qadir": _h_play_al_qadir,
