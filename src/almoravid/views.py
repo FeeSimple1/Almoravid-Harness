@@ -77,10 +77,11 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
                     "_retreat_provender_resume", "_combat_hold_resume", "_relief_sally_resume",
-                    "_storm_front_resume"):
+                    "_storm_front_resume", "_feed_loot"):
             dump["pending"]["payload"].pop(key, None)
         if dump["pending"]["waiting_on"] != viewer_side:
             dump["pending"]["payload"].pop("blocker_card", None)
+            dump["pending"]["payload"].pop("feed_options", None)
     # Controller saves retain RNG inputs; player snapshots must not expose
     # enough information to reconstruct future dice or shuffles.
     dump["meta"].pop("seed", None)
@@ -126,6 +127,8 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         entry["args"].pop("rng_state", None)
         if entry["actor"] != opp:
             continue
+        if state.meta.hidden_mats and entry["action"] in {"end_card", "feed_resource_choice"}:
+            entry["args"].pop("feed_loot", None)
         if state.meta.hidden_mats and entry["action"] in {"levy_take_vassal", "levy_transport"}:
             # The Lord's expenditure is public. For Advanced Vassal Service,
             # the Calendar exposes the Vassal whose marker was placed there.

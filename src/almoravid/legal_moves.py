@@ -336,6 +336,14 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                           "discard_lords": eligible})
         return moves
 
+    if state.pending is not None and state.pending.kind == "feed_resource_choice":
+        move = {"type": "feed_resource_choice", "side": state.pending.waiting_on}
+        moves.append(move)
+        for lid, (minimum, maximum) in state.pending.payload["feed_options"].items():
+            moves.extend({**move, "feed_loot": {lid: amount}}
+                         for amount in range(minimum + 1, maximum + 1))
+        return moves
+
     # 4.8.2 voluntary PAY before the mandatory at-limit Disband (interactive
     # Feed/Pay/Disband). The waiting side may Pay (3.2) any eligible Lord to
     # shift Service rightward, or declare `done` to proceed to Disband.
@@ -1619,7 +1627,16 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                                             "side": active})
                 except (ImportError, KeyError, AttributeError, FileNotFoundError):
                     pass
-            out.append({"type": "end_card", "side": active})
+            from almoravid.campaign import _feed_loot_options
+
+            end = {"type": "end_card", "side": active}
+            out.append(end)
+            for lid, (minimum, maximum) in _feed_loot_options(state).items():
+                if state.lords[lid].side == active:
+                    out.extend({**end, "feed_loot": {lid: amount}}
+                               for amount in range(minimum + 1, maximum + 1))
+            if any(lord.moved_fought for lord in state.lords.values()):
+                out.append({**end, "interactive_economy": True})
         return out
 
     if cstep == "end_campaign":
