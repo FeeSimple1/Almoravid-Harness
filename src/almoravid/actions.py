@@ -1274,16 +1274,11 @@ def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
     """
     # Phase 7d: advanced Vassal Service (3.4.2) — Lord Service shifts
     # cascade to that Lord's Vassal Service markers by the same boxes.
+    # Box 0 still holds the Vassal marker through Pay and Disband (2.2.3).
     if state.meta.advanced_vassal_service:
-        for vm in list(state.calendar.service_markers):
+        for vm in state.calendar.service_markers:
             if vm.lord_id == lord_id and vm.vassal_id is not None:
                 vm.box = max(0, vm.box - boxes)
-        # Drop Vassal markers that hit off-left.
-        state.calendar.service_markers = [
-            s for s in state.calendar.service_markers
-            if not (s.lord_id == lord_id and s.vassal_id is not None
-                    and s.box <= 0)
-        ]
 
     # The Lord's OWN Service marker has vassal_id is None.
     sm = next((s for s in state.calendar.service_markers
@@ -1385,22 +1380,11 @@ def _disband_vassals_for_side(state: GameState,
         if markers and not lord.forces and lord.cylinder.kind == "locale":
             no_force_lords.append(lid)
     for lid in no_force_lords:
-        # The 1.6 no-Forces Disband reuses _h_disband_lord (3.3.2). That
-        # handler is guarded for the Levy service_disband step, but this
-        # pass also runs during Campaign 4.8.2 — temporarily present a
-        # Levy/service_disband context, then restore.
-        _saved = (state.meta.phase, state.meta.levy_step,
-                  state.meta.active_player)
-        state.meta.phase = "levy"
-        state.meta.levy_step = "service_disband"
-        state.meta.active_player = side
-        try:
-            _h_disband_lord(state, {"type": "disband_lord",
-                                    "side": side, "lord_id": lid,
-                                    "bypass_limit_check": True})
-        finally:
-            (state.meta.phase, state.meta.levy_step,
-             state.meta.active_player) = _saved
+        # 1.6 Disbands the empty Lord as at Service limit. Use the actual
+        # phase so 3.3.2 counts from the next box during Campaign.
+        _h_disband_lord(state, {"type": "disband_lord", "side": side,
+                               "lord_id": lid, "auto_service_disband": True,
+                               "force_at_service_limit": True})
         out.append({"lord_id": lid, "fate": "lord_no_forces_disband"})
     return out
 
@@ -1655,13 +1639,12 @@ def _h_disband_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     cur = state.calendar.current_box
     sm = next((m for m in state.calendar.service_markers
                if m.lord_id == lord_id and m.vassal_id is None), None)
-    # 1.6 no-Forces auto-Disband (3.3.2) bypasses the at-limit gate.
+    # 1.6 no-Forces Disband and certain Events mandate the at-limit fate.
     force_at_limit = bool(action.get("force_at_service_limit"))
     bypass_limit = bool(action.get("bypass_limit_check")) or force_at_limit
     if force_at_limit:
-        # C26/M25/M26 mandate Disband as at Service limit (3.3.2),
-        # regardless of the current Service marker; internal callers
-        # retain their original phase for the Errata calendar placement.
+        # The 3.3.2 fate applies regardless of the current Service marker.
+        # Keep the caller's phase for the Errata calendar placement.
         beyond = False
     elif sm is None:
         beyond = True  # off the Calendar (off-left)
