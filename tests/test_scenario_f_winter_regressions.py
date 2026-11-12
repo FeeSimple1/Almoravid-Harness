@@ -211,7 +211,8 @@ def test_bishoprics_placement_is_free_and_enumerated_throughout_play(phase, step
 
 
 @pytest.mark.parametrize("active", ["christian", "muslim"])
-@pytest.mark.parametrize("kind", ["battle_concede", "storm_concede", "besiege_or_bypass"])
+@pytest.mark.parametrize("kind", ["battle_concede", "storm_concede", "besiege_or_bypass",
+                                  "greed_mule_choice", "pay_before_disband"])
 def test_bishoprics_preserves_pending_decision_and_opponents_turn(active, kind):
     s = _state()
     _deploy_bishoprics(s)

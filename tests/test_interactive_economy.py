@@ -4,9 +4,13 @@ and voluntary Pay before the mandatory at-limit Disband (4.8.2). With
 PendingDecisions; without it, the deterministic default runs."""
 from __future__ import annotations
 
+import pytest
+
+from almoravid.actions import IllegalAction
 from almoravid.campaign import _greed_eligible_lords, _plan_target_size
 from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
+from almoravid.state import GameState
 from tests._plan_helpers import legal_pad, step_levy
 from tests._reset_helpers import apply_action_keeping_reset_cards as apply_action
 
@@ -111,6 +115,50 @@ def test_interactive_keep_mules_matches_default_when_no_discard() -> None:
     res = apply_action(s, {"type": "pay_before_disband", "side": "muslim",
                            "done": True})
     assert s.pending is None and "finalize" in res
+
+
+@pytest.mark.parametrize("prompt", ["greed_mule_choice", "pay_before_disband"])
+def test_interactive_economy_closes_commands(prompt: str) -> None:
+    state = load_scenario("scenario_a_toledo_beset", seed=14)
+    _reveal_alfonso_card(state)
+    march = {"type": "cmd_march", "side": "christian",
+             "target_locale_id": "leon", "way_type": "road"}
+    if prompt == "greed_mule_choice":
+        state.lords["alfonso"].assets["prov"] = 0
+        apply_action(state, march)
+        march = {**march, "target_locale_id": "sahagun"}
+    assert march in legal_moves(state)
+    end_card = {"type": "end_card", "side": "christian", "interactive_economy": True}
+    apply_action(state, end_card)
+    assert state.pending is not None and state.pending.kind == prompt
+    assert state.meta.actions_remaining > 0
+    saved = state.model_dump_json()
+    restored = GameState.model_validate_json(saved)
+
+    for position in (state, restored):
+        for late_action in (march, end_card, {"type": "cmd_pass", "side": "christian"}):
+            with pytest.raises(IllegalAction) as exc:
+                apply_action(position, late_action)
+            assert exc.value.code == "pending_decision"
+            assert position.model_dump_json() == saved
+
+        if prompt == "greed_mule_choice":
+            apply_action(position, {"type": prompt, "side": "christian",
+                                    "discard_lords": ["alfonso"]})
+            assert position.lords["alfonso"].assets.get("mule", 0) == 0
+        pay = {"type": "pay_before_disband", "side": "christian",
+               "payer_lord_id": "alfonso", "target_lord_id": "alfonso",
+               "resource": "coin", "amount": 1}
+        assert pay in legal_moves(position)
+        coin = position.lords["alfonso"].assets["coin"]
+        apply_action(position, pay)
+        assert position.lords["alfonso"].assets["coin"] == coin - 1
+        for side in ("christian", "muslim"):
+            apply_action(position, {"type": "pay_before_disband", "side": side, "done": True})
+        assert position.pending is None and position.meta.active_lord_id is None
+        assert position.lords["alfonso"].cylinder.locale_id != march["target_locale_id"]
+
+    assert state.model_dump_json() == restored.model_dump_json()
 
 
 # --- Wastage (4.9.4) interactive choice -----------------------------------
