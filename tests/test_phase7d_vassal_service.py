@@ -46,7 +46,7 @@ def test_advanced_rule_cascades_to_vassal_markers() -> None:
     assert other.box == 8
 
 
-def test_advanced_rule_vassal_marker_off_left_removed() -> None:
+def test_advanced_rule_vassal_marker_stays_at_box_zero_until_disband() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     s.meta.advanced_vassal_service = True
     s.calendar.service_markers = [
@@ -54,9 +54,9 @@ def test_advanced_rule_vassal_marker_off_left_removed() -> None:
         ServiceMarker(lord_id="alfonso", box=2, vassal_id="alfonso_v1"),
     ]
     _shift_service_left(s, "alfonso", boxes=3)
-    # Vassal marker (box 2 - 3 <= 0) removed off-left.
-    assert not any(m.vassal_id == "alfonso_v1"
-                   for m in s.calendar.service_markers)
+    # Pay and Disband still see the Vassal's marker in the box 0 lane.
+    marker = next(m for m in s.calendar.service_markers if m.vassal_id == "alfonso_v1")
+    assert marker.box == 0
     # Lord marker survives at box 2.
     lord_sm = next(m for m in s.calendar.service_markers
                    if m.lord_id == "alfonso" and m.vassal_id is None)
