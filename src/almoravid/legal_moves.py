@@ -684,6 +684,8 @@ def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     has_marker = {sm.lord_id for sm in state.calendar.service_markers
                   if sm.vassal_id is None}
+    # Box 0 is on the Calendar for Pay (2.2.3, 3.2).
+    has_marker.update(state.calendar.off_left_service)
     for lid, lord in state.lords.items():
         if lord.side != side or lord.cylinder.kind != "locale":
             continue

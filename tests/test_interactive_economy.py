@@ -117,6 +117,37 @@ def test_interactive_keep_mules_matches_default_when_no_discard() -> None:
     assert s.pending is None and "finalize" in res
 
 
+def test_interactive_pay_can_rescue_lord_from_box_zero() -> None:
+    state = load_scenario("scenario_a_toledo_beset", seed=14)
+    _reveal_alfonso_card(state)
+    state.lords["alfonso"].assets["prov"] = 0
+    marker = next(m for m in state.calendar.service_markers
+                  if m.lord_id == "alfonso" and m.vassal_id is None)
+    marker.box = 1
+    apply_action(state, {"type": "cmd_march", "side": "christian",
+                         "target_locale_id": "leon", "way_type": "road"})
+    apply_action(state, {"type": "end_card", "side": "christian", "interactive_economy": True})
+    apply_action(state, {"type": "greed_mule_choice", "side": "christian", "discard_lords": []})
+    assert state.pending is not None and state.pending.kind == "pay_before_disband"
+    assert "alfonso" in state.calendar.off_left_service
+
+    restored = GameState.model_validate_json(state.model_dump_json())
+    coin = restored.lords["alfonso"].assets["coin"]
+    pay = {"type": "pay_before_disband", "side": "christian",
+           "payer_lord_id": "alfonso", "target_lord_id": "alfonso",
+           "resource": "coin", "amount": 1}
+    for box in (1, 2):
+        assert pay in legal_moves(restored)
+        apply_action(restored, pay)
+        assert _sm_box(restored, "alfonso") == box
+    assert "alfonso" not in restored.calendar.off_left_service
+    for side in ("christian", "muslim"):
+        apply_action(restored, {"type": "pay_before_disband", "side": side, "done": True})
+    assert restored.pending is None
+    assert restored.lords["alfonso"].cylinder.locale_id == "leon"
+    assert restored.lords["alfonso"].assets["coin"] == coin - 2
+
+
 @pytest.mark.parametrize("prompt", ["greed_mule_choice", "pay_before_disband"])
 def test_interactive_economy_closes_commands(prompt: str) -> None:
     state = load_scenario("scenario_a_toledo_beset", seed=14)
