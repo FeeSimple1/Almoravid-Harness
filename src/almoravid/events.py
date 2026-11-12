@@ -152,7 +152,7 @@ def play_held_event(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require_levy_step(state, "muster")
         from almoravid.campaign import _muster_cap_lord_eligible
         lid = payload.get("lord_id")
-        _require(lid in state.lords and state.lords[lid].is_taifa
+        _require(isinstance(lid, str) and lid in state.lords and state.lords[lid].is_taifa
                  and _muster_cap_lord_eligible(state, lid, side),
                  "Lordship requires an eligible Taifa Lord in Muster",
                  code="not_eligible")
@@ -184,9 +184,7 @@ def held_event_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for selected in al_qadir_choices(state):
                 moves.append({**move, "payload": {"locale_ids": selected}})
         elif card_id == "M12":
-            targets = [lid for lid, lord in state.lords.items()
-                       if lord.is_taifa and lord.side == side
-                       and lord.cylinder.kind in ("locale", "calendar")]
+            targets = _taifa_marriage_targets(state)
             for count in (1, 2):
                 for selected in combinations(targets, count):
                     moves.append({**move, "payload": {"lord_ids": list(selected)}})
@@ -398,6 +396,16 @@ def _feigned_retreat(state: GameState, side: Side, card_id: str,
 # ---------------------------------------------------------------------------
 
 
+def _taifa_marriage_targets(state: GameState) -> list[str]:
+    """Taifa Muslims with a Calendar cylinder or a Service marker to shift."""
+    service_lords = {m.lord_id for m in state.calendar.service_markers if m.vassal_id is None}
+    service_lords.update(state.calendar.off_left_service)
+    return [lid for lid, lord in state.lords.items()
+            if lord.is_taifa and lord.side == "muslim"
+            and ((lord.cylinder.kind == "calendar" and lord.cylinder.box is not None)
+                 or (lord.cylinder.kind == "locale" and lid in service_lords))]
+
+
 @register("M12")  # Taifa Marriage
 def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
@@ -405,16 +413,15 @@ def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
     Calendar, or Service RIGHT if Lord is on the map. OR one Lord
     uses Lordship +2.
 
-    Phase 6j+: greedy default — pick up to 2 Taifa Lords sorted by
-    lord_id; for each, if cylinder.kind == 'calendar' shift the
-    Calendar cylinder via service marker; if on the map, shift their
-    Service marker RIGHT (toward end of campaign, +1 box).
-    payload['lord_ids']: optional explicit list of up to 2 Lord IDs.
+    An omitted `lord_ids` defaults to the first two eligible Lords by ID.
+    Explicit elections must name one or two distinct eligible Lords.
     """
-    taifa_lord_ids = [lid for lid, lord in state.lords.items()
-                      if lord.is_taifa and lord.side == "muslim"]
+    from almoravid.actions import _require, _shift_service_right
+
     # Lordship +2 branch: payload['mode']=='lordship', one Lord.
     if payload.get("mode") == "lordship":
+        taifa_lord_ids = [lid for lid, lord in state.lords.items()
+                          if lord.is_taifa and lord.side == "muslim"]
         lid = payload.get("lord_id")
         if lid not in taifa_lord_ids:
             lid = sorted(taifa_lord_ids)[0] if taifa_lord_ids else None
@@ -428,31 +435,37 @@ def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
                 "lordship_plus_2": lid,
                 "lordship_rating_now": state.lords[lid].lordship_rating
                 + state.lords[lid].lordship_bonus_this_levy}
-    chosen = payload.get("lord_ids") or sorted(taifa_lord_ids)[:2]
+    eligible = _taifa_marriage_targets(state)
+    if "lord_ids" in payload:
+        chosen = payload["lord_ids"]
+        _require(isinstance(chosen, list) and 1 <= len(chosen) <= 2
+                 and all(isinstance(lid, str) for lid in chosen)
+                 and len(set(chosen)) == len(chosen),
+                 "Taifa Marriage requires one or two distinct Lord IDs", code="bad_arg")
+        _require(all(lid in eligible for lid in chosen),
+                 "Taifa Marriage targets must be Taifa Muslims with a cylinder or Service marker "
+                 "on the Calendar", code="not_eligible")
+    else:
+        chosen = sorted(eligible)[:2]
     if not chosen:
         return _no_op_with_note(state, card_id, side,
                                 "no Taifa Lord eligible")
     shifted = []
-    for lid in chosen[:2]:
-        lord = state.lords.get(lid)
-        if lord is None:
-            continue
-        if lord.cylinder.kind == "calendar":
-            # Shift cylinder LEFT (toward box 1 / earlier activation).
-            cur = lord.cylinder.box if lord.cylinder.box is not None else 1
-            lord.cylinder.box = max(0, cur - 1)
+    for lid in chosen:
+        cylinder = state.lords[lid].cylinder
+        if cylinder.kind == "calendar":
+            assert cylinder.box is not None
+            cylinder.box = max(0, cylinder.box - 1)
+            if lid in state.calendar.off_right:
+                state.calendar.off_right.remove(lid)
+            if cylinder.box == 0 and lid not in state.calendar.off_left:
+                state.calendar.off_left.append(lid)
             shifted.append({"lord_id": lid, "shifted": "cylinder_left",
-                            "new_cylinder_box": lord.cylinder.box})
+                            "new_cylinder_box": cylinder.box})
         else:
-            sm = next((s for s in state.calendar.service_markers
-                       if s.lord_id == lid), None)
-            if sm is not None:
-                sm.box = min(16, sm.box + 1)  # Service RIGHT (delay Disband)
-                shifted.append({"lord_id": lid, "shifted": "service_right",
-                                "new_service_box": sm.box})
-    if not shifted:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Lord could be shifted")
+            new_box = _shift_service_right(state, lid)
+            shifted.append({"lord_id": lid, "shifted": "service_right",
+                            "new_service_box": new_box})
     state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side, "shifted": shifted}
 

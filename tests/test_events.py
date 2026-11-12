@@ -18,6 +18,7 @@ from almoravid.events import (
     unresolved_event_cards,
 )
 from almoravid.scenarios import load_scenario
+from almoravid.state import Cylinder
 
 
 def test_hills_held_in_this_levy_bucket() -> None:
@@ -45,23 +46,21 @@ def test_betrayal_of_terms_held_until_surrender() -> None:
     assert "C9" in s.decks.this_levy_events.get("christian", [])
 
 
-def test_taifa_marriage_no_op_when_no_taifa_lords() -> None:
-    """Phase 6j: M12 shifts up to 2 Taifa Lords. With none eligible
-    (no service markers + bogus payload), it no-ops."""
+def test_taifa_marriage_default_no_ops_when_no_taifa_is_eligible() -> None:
     s = load_scenario("scenario_a_toledo_beset")
-    r = resolve_event(s, "muslim", "M12", {"lord_ids": ["not_a_lord"]})
+    for lord in s.lords.values():
+        if lord.is_taifa:
+            lord.cylinder = Cylinder(kind="set_aside")
+    r = resolve_event(s, "muslim", "M12")
     assert r.get("no_op") is True
 
 
 def test_taifa_marriage_shifts_two_taifa_lords() -> None:
-    """Phase 6j: greedy default shifts Service right (toward
-    end-of-Campaign) for up to 2 Taifa Lords on the Calendar."""
+    """The default skips set-aside Taifas and shifts two eligible Lords."""
     s = load_scenario("scenario_a_toledo_beset")
     r = resolve_event(s, "muslim", "M12")
-    if not r.get("no_op"):
-        assert len(r["shifted"]) <= 2
-        for entry in r["shifted"]:
-            assert entry["shifted"] == "service_right"
+    assert [entry["lord_id"] for entry in r["shifted"]] == ["abu_bakr", "al_mustain"]
+    assert all(entry["shifted"] == "service_right" for entry in r["shifted"])
 
 
 def test_devaluation_no_op_when_target_has_no_coin() -> None:
