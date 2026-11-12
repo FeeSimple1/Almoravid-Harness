@@ -3,6 +3,7 @@ Coin/Loot/Taifa-Coin, same-Locale targeting."""
 from __future__ import annotations
 import pytest
 from almoravid.actions import IllegalAction, apply_action
+from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder, ServiceMarker
 from tests._plan_helpers import step_levy
@@ -17,7 +18,10 @@ def _to_pay(s):
 def _set_marker(s, lid, box):
     s.calendar.service_markers = [m for m in s.calendar.service_markers
                                   if not (m.lord_id == lid and m.vassal_id is None)]
-    s.calendar.service_markers.append(ServiceMarker(lord_id=lid, box=box))
+    if box == 0:
+        s.calendar.off_left_service.append(lid)
+    else:
+        s.calendar.service_markers.append(ServiceMarker(lord_id=lid, box=box))
 
 
 def test_coin_shifts_rightward():
@@ -48,17 +52,18 @@ def test_loot_requires_friendly_locale_free_of_siege():
     assert ei.value.code == "not_friendly_locale"
 
 
-def test_loot_at_friendly_locale_shifts_right():
+@pytest.mark.parametrize("box", [0, 3])
+def test_loot_at_friendly_locale_shifts_right(box):
     s = load_scenario("scenario_a_toledo_beset")
-    _set_marker(s, "alfonso", 3)
+    _set_marker(s, "alfonso", box)
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords["alfonso"].assets = {"loot": 1}
     _to_pay(s)
-    r = apply_action(s, {"type": "pay_lord", "side": "christian",
-                         "payer_lord_id": "alfonso",
-                         "target_lord_id": "alfonso",
-                         "resource": "loot", "amount": 1})
-    assert r["service_box"] == 4
+    pay = {"type": "pay_lord", "side": "christian",
+           "payer_lord_id": "alfonso", "target_lord_id": "alfonso",
+           "resource": "loot", "amount": 1}
+    assert pay in legal_moves(s)
+    assert apply_action(s, pay)["service_box"] == box + 1
 
 
 def test_coin_can_target_another_lord_same_locale():
@@ -97,17 +102,18 @@ def test_coin_other_lord_must_be_same_locale():
     assert ei.value.code == "not_same_locale"
 
 
-def test_taifa_box_coin_shifts_unbesieged_muslim():
+@pytest.mark.parametrize("box", [0, 6])
+def test_taifa_box_coin_shifts_unbesieged_muslim(box):
     s = load_scenario("scenario_a_toledo_beset")
     s.taifas_box_coin = 2
     s.lords["al_mutamid"].cylinder = Cylinder(kind="locale", locale_id="sevilla")
     s.lords["al_mutamid"].in_stronghold = False
-    _set_marker(s, "al_mutamid", 6)
+    _set_marker(s, "al_mutamid", box)
     _to_pay(s)
     while s.meta.active_player != "muslim":
         step_levy(s)
-    r = apply_action(s, {"type": "pay_lord", "side": "muslim",
-                         "target_lord_id": "al_mutamid",
-                         "resource": "taifa_coin", "amount": 2})
-    assert r["service_box"] == 8
+    pay = {"type": "pay_lord", "side": "muslim", "target_lord_id": "al_mutamid",
+           "resource": "taifa_coin", "amount": 1}
+    assert pay in legal_moves(s)
+    assert apply_action(s, {**pay, "amount": 2})["service_box"] == box + 2
     assert s.taifas_box_coin == 0
