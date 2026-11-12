@@ -2089,6 +2089,11 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(action_type in {"respond_besiege", "respond_bypass", "cap_bishoprics",
                                  "set_absorption_policy", "set_array_tactics"},
                  "choose Besiege or Bypass before continuing", code="pending_decision")
+    if state.pending is not None and state.pending.kind in {
+        "greed_mule_choice", "pay_before_disband",
+    }:
+        _require(action_type in {state.pending.kind, "cap_bishoprics"},
+                 "finish Feed, Pay, and Disband before continuing", code="pending_decision")
     reset_pending = (state.pending is not None and (
         state.pending.kind == "reset_discard"
         or "_reset_discard_resume" in state.pending.payload))
