@@ -439,10 +439,24 @@ def _apply_unfed_penalty(state: GameState, lord_id: str) -> None:
     _shift_service_left(state, lord_id, 1)
 
 
+def _spend_food(assets: dict[str, int], needed: int, loot_budget: int) -> tuple[int, int]:
+    """Spend as much as possible, using elected Loot before the default order."""
+    prov, loot = assets.get("prov", 0), assets.get("loot", 0)
+    total = min(needed, prov + loot)
+    use_prov = min(prov, total - min(total, loot, loot_budget))
+    use_loot = total - use_prov
+    if use_prov:
+        assets["prov"] = prov - use_prov
+    if use_loot:
+        assets["loot"] = loot - use_loot
+    return use_prov, use_loot
+
+
 def _feed_consume_own(state: GameState, lord_id: str, *,
-                      discard_excess_mules: bool = False) -> dict[str, Any]:
+                      discard_excess_mules: bool = False,
+                      loot_budget: int = 0) -> dict[str, Any]:
     """4.8.1 own-Feed: a Lord consumes ceil((units + Mules)/6) Provender
-    or Loot from his OWN mat (Provender first, then Loot). Does NOT apply
+    or Loot from his OWN mat (default: Provender first). Does NOT apply
     the Unfed penalty (the caller decides when, after Sharing).
 
     E6 GREED (rule 4.8.1): if `discard_excess_mules`, the Lord may first
@@ -469,14 +483,8 @@ def _feed_consume_own(state: GameState, lord_id: str, *,
             else:
                 lord.assets.pop("mule", None)
     needed = math.ceil((units + mules) / 6) if (units + mules) > 0 else 0
-    use_prov = min(prov, needed)
-    short_after = needed - use_prov
-    use_loot = min(loot, short_after)
-    short = short_after - use_loot
-    if use_prov > 0:
-        lord.assets["prov"] = prov - use_prov
-    if use_loot > 0:
-        lord.assets["loot"] = loot - use_loot
+    use_prov, use_loot = _spend_food(lord.assets, needed, loot_budget)
+    short = needed - use_prov - use_loot
     return {"needed": needed, "consumed": use_prov + use_loot,
             "use_prov": use_prov, "use_loot": use_loot, "short": short,
             "mules_discarded": discarded}
@@ -485,12 +493,13 @@ def _feed_consume_own(state: GameState, lord_id: str, *,
 def _feed_all_moved_fought(state: GameState, *,
                            discard_excess_mules: bool = False,
                            discard_mules_lords: set[str] | None = None,
+                           feed_loot: dict[str, int] | None = None,
                            ) -> dict[str, Any]:
     """End-card Feed for all on-map Lords marked Moved/Fought, on both sides."""
     return _feed_lords(
         state, [lid for lid, lord in state.lords.items() if lord.moved_fought],
         discard_excess_mules=discard_excess_mules,
-        discard_mules_lords=discard_mules_lords)
+        discard_mules_lords=discard_mules_lords, feed_loot=feed_loot)
 
 
 def _forced_feed_lords(state: GameState, lord_ids: list[str], *,
@@ -513,7 +522,9 @@ def _forced_feed_lords(state: GameState, lord_ids: list[str], *,
 
 def _feed_lords(state: GameState, lord_ids: list[str], *,
                 discard_excess_mules: bool = False,
-                discard_mules_lords: set[str] | None = None) -> dict[str, Any]:
+                discard_mules_lords: set[str] | None = None,
+                feed_loot: dict[str, int] | None = None,
+                preview: bool = False) -> dict[str, Any]:
     """4.8.1 Feed for an explicit set of Lords, Christians then Muslims.
 
     The end-card caller selects Moved/Fought Lords; Events select their
@@ -527,6 +538,7 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
     summary: dict[str, Any] = {"fed": [], "shared": [], "unfed": []}
     shortfall: dict[str, int] = {}
     feeding = set(lord_ids)
+    loot_budget = dict(feed_loot or {})
 
     # Phase A: own-Feed, Christians then Muslims.
     for side in ("christian", "muslim"):
@@ -538,7 +550,10 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
             _discard_this = discard_excess_mules or (
                 discard_mules_lords is not None and lid in discard_mules_lords)
             r = _feed_consume_own(state, lid,
-                                  discard_excess_mules=_discard_this)
+                                  discard_excess_mules=_discard_this,
+                                  loot_budget=loot_budget.get(lid, 0))
+            if lid in loot_budget:
+                loot_budget[lid] -= r["use_loot"]
             summary["fed"].append({"lord_id": lid, **r})
             if r["short"] > 0:
                 shortfall[lid] = r["short"]
@@ -550,8 +565,7 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
         lord = state.lords[lid]
         loc_id = lord.cylinder.locale_id
         assert loc_id is not None
-        # Same-side Lords at the same Locale (excluding self) must share
-        # their remaining Provender then Loot.
+        # Same-side Lords at the same Locale must share their surplus.
         for donor_id, donor in state.lords.items():
             if shortfall[lid] <= 0:
                 break
@@ -559,14 +573,13 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
                     or donor.cylinder.kind != "locale"
                     or donor.cylinder.locale_id != loc_id):
                 continue
-            for asset in ("prov", "loot"):
-                if shortfall[lid] <= 0:
-                    break
-                have = donor.assets.get(asset, 0)
-                give = min(have, shortfall[lid])
-                if give > 0:
-                    donor.assets[asset] = have - give
-                    shortfall[lid] -= give
+            prov, loot = _spend_food(
+                donor.assets, shortfall[lid], loot_budget.get(donor_id, 0))
+            if donor_id in loot_budget:
+                loot_budget[donor_id] -= loot
+            shortfall[lid] -= prov + loot
+            for asset, give in (("prov", prov), ("loot", loot)):
+                if give:
                     summary["shared"].append(
                         {"to": lid, "from": donor_id, "asset": asset,
                          "amount": give})
@@ -574,9 +587,45 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
     # Phase C: UNFED penalty for any Lord still short after Sharing.
     for lid, short in shortfall.items():
         if short > 0:
-            _apply_unfed_penalty(state, lid)
+            if not preview:
+                _apply_unfed_penalty(state, lid)
             summary["unfed"].append(lid)
     return summary
+
+
+def _feed_loot_options(state: GameState, discard_lords: set[str] | None = None,
+                       ) -> dict[str, tuple[int, int]]:
+    """Each payer's Loot range for its combined own Feed and Sharing."""
+    on_map = {lid: lord for lid, lord in state.lords.items()
+              if lord.cylinder.kind == "locale"}
+    mixed = {lid: lord for lid, lord in on_map.items()
+             if lord.assets.get("prov", 0) and lord.assets.get("loot", 0)}
+    feeding = [lid for lid, lord in on_map.items() if lord.moved_fought]
+    if not mixed or not feeding:
+        return {}
+    # Mandatory food totals are independent of which Assets cover them.
+    mats = {lid: lord.model_copy(update={"assets": dict(lord.assets)})
+            for lid, lord in on_map.items()}
+    probe = state.model_copy(update={"lords": mats})
+    _feed_lords(probe, feeding, discard_mules_lords=discard_lords, preview=True)
+    options = {}
+    for lid, lord in mixed.items():
+        prov, loot = lord.assets["prov"], lord.assets["loot"]
+        spent = prov + loot - mats[lid].assets["prov"] - mats[lid].assets["loot"]
+        minimum, maximum = max(0, spent - prov), min(spent, loot)
+        if minimum < maximum:
+            options[lid] = (minimum, maximum)
+    return options
+
+
+def _feed_loot_election(raw: Any, options: dict[str, tuple[int, int]]) -> dict[str, int]:
+    _require(isinstance(raw, dict), "feed_loot must map your Lord IDs to Loot amounts",
+             code="bad_feed_choice")
+    for lid, amount in raw.items():
+        bounds = options.get(lid)
+        _require(bounds is not None and type(amount) is int and bounds[0] <= amount <= bounds[1],
+                 f"no legal Feed election of {amount!r} Loot for {lid}", code="bad_feed_choice")
+    return dict(raw)
 
 
 def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, Any]:
@@ -612,15 +661,7 @@ def _clear_per_card_event_flags(state: GameState) -> None:
 
 
 def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """End the currently-active Lord's card. Runs the rule 4.8 cascade.
-
-    Phase 5h + deferred fix: auto-Feed via _feed_lord, then auto-
-    Disband if the Lord is at-or-beyond Service limit (rule 4.8.3 /
-    3.3.2). Voluntary Pay during the FPD step uses the same
-    pay_lord handler the Levy step uses but during Campaign is not
-    yet exposed via legal_moves; agent-driven Pay during FPD is a
-    Q-NNN candidate for when scenarios demand it.
-    """
+    """End a card with optional Feed elections, or open interactive economy (4.8)."""
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
@@ -629,17 +670,16 @@ def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              code="no_active_lord")
     lord_id = state.meta.active_lord_id
     assert lord_id is not None
-    # 4.8 Feed / Pay / Disband cascade. With `interactive_economy`, the
-    # optional player choices in this step (4.8.1 Greed Mule-discard and
-    # 4.8.2 voluntary Pay before the mandatory Disband) are exposed as
-    # PendingDecisions; otherwise the deterministic default runs (keep
-    # Mules, no voluntary Pay), preserving self-play / synchronous play.
     if bool(action.get("interactive_economy")):
-        return _economy_begin(state, action, side, lord_id)
-    # 4.8.1 Feed — E4/E5: ALL Lords marked Moved/Fought on both sides
-    # Feed (a Battle/Storm or Group March marks several), with Sharing
-    # among same-Locale same-side Lords.
-    feed_result = _feed_all_moved_fought(state)
+        _require("feed_loot" not in action, "choose Feed resources at the Feed prompt",
+                 code="bad_feed_choice")
+        return _economy_begin(state, side, lord_id)
+    choices = {}
+    if "feed_loot" in action:
+        options = {lid: bounds for lid, bounds in _feed_loot_options(state).items()
+                   if state.lords[lid].side == side}
+        choices = _feed_loot_election(action["feed_loot"], options)
+    feed_result = _feed_all_moved_fought(state, feed_loot=choices)
     return _economy_finalize(state, action, side, lord_id, feed_result)
 
 
@@ -742,11 +782,10 @@ def _greed_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
     return out
 
 
-def _economy_begin(state: GameState, action: dict[str, Any], side: Side,
-                   lord_id: str) -> dict[str, Any]:
+def _economy_begin(state: GameState, side: Side, lord_id: str) -> dict[str, Any]:
     """Start the interactive 4.8 Feed/Pay/Disband cascade. Sequences,
     in rule order (Christians then Muslims): optional Greed Mule-discard
-    -> Feed -> optional voluntary Pay -> mandatory Disband."""
+    -> Feed resource elections -> optional Pay -> mandatory Disband."""
     payload: dict[str, Any] = {
         "active_side": side,
         "active_lord_id": lord_id,
@@ -756,14 +795,11 @@ def _economy_begin(state: GameState, action: dict[str, Any], side: Side,
         "discard_lords": [],
         "feed_result": None,
     }
-    return _economy_advance(state, action, payload)
+    return _economy_advance(state, payload)
 
 
-def _economy_advance(state: GameState, action: dict[str, Any],
-                     payload: dict[str, Any]) -> dict[str, Any]:
-    """Emit the next economy PendingDecision, or finalize when the
-    cascade is complete. Shared by _economy_begin and the two response
-    handlers (greed_mule_choice, pay_before_disband)."""
+def _economy_advance(state: GameState, payload: dict[str, Any]) -> dict[str, Any]:
+    """Emit the next economy decision in rules order."""
     order: tuple[Side, Side] = ("christian", "muslim")
     if payload["phase"] == "greed":
         prompted = set(payload["greed_prompted"])
@@ -781,12 +817,28 @@ def _economy_advance(state: GameState, action: dict[str, Any],
                 return {"pending": "greed_mule_choice", "side": sd,
                         "eligible": eligible}
             payload["greed_prompted"].append(sd)
-        feed_result = _feed_all_moved_fought(
-            state, discard_mules_lords=set(payload["discard_lords"]))
-        payload["feed_result"] = feed_result
+        payload["phase"] = "feed"
+        payload["feed_prompted"] = []
+        payload["_feed_loot"] = {}
+    if payload["phase"] == "feed":
+        discards = set(payload["discard_lords"])
+        options = _feed_loot_options(state, discards)
+        for sd in order:
+            if sd in payload["feed_prompted"]:
+                continue
+            own = {lid: list(bounds) for lid, bounds in options.items()
+                   if state.lords[lid].side == sd}
+            if own:
+                payload["feed_options"] = own
+                state.pending = PendingDecision(
+                    kind="feed_resource_choice", waiting_on=sd, payload=payload)
+                state.meta.active_player = sd
+                return {"pending": "feed_resource_choice", "side": sd, "feed_options": own}
+        payload["feed_result"] = _feed_all_moved_fought(
+            state, discard_mules_lords=discards, feed_loot=payload.pop("_feed_loot"))
+        payload.pop("feed_options", None)
         payload["phase"] = "pay"
         payload["cursor_side"] = "christian"
-        return _economy_advance(state, action, payload)
     sd = payload["cursor_side"]
     state.pending = PendingDecision(
         kind="pay_before_disband", waiting_on=sd, payload=payload)
@@ -816,7 +868,20 @@ def _h_greed_mule_choice(state: GameState,
     _record(state, action,
             f"{side} Greed: discard excess Mules for {list(chosen)}")
     return {"greed_choice": {"side": side, "discarded_for": list(chosen)},
-            "advance": _economy_advance(state, action, payload)}
+            "advance": _economy_advance(state, payload)}
+
+
+def _h_feed_resource_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Choose each payer's total Loot spend in own Feed and Sharing (4.8.1)."""
+    side = _require_side(action)
+    pd = _require_pending(state, "feed_resource_choice", side)
+    payload = pd.payload
+    options = {lid: tuple(bounds) for lid, bounds in payload["feed_options"].items()}
+    choice = _feed_loot_election(action.get("feed_loot", {}), options)
+    payload["_feed_loot"].update(choice)
+    payload["feed_prompted"].append(side)
+    _record(state, action, f"{side} chooses Feed resources")
+    return {"feed_choice": choice, "advance": _economy_advance(state, payload)}
 
 
 def _h_pay_before_disband(state: GameState,
@@ -836,7 +901,7 @@ def _h_pay_before_disband(state: GameState,
         if side == "christian":
             payload["cursor_side"] = "muslim"
             return {"pay_before_disband": "done", "next_side": "muslim",
-                    "advance": _economy_advance(state, action, payload)}
+                    "advance": _economy_advance(state, payload)}
         # Restore the card-owner as active_player so the card-to-card baton
         # flips from the SAME side the synchronous path would (the Pay
         # cursor ended on Muslim; _advance_or_end_campaign flips from
@@ -8170,6 +8235,7 @@ CAMPAIGN_HANDLERS = {
     "command_reveal": _h_command_reveal,
     "end_card": _h_end_card,
     "greed_mule_choice": _h_greed_mule_choice,
+    "feed_resource_choice": _h_feed_resource_choice,
     "pay_before_disband": _h_pay_before_disband,
     "wastage_choice": _h_wastage_choice,
     "oneround_timing": _h_oneround_timing,
