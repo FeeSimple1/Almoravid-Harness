@@ -2641,9 +2641,19 @@ def _choose_march_hold(state: GameState, action: dict[str, Any], side: Side,
     return play
 
 
-def _h_swollen_river_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _adalides_cancels_swollen_river(state: GameState, card_id: str, locale: str) -> bool:
+    """M3 is canceled by any Christian Lord with Adalides at the Locale."""
     from almoravid.capabilities import capabilities_for_lord
 
+    return card_id == "M3" and any(
+        lord.side == "christian" and lord.cylinder.kind == "locale"
+        and lord.cylinder.locale_id == locale
+        and {"C3", "C10"}.intersection(capabilities_for_lord(state, lord.id))
+        for lord in state.lords.values()
+    )
+
+
+def _h_swollen_river_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     side = _require_side(action)
     payload = _require_pending(state, "swollen_river_march", side).payload
     card_id = _swollen_card(side)
@@ -2652,13 +2662,7 @@ def _h_swollen_river_march(state: GameState, action: dict[str, Any]) -> dict[str
     moving_side = _other(side)
     _clear_approach_pending(state, moving_side)
     if play:
-        # M3 can be canceled by any Christian Lord with Adalides here.
-        adalides = side == "muslim" and any(
-            lord.side == moving_side and lord.cylinder.kind == "locale"
-            and lord.cylinder.locale_id == origin
-            and {"C3", "C10"}.intersection(capabilities_for_lord(state, lord.id))
-            for lord in state.lords.values())
-        if not adalides:
+        if not _adalides_cancels_swollen_river(state, card_id, origin):
             lord_id = state.meta.active_lord_id
             state.meta.swollen_river_blocked_card_lord_id = lord_id
             _record(state, action,
@@ -5860,24 +5864,21 @@ def _begin_interactive_relief(
 
 
 def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
-    """Resolve the C3/M3 Swollen River Avoid-block decision. `play=True`
-    cancels the Avoid (discard Swollen River, force the Defender to Stand
-    -> Battle); `play=False` lets the Avoid proceed."""
-    from almoravid.state import PendingDecision as _PD_b
+    """Resolve the C3/M3 Avoid reaction, resuming Avoid if the Event has no effect."""
     side = _require_side(action)
     pd = _require_pending(state, "swollen_river_block", side)
     p = pd.payload
     defender_side = p["defender_side"]
     blocker_card = p["blocker_card"]
+    march_payload = p["march_payload"]
     play = action.get("play", False)
     _require(isinstance(play, bool), "play must be true or false", code="bad_arg")
     if play:
         _require(blocker_card in held_event_ids(state, side),
                  "Swollen River is not Held by the responding side", code="not_held")
     # Restore the Defender's march_arrival_response pending either way.
-    state.pending = _PD_b(kind="march_arrival_response",
-                          waiting_on=defender_side,
-                          payload=p["march_payload"])
+    state.pending = PendingDecision(kind="march_arrival_response",
+                                    waiting_on=defender_side, payload=march_payload)
     state.meta.active_player = defender_side
     avoid = dict(p["avoid_action"])
     # Older saves could already have parked an Avoid with repeated IDs
@@ -5885,23 +5886,31 @@ def _h_respond_swollen_river_block(state: GameState, action: dict[str, Any]) -> 
     if isinstance(avoid.get("lord_ids"), list):
         avoid["lord_ids"] = list(dict.fromkeys(avoid["lord_ids"]))
     try:
-        _approach_subset(state, p["march_payload"], avoid)
+        _approach_subset(state, march_payload, avoid)
     except IllegalAction as exc:
         if exc.code != "lt_pair_split":
             raise
         _record(state, action, "Defender must reselect an Avoid for the full Lieutenant pair")
         return {"pending": "march_arrival_response", "waiting_on": defender_side}
+    locale = march_payload["locale_id"]
+    cancelled = play and _adalides_cancels_swollen_river(state, blocker_card, locale)
     if play:
         consume_held_event(state, side, blocker_card)
         state.decks.discard.append(blocker_card)
-        result = _h_respond_stand_battle(
-            state, {"type": "respond_stand_battle", "side": defender_side,
-                    "interactive_concede": action.get("interactive_concede", False),
-                    "interactive_timing": action.get("interactive_timing", False),
-                    "interactive_retreat": action.get("interactive_retreat", False)})
-        result["swollen_river_played"] = blocker_card
-        return result
-    return _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
+        if not cancelled:
+            result = _h_respond_stand_battle(
+                state, {"type": "respond_stand_battle", "side": defender_side,
+                        "interactive_concede": action.get("interactive_concede", False),
+                        "interactive_timing": action.get("interactive_timing", False),
+                        "interactive_retreat": action.get("interactive_retreat", False)})
+            result["swollen_river_played"] = blocker_card
+            return result
+        _record(state, action,
+                f"Adalides cancels {side} Swollen River ({blocker_card}) at {locale}")
+    result = _h_respond_avoid_battle(state, avoid, reaction_resolved=True)
+    if cancelled:
+        result["swollen_river_cancelled"] = blocker_card
+    return result
 
 
 def _h_relief_sally(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -6081,14 +6090,22 @@ def _grant_event_lordship(state: GameState, lord_id: str, side: Side) -> int:
     return effective_lordship(state, lord_id)
 
 
+def _shift_event_service(state: GameState, lord_id: str, delta: int) -> int:
+    from almoravid.actions import _lord_service_box, _shift_service
+
+    _require(_lord_service_box(state, lord_id) is not None,
+             f"{lord_id} has no Service marker to shift", code="no_service_marker")
+    return _shift_service(state, lord_id, delta)
+
+
 def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """C14 (Hold) Pope Gregory: Play on Sancho or Eudes to
-    Muster him from Calendar, OR shift his Service 2 boxes right,
+    Muster him from Calendar, OR shift his Service 2 boxes in either direction (2.2.3),
     OR for Lordship +2.
 
     Args:
       side: 'christian'
-      mode: 'muster_from_calendar' | 'service_shift_right' |
+      mode: 'muster_from_calendar' | 'service_shift_right' | 'service_shift_left' |
             'lordship_plus_2'
       lord_id: 'sancho' | 'eudes'
     """
@@ -6125,12 +6142,9 @@ def _h_play_pope_gregory(state: GameState, action: dict[str, Any]) -> dict[str, 
                                  2, allow_taifa_box=False)
         from almoravid.actions import _initialize_mustered_lord
         result.update(_initialize_mustered_lord(state, lord_id, seat))
-    elif mode == "service_shift_right":
-        sm = next((s for s in state.calendar.service_markers
-                   if s.lord_id == lord_id), None)
-        if sm is not None:
-            sm.box = min(16, sm.box + 2)
-            result["new_service_box"] = sm.box
+    elif mode in ("service_shift_right", "service_shift_left"):
+        delta = 2 if mode == "service_shift_right" else -2
+        result["new_service_box"] = _shift_event_service(state, lord_id, delta)
     elif mode == "lordship_plus_2":
         result["lordship_rating_now"] = _grant_event_lordship(state, lord_id, side)
     else:
@@ -6322,11 +6336,7 @@ def _h_play_cluniacs(state: GameState, action: dict[str, Any]) -> dict[str, Any]
         from almoravid.actions import _initialize_mustered_lord
         result.update(_initialize_mustered_lord(state, lord_id, seat))
     elif mode == "service_shift_right":
-        sm = next((s for s in state.calendar.service_markers
-                   if s.lord_id == lord_id), None)
-        if sm is not None:
-            sm.box = min(16, sm.box + 1)
-            result["new_service_box"] = sm.box
+        result["new_service_box"] = _shift_event_service(state, lord_id, 1)
     elif mode == "lordship_plus_2":
         result["lordship_rating_now"] = _grant_event_lordship(state, lord_id, side)
     else:

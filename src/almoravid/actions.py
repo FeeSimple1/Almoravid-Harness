@@ -36,6 +36,7 @@ from almoravid.state import (
     HistoryEntry,
     LevyStep,
     Lord,
+    ServiceMarker,
     Side,
     Vassal,
 )
@@ -1282,89 +1283,69 @@ def _h_cta_add_crusade_jihad(state: GameState, action: dict[str, Any]) -> dict[s
 
 
 
-def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
-    """Shift a Lord's Service marker N boxes left (toward Disband).
+def _lord_service_box(state: GameState, lord_id: str) -> int | None:
+    """The Lord's own Service position, including saved off-edge lanes."""
+    for marker in state.calendar.service_markers:
+        if marker.lord_id == lord_id and marker.vassal_id is None:
+            return marker.box
+    if lord_id in state.calendar.off_left_service:
+        return 0
+    if lord_id in state.calendar.off_right_service:
+        return 17
+    return None
 
-    Pattern 6 (off-edge): box can land at 0 (off_left_service). Per
-    rule, off-Calendar Service markers transition to off_left_service.
-    Multi-box shifts that would go below 0 are clamped at 0.
 
-    Returns the new box position (0..16, where 0 means off-left).
-    """
-    # Phase 7d: advanced Vassal Service (3.4.2) — Lord Service shifts
-    # cascade to that Lord's Vassal Service markers by the same boxes.
-    # Box 0 still holds the Vassal marker through Pay and Disband (2.2.3).
+def _shift_service(state: GameState, lord_id: str, delta: int) -> int:
+    """Apply a signed Service shift within the 0 and 17+ edges (2.2.3)."""
+    calendar = state.calendar
+    new_box = max(0, min(17, (_lord_service_box(state, lord_id) or 0) + delta))
+    # 3.4.2: Vassals shift by the requested distance even if their Lord is capped.
     if state.meta.advanced_vassal_service:
-        for vm in state.calendar.service_markers:
-            if vm.lord_id == lord_id and vm.vassal_id is not None:
-                vm.box = max(0, vm.box - boxes)
+        for marker in calendar.service_markers:
+            if marker.lord_id == lord_id and marker.vassal_id is not None:
+                marker.box = max(0, min(17, marker.box + delta))
 
-    # The Lord's OWN Service marker has vassal_id is None.
-    sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id and s.vassal_id is None), None)
-    if sm is None:
-        # Already off-edge or no marker — append to off_left_service if not present
-        if lord_id not in state.calendar.off_left_service:
-            state.calendar.off_left_service.append(lord_id)
-        return 0
-    new_box = sm.box - boxes
-    if new_box <= 0:
-        # Goes off-left (remove only the Lord's own marker, not Vassals')
-        state.calendar.service_markers = [
-            s for s in state.calendar.service_markers
-            if not (s.lord_id == lord_id and s.vassal_id is None)
-        ]
-        if lord_id not in state.calendar.off_left_service:
-            state.calendar.off_left_service.append(lord_id)
-        return 0
-    sm.box = new_box
+    own = next((m for m in calendar.service_markers
+                if m.lord_id == lord_id and m.vassal_id is None), None)
+    if lord_id in calendar.off_right_service:
+        calendar.off_right_service.remove(lord_id)
+    if new_box == 0:
+        if own is not None:
+            calendar.service_markers.remove(own)
+        if lord_id not in calendar.off_left_service:
+            calendar.off_left_service.append(lord_id)
+        return new_box
+
+    if lord_id in calendar.off_left_service:
+        calendar.off_left_service.remove(lord_id)
+    if own is None:
+        calendar.service_markers.append(ServiceMarker(lord_id=lord_id, box=new_box))
+    else:
+        own.box = new_box
     return new_box
+
+
+def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
+    """Shift Service toward Disband."""
+    return _shift_service(state, lord_id, -boxes)
 
 
 def _payable_service_steps(state: GameState, lord_id: str) -> int:
     """How many one-box payments can still move a Service marker (3.2)."""
-    markers = [m for m in state.calendar.service_markers if m.lord_id == lord_id]
-    own = next((m.box for m in markers if m.vassal_id is None), None)
+    own = _lord_service_box(state, lord_id)
     if own is None:
-        if lord_id in state.calendar.off_left_service:
-            own = 0
-        elif lord_id in state.calendar.off_right_service:
-            own = 17
-        else:
-            return 0
+        return 0
     leftmost = own
     if state.meta.advanced_vassal_service:
-        leftmost = min(own, min((m.box for m in markers if m.vassal_id is not None),
+        leftmost = min(own, min((m.box for m in state.calendar.service_markers
+                                if m.lord_id == lord_id and m.vassal_id is not None),
                                 default=own))
     return 17 - leftmost
 
 
 def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
-    """Shift a Lord's Service marker N boxes right (ahead / away from
-    Disband), per Pay (3.2). Box caps at 17 (the "17+" box). If the
-    marker was off-left, it re-enters at box `boxes` from box 0.
-    Returns the new box (1..17)."""
-    # 3.4.2: a Lord's Service shift (any direction, any reason) cascades
-    # to that Lord's Vassal Service markers by the same number of boxes.
-    if state.meta.advanced_vassal_service:
-        for vm in state.calendar.service_markers:
-            if vm.lord_id == lord_id and vm.vassal_id is not None:
-                vm.box = min(17, vm.box + boxes)
-    sm = next((s for s in state.calendar.service_markers
-               if s.lord_id == lord_id and s.vassal_id is None), None)
-    if sm is None:
-        # Resume the edge position stored by older saves.
-        box = 0
-        if lord_id in state.calendar.off_left_service:
-            state.calendar.off_left_service.remove(lord_id)
-        elif lord_id in state.calendar.off_right_service:
-            state.calendar.off_right_service.remove(lord_id)
-            box = 17
-        from almoravid.state import ServiceMarker
-        sm = ServiceMarker(lord_id=lord_id, box=box)
-        state.calendar.service_markers.append(sm)
-    sm.box = min(17, sm.box + boxes)
-    return sm.box
+    """Shift Service away from Disband, including Pay (3.2)."""
+    return _shift_service(state, lord_id, boxes)
 
 
 def _disband_vassals_for_side(state: GameState,
