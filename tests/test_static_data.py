@@ -171,13 +171,13 @@ def test_every_card_has_at_least_one_half(cards: dict) -> None:
 
 
 def test_event_persistence_values(cards: dict) -> None:
-    """Pattern 7: event_persistence must be 'immediate' or 'hold' (or null for no_event)."""
+    """Every Event has a supported lifetime."""
     for cid, c in cards["cards"].items():
         if c["no_event"]:
             assert c["event_persistence"] is None
             assert c["event_name"] is None
         else:
-            assert c["event_persistence"] in ("immediate", "hold"), (
+            assert c["event_persistence"] in ("immediate", "hold", "this_levy"), (
                 f"{cid}: event_persistence={c['event_persistence']!r}"
             )
 

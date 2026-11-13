@@ -1,9 +1,9 @@
 """Arts of War Event resolution.
 
-An Event is the TOP half of an AoW card. Events have one of three
-persistence kinds:
+An Event is the TOP half of an AoW card. Events have these lifetimes:
 
   - immediate: fires once on play, then discards.
+  - this_levy: remains in play until both sides finish the Levy.
   - hold (Battle scope): fires when a relevant Battle / Storm / Sally
     starts; discards at engagement end.
   - hold (Campaign scope): fires when the qualifying condition occurs
@@ -25,11 +25,10 @@ state so the eventual Battle code can find them.
 
 from __future__ import annotations
 
-import math as _math
 from collections.abc import Callable
 from typing import Any, cast
 
-from almoravid.state import GameState, Lord, PendingDecision, Side
+from almoravid.state import GameState, PendingDecision, Side
 from almoravid.static_data import load_cards
 
 # (state, side, card_id, payload) -> result dict
@@ -56,9 +55,48 @@ class EventNotResolvable(ValueError):
         )
 
 
-def _is_immediate(card_id: str) -> bool:
-    rec = load_cards()["cards"].get(card_id, {})
-    return bool(rec.get("event_persistence") == "immediate")
+def _is_levy_event(card_id: str) -> bool:
+    return load_cards()["cards"].get(card_id, {}).get("event_persistence") == "this_levy"
+
+
+def discard_levy_events(state: GameState) -> None:
+    """3.5.3: discard continuing Events, preserving legacy Holds in the bucket."""
+    for side, cards in list(state.decks.this_levy_events.items()):
+        for card_id in dict.fromkeys(cards):
+            if _is_levy_event(card_id) and card_id not in state.decks.discard:
+                state.decks.discard.append(card_id)
+        remaining = [card_id for card_id in cards if not _is_levy_event(card_id)]
+        if remaining:
+            state.decks.this_levy_events[side] = remaining
+        else:
+            state.decks.this_levy_events.pop(side)
+
+
+def restore_legacy_levy_events(state: GameState) -> None:
+    """Recover continuing cards sent to discard by older Levy saves."""
+    if state.meta.phase != "levy":
+        return
+    discarded = {cid for cid in state.decks.discard if _is_levy_event(cid)}
+    if not discarded:
+        return
+    for entry in reversed(state.history):
+        if entry.turn_index != state.meta.turn_index or entry.action == "begin_levy":
+            break
+        if entry.action != "aow_implement_event" or entry.actor == "system":
+            continue
+        card_id = entry.args.get("card_id")
+        if card_id is None:
+            # The implementation action allows the queued card id to be omitted.
+            card_id = entry.summary.removesuffix(" (3.1.3)").rsplit(" ", 1)[-1]
+        if not isinstance(card_id, str) or card_id not in discarded:
+            continue
+        if load_cards()["cards"][card_id]["side"] != entry.actor:
+            continue
+        state.decks.discard = [cid for cid in state.decks.discard if cid != card_id]
+        cards = state.decks.this_levy_events.setdefault(entry.actor, [])
+        if card_id not in cards:
+            cards.append(card_id)
+        discarded.remove(card_id)
 
 
 def _no_op_with_note(state: GameState, card_id: str, side: Side, note: str) -> dict[str, Any]:
@@ -90,7 +128,8 @@ def held_event_ids(state: GameState, side: Side) -> list[str]:
     """
     return list(dict.fromkeys(
         state.decks.held.get(side, [])
-        + state.decks.this_levy_events.get(side, [])
+        + [card for card in state.decks.this_levy_events.get(side, [])
+           if not _is_levy_event(card)]
         + state.decks.this_campaign_events.get(side, [])))
 
 
@@ -245,7 +284,10 @@ def resolve_event(
     resolver = _RESOLVERS.get(card_id)
     if resolver is None:
         raise EventNotResolvable(card_id)
-    return resolver(state, side, card_id, payload or {})
+    result = resolver(state, side, card_id, payload or {})
+    if _is_levy_event(card_id):
+        state.decks.this_levy_events.setdefault(side, []).append(card_id)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -346,20 +388,14 @@ def _finish_drought(state: GameState, context: dict[str, Any],
 def _drought_feed(state: GameState, context: dict[str, Any], lord_ids: list[str], *,
                   discard_lords: list[str] | None = None,
                   feed_loot: dict[str, int] | None = None) -> dict[str, Any]:
-    from almoravid.campaign import _feed_loot_options, _forced_feed_lords, _greed_eligible_lords
+    from almoravid.campaign import _forced_feed_lords, _immediate_feed_options
 
-    if discard_lords is None:
-        eligible = _greed_eligible_lords(state, context["target_side"], lord_ids=lord_ids)
-        if eligible:
-            return _drought_prompt(state, context, "greed", lord_ids=lord_ids, eligible=eligible)
-    discards = set(discard_lords or [])
     if feed_loot is None:
-        options = _feed_loot_options(state, discards, lord_ids=lord_ids)
+        options = _immediate_feed_options(state, context["target_side"], lord_ids, discard_lords)
         if options:
-            return _drought_prompt(
-                state, context, "feed", lord_ids=lord_ids, discard_lords=discard_lords or [],
-                feed_options={lid: list(bounds) for lid, bounds in options.items()})
-    fed = _forced_feed_lords(state, lord_ids, discard_mules_lords=discards, feed_loot=feed_loot)
+            return _drought_prompt(state, context, lord_ids=lord_ids, **options)
+    fed = _forced_feed_lords(state, lord_ids, discard_mules_lords=set(discard_lords or []),
+                             feed_loot=feed_loot)
     return _finish_drought(state, context, fed)
 
 
@@ -547,86 +583,144 @@ def _m12_taifa_marriage(state: GameState, side: Side, card_id: str,
 
 
 
-@register("C10")  # Devaluation (Christian-played, drains Muslim Coin)
-def _c10_devaluation_christian(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C10 Devaluation: 'Muslims reduce their Coin among Taifas box
-    and Lords to 2/3 of the total (rounded up).'
+def _devaluation_groups(state: GameState, card_id: str) -> dict[str, dict[str, int]]:
+    if card_id == "C10":
+        sources = {"taifa_box": state.taifas_box_coin} if state.taifas_box_coin else {}
+        sources.update({lord.id: lord.assets["coin"]
+                        for lord in state.lords.values()
+                        if lord.side == "muslim" and lord.assets.get("coin", 0) > 0})
+        return {"muslim": sources} if sources else {}
 
-    Reduces the Muslim total (Taifas box + all Muslim Lords' Coin) down to
-    ceil(total * 2/3), draining the Taifas box (state.taifas_box_coin) first
-    then Lord mats deterministically. Pattern 10: no Coin -> no-op.
-    """
-    muslim_lords = [lord for lord in state.lords.values() if lord.side == "muslim"]
-    box = state.taifas_box_coin
-    total_before = sum(lord.assets.get("coin", 0) for lord in muslim_lords) + box
-    if total_before == 0:
-        return _no_op_with_note(state, card_id, side,
-                                "no Muslim Coin to devalue")
-    target = _math.ceil(total_before * 2 / 3)
-    to_remove = total_before - target
-    removed = 0
-    # Drain the Taifas box first, then Lord mats (deterministic).
-    box_take = min(box, to_remove)
-    state.taifas_box_coin -= box_take
-    removed += box_take
-    for lord in sorted(muslim_lords, key=lambda x: x.id):
-        if removed >= to_remove:
-            break
-        have = lord.assets.get("coin", 0)
-        take = min(have, to_remove - removed)
-        if take > 0:
-            lord.assets["coin"] = have - take
-            if lord.assets["coin"] == 0:
-                lord.assets.pop("coin", None)
-            removed += take
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side,
-            "coin_before": total_before, "coin_after": target,
-            "removed": removed}
-
-
-@register("M14")  # Devaluation (Muslim-played, drains Christian Coin)
-def _m14_devaluation_muslim(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """M14 Devaluation: 'Each Locale where Christian Lords have Coin,
-    they reduce their total there to half (rounded up).'
-
-    Phase 6d: per-Locale halving for Christian Coin. Pattern 10: no
-    Coin -> no-op.
-    """
-    per_locale: dict[str, list[Lord]] = {}
+    groups: dict[str, dict[str, int]] = {}
     for lord in state.lords.values():
         if (lord.side == "christian" and lord.cylinder.kind == "locale"
                 and lord.assets.get("coin", 0) > 0):
-            loc_id = lord.cylinder.locale_id
-            assert loc_id is not None
-            per_locale.setdefault(loc_id, []).append(lord)
-    if not per_locale:
-        return _no_op_with_note(state, card_id, side,
-                                "no Christian Coin at any Locale")
-    total_removed = 0
-    for _locale_id, lords in per_locale.items():
-        total_before = sum(lord.assets.get("coin", 0) for lord in lords)
-        target = _math.ceil(total_before / 2)
-        to_remove = total_before - target
-        removed = 0
-        for lord in sorted(lords, key=lambda x: x.id):
-            if removed >= to_remove:
-                break
-            have = lord.assets.get("coin", 0)
-            take = min(have, to_remove - removed)
-            if take > 0:
-                lord.assets["coin"] = have - take
-                if lord.assets["coin"] == 0:
-                    lord.assets.pop("coin", None)
-                removed += take
-        total_removed += removed
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side,
-            "locales_affected": list(per_locale),
-            "total_removed": total_removed}
+            assert lord.cylinder.locale_id is not None
+            groups.setdefault(lord.cylinder.locale_id, {})[lord.id] = lord.assets["coin"]
+    return groups
 
+
+@register("C10")
+@register("M14")
+def _devaluation(state: GameState, side: Side, card_id: str,
+                 payload: dict[str, Any]) -> dict[str, Any]:
+    """The affected side allocates the mandatory Coin loss (C10/M14)."""
+    from almoravid.actions import _other, _require
+
+    _require(not payload, "the affected side chooses the Devaluation allocation",
+             code="bad_devaluation_choice")
+    _require(state.pending is None, "finish the pending decision before Devaluation",
+             code="pending_decision")
+    groups = _devaluation_groups(state, card_id)
+    divisor = 3 if card_id == "C10" else 2
+    context = {
+        "card_id": card_id,
+        "side": side,
+        "target_side": _other(side),
+        "resume_active": state.meta.active_player,
+        "groups": groups,
+        "required": {group: sum(sources.values()) // divisor
+                     for group, sources in groups.items()},
+    }
+    return _continue_devaluation(state, context, {})
+
+
+def _continue_devaluation(state: GameState, context: dict[str, Any],
+                          selected: dict[str, int]) -> dict[str, Any]:
+    """Resolve forced amounts and offer the full feasible range at each choice."""
+    for group, sources in context["groups"].items():
+        remaining = context["required"][group] - sum(selected.get(lid, 0) for lid in sources)
+        available = sum(coin for lid, coin in sources.items() if lid not in selected)
+        for source, coin in sources.items():
+            if source in selected:
+                continue
+            available -= coin
+            minimum = max(0, remaining - available)
+            maximum = min(coin, remaining)
+            if minimum != maximum:
+                return _devaluation_prompt(
+                    state, context, selected, {"source": source, "min": minimum, "max": maximum})
+            selected[source] = minimum
+            remaining -= minimum
+    # A private response is always owed with Hidden Mats, so the drawer
+    # cannot infer whether the opponent's allocation was forced or empty.
+    if state.meta.hidden_mats and state.pending is None:
+        return _devaluation_prompt(state, context, selected, None)
+    return _finish_devaluation(state, context, selected)
+
+
+def _devaluation_prompt(state: GameState, context: dict[str, Any], selected: dict[str, int],
+                        choice: dict[str, Any] | None) -> dict[str, Any]:
+    side = context["target_side"]
+    state.pending = PendingDecision(
+        kind="devaluation_choice", waiting_on=side,
+        payload={**context, "selected": selected, "choice": choice})
+    state.meta.active_player = side
+    return {"card_id": context["card_id"], "pending": "devaluation_choice", "waiting_on": side}
+
+
+def _finish_devaluation(state: GameState, context: dict[str, Any],
+                        allocation: dict[str, int]) -> dict[str, Any]:
+    for source, amount in allocation.items():
+        if not amount:
+            continue
+        if source == "taifa_box":
+            state.taifas_box_coin -= amount
+        else:
+            assets = state.lords[source].assets
+            assets["coin"] -= amount
+            if assets["coin"] == 0:
+                assets.pop("coin")
+    card_id = context["card_id"]
+    state.pending = None
+    state.meta.active_player = context["resume_active"]
+    if not context["groups"]:
+        return _no_op_with_note(state, card_id, context["side"], "no Coin to devalue")
+    state.decks.discard.append(card_id)
+    result = {"card_id": card_id, "side": context["side"]}
+    removed = sum(allocation.values())
+    if card_id == "C10":
+        before = sum(context["groups"]["muslim"].values())
+        return {**result, "coin_before": before, "coin_after": before - removed, "removed": removed}
+    return {**result, "locales_affected": list(context["groups"]), "total_removed": removed}
+
+
+def resolve_devaluation_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Choose Coin from the current source or submit the complete allocation."""
+    from almoravid.actions import _record, _require, _require_side
+    from almoravid.campaign import _require_pending
+
+    side = _require_side(action)
+    payload = _require_pending(state, "devaluation_choice", side).payload
+    context = {key: value for key, value in payload.items() if key not in {"selected", "choice"}}
+    selected = payload["selected"].copy()
+    fields = action.keys() - {"type", "side"}
+    if fields == {"coin_by_source"}:
+        allocation = action["coin_by_source"]
+        sources = {lid: coin for group in context["groups"].values()
+                   for lid, coin in group.items()}
+        _require(isinstance(allocation, dict) and all(
+            lid in sources and type(coin) is int and 0 <= coin <= sources[lid]
+            for lid, coin in allocation.items()),
+            "choose only available Coin from eligible sources", code="bad_devaluation_choice")
+        _require(all(allocation.get(lid, 0) == coin for lid, coin in selected.items())
+                 and all(sum(allocation.get(lid, 0) for lid in group) == context["required"][key]
+                         for key, group in context["groups"].items()),
+                 "allocate the exact required loss for each group and keep earlier choices",
+                 code="bad_devaluation_choice")
+        result = _finish_devaluation(state, context, allocation)
+    else:
+        choice = payload["choice"]
+        coin = action.get("coin")
+        _require(choice is not None and fields == {"source", "coin"}
+                 and action["source"] == choice["source"]
+                 and type(coin) is int and choice["min"] <= coin <= choice["max"],
+                 "choose an offered Coin amount for the current source",
+                 code="bad_devaluation_choice")
+        selected[choice["source"]] = coin
+        result = _continue_devaluation(state, context, selected)
+    _record(state, action, f"{side} allocates Coin for Devaluation ({context['card_id']})")
+    return result
 
 # ---------------------------------------------------------------------------
 # Catch-all: a registry coverage helper for the test suite
@@ -1019,7 +1113,6 @@ def _m16_galician_revolt(state: GameState, side: Side, card_id: str,
             and "alfonso" not in
             state.meta.muster_banned_this_levy_lord_ids):
         state.meta.muster_banned_this_levy_lord_ids.append("alfonso")
-    state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "service_shifted": target, "new_service_box": new_box,
             "muster_ban": ["alfonso"]}
@@ -1052,7 +1145,6 @@ def _m17_leon_y_castilla(state: GameState, side: Side, card_id: str,
         if (lid in state.lords
                 and lid not in state.meta.muster_banned_this_levy_lord_ids):
             state.meta.muster_banned_this_levy_lord_ids.append(lid)
-    state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "service_shifted": target, "new_service_box": new_box,
             "muster_ban": list(_M17_LORDS)}
@@ -1660,28 +1752,39 @@ def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
     return {"card_id": card_id, "side": side, "restored": restored}
 
 
+def fitna_choices(state: GameState) -> list[list[str]]:
+    from itertools import combinations
+
+    eligible = sorted(lid for lid, lord in state.lords.items()
+                      if lord.side == "muslim" and lord.is_taifa
+                      and lord.cylinder.kind in ("locale", "calendar"))
+    return [list(pair) for pair in combinations(eligible, min(2, len(eligible)))]
+
+
 @register("C19")  # Fitna
 def _c19_fitna(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C19 (Immediate): Choose 2 Taifa Lords; Service -1 left each;
-    this Levy, no Muster of/by them."""
-    from almoravid.actions import _shift_service_left
-    taifa_lords = [lid for lid, lord in state.lords.items()
-                   if lord.is_taifa and lord.side == "muslim"
-                   and any(sm.lord_id == lid
-                           for sm in state.calendar.service_markers)]
-    if not taifa_lords:
-        return _no_op_with_note(state, card_id, side,
-                                "no Taifa Lord on Calendar")
-    targets = sorted(taifa_lords)[:2]
+               payload: dict[str, Any]) -> dict[str, Any]:
+    """Choose up to two Taifa Lords. Shift only Mustered Lords' Service."""
+    from almoravid.actions import _require, _shift_service_left
+
+    choices = fitna_choices(state)
+    targets = payload.get("lord_ids", choices[0] if len(choices) == 1 else None)
+    _require(targets is not None, "select Fitna targets with payload.lord_ids",
+             code="choice_required")
+    _require(isinstance(targets, list) and all(isinstance(lid, str) for lid in targets)
+             and sorted(targets) in choices, "select distinct eligible Taifa Lords for Fitna",
+             code="bad_target")
     shifted = []
+    service = {sm.lord_id for sm in state.calendar.service_markers if sm.vassal_id is None}
+    service.update(state.calendar.off_left_service)
     for lid in targets:
-        new_box = _shift_service_left(state, lid, boxes=1)
-        shifted.append({"lord_id": lid, "new_service_box": new_box})
+        if state.lords[lid].cylinder.kind == "locale" and lid in service:
+            new_box = _shift_service_left(state, lid, boxes=1)
+            shifted.append({"lord_id": lid, "new_service_box": new_box})
         if lid not in state.meta.muster_banned_this_levy_lord_ids:
             state.meta.muster_banned_this_levy_lord_ids.append(lid)
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "shifted": shifted}
+    return {"card_id": card_id, "side": side, "shifted": shifted,
+            "muster_ban": targets, "no_op": not targets}
 
 
 def al_qadir_choices(state: GameState) -> list[list[str]]:
@@ -1778,12 +1881,20 @@ def _c22_berbers(state: GameState, side: Side, card_id: str,
         if (lid in state.lords
                 and lid not in state.meta.muster_banned_this_levy_lord_ids):
             state.meta.muster_banned_this_levy_lord_ids.append(lid)
-    state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side,
             "service_shifted": target, "new_service_box": new_box}
 
 
 _C23_LORDS = ("abu_bakr", "al_mustain")
+
+
+def illness_choices(state: GameState) -> list[dict[str, str]]:
+    service = {sm.lord_id for sm in state.calendar.service_markers if sm.vassal_id is None}
+    return [{"lord_id": lid, "mode": mode}
+            for lid in _C23_LORDS if lid in state.lords
+            for mode in ("service", "cylinder")
+            if (lid in service if mode == "service"
+                else state.lords[lid].cylinder.kind == "calendar")]
 
 
 @register("C23")  # Illness of the Emir
@@ -1796,37 +1907,32 @@ def _c23_illness(state: GameState, side: Side, card_id: str,
     'cylinder' (cylinder 1 box left on the Calendar).
     payload['lord_id']: abu_bakr | al_mustain.
     """
-    from almoravid.actions import _shift_service_left
-    mode = payload.get("mode", "service")
-    eligible = [lid for lid in _C23_LORDS
-                if lid in state.lords
-                and any(sm.lord_id == lid
-                        for sm in state.calendar.service_markers)]
-    target = payload.get("lord_id") if payload.get("lord_id") in _C23_LORDS         else None
-    if target is None and eligible:
-        target = eligible[0]
-    if target is None:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Lord on Calendar")
+    from almoravid.actions import _require, _shift_service_left
+
+    choices = illness_choices(state)
+    matches = [choice for choice in choices
+               if all(choice[key] == payload.get(key, choice[key]) for key in choice)]
+    if not choices and not payload:
+        return {"card_id": card_id, "side": side, "no_op": True}
+    _require(bool(matches), "select an eligible cylinder or Service marker for Illness",
+             code="bad_target")
+    target, mode = matches[0]["lord_id"], matches[0]["mode"]
     result: dict[str, Any] = {"card_id": card_id, "side": side,
                               "target": target, "mode": mode}
     if mode == "cylinder":
         lord = state.lords[target]
-        if lord.cylinder.kind == "calendar":
-            cur = lord.cylinder.box if lord.cylinder.box is not None else 1
-            lord.cylinder.box = max(0, cur - 1)
-            result["new_cylinder_box"] = lord.cylinder.box
-        else:
-            # On the map: fall back to Service shift (cylinder branch
-            # only meaningful on Calendar per card text).
-            result["new_service_box"] = _shift_service_left(state, target,
-                                                            boxes=1)
+        cur = lord.cylinder.box if lord.cylinder.box is not None else 1
+        lord.cylinder.box = max(0, cur - 1)
+        if target in state.calendar.off_right:
+            state.calendar.off_right.remove(target)
+        if lord.cylinder.box == 0 and target not in state.calendar.off_left:
+            state.calendar.off_left.append(target)
+        result["new_cylinder_box"] = lord.cylinder.box
     else:
         result["new_service_box"] = _shift_service_left(state, target,
                                                         boxes=1)
     if target not in state.meta.muster_banned_this_levy_lord_ids:
         state.meta.muster_banned_this_levy_lord_ids.append(target)
-    state.decks.discard.append(card_id)
     return result
 
 
@@ -1840,17 +1946,13 @@ def _c24_abu_bakr(state: GameState, side: Side, card_id: str,
     for lid in ("yusuf", "sir"):
         if lid not in state.lords:
             continue
+        if lid not in state.meta.muster_banned_this_levy_lord_ids:
+            state.meta.muster_banned_this_levy_lord_ids.append(lid)
         if not any(sm.lord_id == lid
-                   for sm in state.calendar.service_markers):
+                   and sm.vassal_id is None for sm in state.calendar.service_markers):
             continue
         new_box = _shift_service_left(state, lid, boxes=1)
         shifted.append({"lord_id": lid, "new_service_box": new_box})
-        if lid not in state.meta.muster_banned_this_levy_lord_ids:
-            state.meta.muster_banned_this_levy_lord_ids.append(lid)
-    if not shifted:
-        return _no_op_with_note(state, card_id, side,
-                                "neither Yusuf nor Sir on Calendar")
-    state.decks.discard.append(card_id)
     return {"card_id": card_id, "side": side, "shifted": shifted}
 
 

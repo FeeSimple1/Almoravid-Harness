@@ -94,6 +94,10 @@ def _arid_terrain_march(advanced=True):
              "target_locale_id": "palencia", "way_type": "road"}
     assert march in legal_moves(state)
     apply_action(state, march)
+    apply_action(state, {"type": "arid_terrain_choice", "side": "muslim", "play": True})
+    if state.pending is not None and state.pending.kind == "arid_terrain_choice":
+        apply_action(state, {"type": "arid_terrain_choice", "side": "christian",
+                             "discard_lords": []})
     assert _service(state) == 3
     assert _service(state, VELA) == (1 if advanced else None)
     return state

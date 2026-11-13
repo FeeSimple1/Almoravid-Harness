@@ -20,6 +20,7 @@ from almoravid.state import GameState, Side
 
 _HIDDEN_LORD_FIELDS = ("forces", "assets", "routed_units", "capabilities",
                        "vassals")
+_PRIVATE_CONTINGENT_CARDS = {"M15", "M20"}
 
 
 def _other(side: Side) -> Side:
@@ -79,14 +80,19 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
                     "_retreat_provender_resume", "_combat_hold_resume", "_relief_sally_resume",
-                    "_storm_front_resume", "_feed_loot"):
+                    "_storm_front_resume", "_feed_loot", "_arid_resume"):
             payload.pop(key, None)
         if pending["waiting_on"] != viewer_side:
             payload.pop("blocker_card", None)
             payload.pop("feed_options", None)
+            if state.meta.hidden_mats and pending["kind"] == "devaluation_choice":
+                pending["payload"] = {"card_id": payload["card_id"]}
+            if state.meta.hidden_mats and pending["kind"] == "arid_terrain_choice":
+                payload.pop("discard_lords", None)
         if (state.meta.hidden_mats and "eligible" in payload
                 and pending["kind"] in {"greed_mule_choice", "feed_resource_choice",
-                                        "pay_before_disband", "drought_choice"}):
+                                        "pay_before_disband", "drought_choice",
+                                        "arid_terrain_choice"}):
             # Old Pay saves can contain rows from the other side's Greed.
             # Each mat's owner controls visibility regardless of the current actor.
             own = [row for row in payload["eligible"]
@@ -124,14 +130,35 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
                     and dump["lords"].get(c["owner_lord_id"], {}).get("hidden_mat")}
     decks["capabilities_in_play"] = [c for c in decks["capabilities_in_play"]
                                      if c["card_id"] not in hidden_cards]
+    if state.meta.hidden_mats and opp == "muslim":
+        cap_state = dump["meta"]["aow_cap_state"]
+        for card in _PRIVATE_CONTINGENT_CARDS:
+            units = cap_state.get(f"{card}_units", {})
+            if units.get("lord") not in revealed:
+                cap_state.pop(f"{card}_units", None)
+                cap_state.pop(f"{card}_used", None)
     plan = decks["plan"].get(opp, [])
     revealed_count = getattr(state.meta, f"plan_index_{opp}")
     decks["plan"][opp] = [entry if i < revealed_count else None
                            for i, entry in enumerate(plan)]
     decks["pending_draw"][opp] = None
     decks["held"][opp] = None
+    # Older saves stored an unplayed Arid Terrain in an in-play bucket.
+    # Screen it the same way as a Hold drawn by the current engine.
+    for key in ("this_levy_events", "this_campaign_events"):
+        cards = decks[key].get(opp, [])
+        legacy = "C4" if opp == "christian" else "M4"
+        if legacy in cards:
+            remaining = [card for card in cards if card != legacy]
+            if remaining:
+                decks[key][opp] = remaining
+            else:
+                decks[key].pop(opp)
     # Neither player may inspect the order of undrawn Arts of War cards.
     decks["draw"] = None
+    if state.meta.hidden_mats:
+        dump["history"] = [entry for entry in dump["history"]
+                           if (entry["actor"], entry["action"]) != (opp, "devaluation_choice")]
     # Screen private choices in the action log as well as on the mats.
     for entry in dump["history"]:
         # Scenario-loading history duplicates the seed even for the system
@@ -141,15 +168,24 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         if entry["actor"] != opp:
             continue
         if state.meta.hidden_mats and entry["action"] in {
-            "end_card", "feed_resource_choice", "drought_choice",
+            "end_card", "feed_resource_choice", "drought_choice", "arid_terrain_choice",
         }:
             entry["args"].pop("feed_loot", None)
-        if state.meta.hidden_mats and entry["action"] in {"levy_take_vassal", "levy_transport"}:
+            if entry["action"] == "arid_terrain_choice":
+                entry["args"].pop("discard_lords", None)
+        if state.meta.hidden_mats and entry["action"] in {
+            "levy_take_vassal", "levy_transport", "cap_fonsadera",
+        }:
             # The Lord's expenditure is public. For Advanced Vassal Service,
             # the Calendar exposes the Vassal whose marker was placed there.
             lord_id = entry["args"].get("lord_id")
             entry["args"] = {"lord_id": lord_id} if lord_id is not None else {}
             entry["summary"] = f"{opp}: {entry['action']} (private Muster)"
+            continue
+        if state.meta.hidden_mats and entry["action"] in {"cap_saqalibah", "cap_al_rum"}:
+            entry["action"] = "muster_capability"
+            entry["args"] = {}
+            entry["summary"] = f"{opp}: private Capability Muster"
             continue
         event_card = entry["args"].get("card_id")
         private_event = (entry["action"] == "aow_implement_event"

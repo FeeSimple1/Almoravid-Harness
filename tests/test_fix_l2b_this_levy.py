@@ -17,8 +17,8 @@ def test_this_levy_event_sets_muster_ban_and_blocks_muster() -> None:
     s.meta.active_player = "christian"
     s.meta.first_levy_done = True               # later Levy -> implement
     s.decks.pending_draw["christian"] = ["C19"]  # Fitna ("This Levy")
-    r = apply_action(s, {"type": "aow_implement_event", "side": "christian",
-                         "card_id": "C19"})
+    apply_action(s, {"type": "aow_implement_event", "side": "christian",
+                     "card_id": "C19", "payload": {"lord_ids": ["al_mustain", "abu_bakr"]}})
     banned = s.meta.muster_banned_this_levy_lord_ids
     assert len(banned) == 2                      # 2 Taifa Lords banned
     # A banned Lord may not Muster this Levy (3.1.3 / muster handler).

@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from almoravid.effective import includes_whole_lieutenant_pairs, lieutenant_for, lower_lord_for
-from almoravid.events import held_event_ids, held_event_moves
+from almoravid.events import fitna_choices, held_event_ids, held_event_moves, illness_choices
 from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
 
@@ -59,24 +59,47 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
 
-    if state.pending is not None and state.pending.kind == "drought_choice":
+    if state.pending is not None and state.pending.kind == "devaluation_choice":
+        payload = state.pending.payload
+        base = {"type": "devaluation_choice", "side": state.pending.waiting_on}
+        choice = payload["choice"]
+        if choice is None:
+            return [{**base, "coin_by_source": dict(payload["selected"])}]
+        return [{**base, "source": choice["source"], "coin": amount}
+                for amount in range(choice["min"], choice["max"] + 1)]
+
+    if state.pending is not None and state.pending.kind in {
+        "drought_choice", "arid_terrain_choice",
+    }:
         from itertools import combinations
 
         payload = state.pending.payload
-        drought: dict[str, Any] = {"type": "drought_choice", "side": state.pending.waiting_on}
-        if payload["step"] == "targets":
+        side = state.pending.waiting_on
+        base = {"type": state.pending.kind, "side": side}
+        step = payload["step"]
+        if step == "play":
+            from almoravid.campaign import _arid_card
+            arid_moves = [{**base, "play": False}]
+            if _arid_card(side) in held_event_ids(state, side):
+                marching = payload["marching_lord_ids"]
+                arid_moves.extend({**base, "play": True, "lord_ids": list(ids)}
+                                  for ids in combinations(marching, min(2, len(marching))))
+            return arid_moves
+        if step == "camels":
+            return [{**base, "discard_camels": choice} for choice in (False, True)]
+        if step == "targets":
             target_moves = [
-                {**drought, "lord_ids": list(ids)}
+                {**base, "lord_ids": list(ids)}
                 for ids in combinations(payload["eligible_lord_ids"], payload["required"])
             ]
             if payload["can_discard_camels"]:
-                target_moves.append({**drought, "discard_camels": True})
+                target_moves.append({**base, "discard_camels": True})
             return target_moves
-        if payload["step"] == "greed":
+        if step == "greed":
             eligible = [row["lord_id"] for row in payload["eligible"]]
-            return [{**drought, "discard_lords": list(ids)}
+            return [{**base, "discard_lords": list(ids)}
                     for count in range(len(eligible) + 1) for ids in combinations(eligible, count)]
-        return _feed_resource_moves(drought, payload["feed_options"])
+        return _feed_resource_moves(base, payload["feed_options"])
 
     if state.pending is not None and state.pending.kind == "storm_front":
         return [{"type": "storm_front", "side": state.pending.waiting_on, "lord_id": lid}
@@ -658,8 +681,13 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                                 "side": side, "card_id": cid})
         else:
             # Implement Events in draw order (FIFO): only the first.
-            out.append({"type": "aow_implement_event", "side": side,
-                        "card_id": pend[0]})
+            event = {"type": "aow_implement_event", "side": side, "card_id": pend[0]}
+            if pend[0] == "C19":
+                return [{**event, "payload": {"lord_ids": ids}} for ids in fitna_choices(state)]
+            if pend[0] == "C23":
+                choices = illness_choices(state)
+                return [{**event, "payload": choice} for choice in choices] or [event]
+            out.append(event)
             if pend[0] in ("C13", "M23"):
                 # Berenguer Ramon is optional. Offer actual paid Levy
                 # choices as well as the no-target decline above.
@@ -956,7 +984,8 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for lord in state.lords.values())
 
     def ready(lord: Lord) -> bool:
-        return (lord.cylinder.kind == "calendar"
+        return (lord.id not in state.meta.muster_banned_this_levy_lord_ids
+                and lord.cylinder.kind == "calendar"
                 and (lord.cylinder.box is None
                      or lord.cylinder.box <= state.calendar.current_box))
 
@@ -1094,7 +1123,8 @@ def _call_to_arms_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             for tlid, tl in state.lords.items():
                 if not (tl.is_taifa and here in tl.seats):
                     continue
-                if tl.cylinder.kind == "calendar":
+                if (tl.cylinder.kind == "calendar"
+                        and tlid not in state.meta.muster_banned_this_levy_lord_ids):
                     for seat in _free_seats_for(state, tlid):
                         out.append({"type": "cta_call_emir", "side": "muslim",
                                     "taifa_lord_id": tlid, "mode": "muster",

@@ -202,7 +202,7 @@
     },
     "Decks": {
       "additionalProperties": false,
-      "description": "Arts of War deck state.\n\n`capabilities_in_play` holds side-wide-scope cards (Pattern 14).\nThis-lord-scope cards live on `Lord.capabilities`.\n\n`this_levy_events` and `this_campaign_events` are the persistence\nbuckets for hold-events drawn this turn (cleared at the relevant\nwindow boundary per Pattern 13).",
+      "description": "Arts of War deck state.\n\n`capabilities_in_play` holds side-wide-scope cards (Pattern 14).\nThis-lord-scope cards live on `Lord.capabilities`.\n\n`this_levy_events` holds continuing Levy Events and also contains some\nplayed combat Events and legacy Holds. `this_campaign_events` tracks\nCampaign-duration effects.",
       "properties": {
         "draw": {
           "items": {

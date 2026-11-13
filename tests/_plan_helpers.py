@@ -78,7 +78,8 @@ def step_levy(s):
     while s.decks.pending_draw.get(side) or s.pending is not None:
         if s.pending is not None:
             apply_action(s, legal_moves(s)[0])
-        else:
+        elif aow_capability_phase(s):
             cid = s.decks.pending_draw[side][0]
-            kind = "aow_deploy_capability" if aow_capability_phase(s) else "aow_implement_event"
-            apply_action(s, {"type": kind, "side": side, "card_id": cid})
+            apply_action(s, {"type": "aow_deploy_capability", "side": side, "card_id": cid})
+        else:
+            apply_action(s, next(m for m in legal_moves(s) if m["type"] == "aow_implement_event"))

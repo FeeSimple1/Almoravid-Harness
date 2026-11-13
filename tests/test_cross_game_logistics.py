@@ -116,8 +116,9 @@ def test_arid_single_march_shares_only_at_destination(donor_locale):
     place(state, "pedro_ansurez", donor_locale, prov=1)
     state.decks.held["muslim"] = ["M4"]
     before = service(state, "alfonso")
-    result = apply_action(state, {"type": "cmd_march", "side": "christian",
-                                 "target_locale_id": "leon", "way_type": "road"})
+    apply_action(state, {"type": "cmd_march", "side": "christian",
+                         "target_locale_id": "leon", "way_type": "road"})
+    result = apply_action(state, {"type": "arid_terrain_choice", "side": "muslim", "play": True})
     fed = result["forced_feed"][0]
     assert fed["unfed_penalty"] == (donor_locale != "leon")
     assert service(state, "alfonso") == before - (donor_locale != "leon")
@@ -128,9 +129,10 @@ def test_arid_group_feeds_both_own_mats_before_sharing():
     state = position(actions=1)
     place(state, "garcia_ordonez", "sahagun", cart=2, prov=2)
     state.decks.held["muslim"] = ["M4"]
-    result = apply_action(state, {"type": "cmd_march", "side": "christian",
-                                 "target_locale_id": "leon", "way_type": "road",
-                                 "group_lord_ids": ["garcia_ordonez"]})
+    apply_action(state, {"type": "cmd_march", "side": "christian",
+                         "target_locale_id": "leon", "way_type": "road",
+                         "group_lord_ids": ["garcia_ordonez"]})
+    result = apply_action(state, {"type": "arid_terrain_choice", "side": "muslim", "play": True})
     assert len(result["forced_feed"]) == 2
     assert all(r["consumed"] == 1 and not r["unfed_penalty"] for r in result["forced_feed"])
     assert state.lords["garcia_ordonez"].assets["prov"] == 0

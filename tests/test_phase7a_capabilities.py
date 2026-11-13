@@ -171,6 +171,8 @@ def test_camels_negates_arid_terrain() -> None:
     prov_before = s2.lords["al_mutamid"].assets.get("prov", 0)
     apply_action(s2, {"type": "cmd_march", "side": "muslim",
                       "target_locale_id": target, "way_type": "road"})
+    apply_action(s2, {"type": "arid_terrain_choice", "side": "christian", "play": True})
+    apply_action(s2, {"type": "arid_terrain_choice", "side": "muslim", "discard_camels": True})
     # Camels discarded; no Feed -> Prov unchanged.
     assert s2.lords["al_mutamid"].assets.get("prov", 0) == prov_before
     assert "M16" in s2.decks.discard

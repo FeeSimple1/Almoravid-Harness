@@ -166,7 +166,7 @@
     "C19": {
       "side": "christian",
       "event_name": "Fitna",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "Caballería Villana",
       "capability_scope": "side_wide",
@@ -193,7 +193,7 @@
     "C22": {
       "side": "christian",
       "event_name": "Berbers",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "Bishoprics",
       "capability_scope": "side_wide",
@@ -202,7 +202,7 @@
     "C23": {
       "side": "christian",
       "event_name": "Illness of the Emir",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "Fonsadera",
       "capability_scope": "side_wide",
@@ -211,7 +211,7 @@
     "C24": {
       "side": "christian",
       "event_name": "Abu Bakr ibn Umar",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "García Jiménez",
       "capability_scope": "this_lord",
@@ -373,7 +373,7 @@
     "M16": {
       "side": "muslim",
       "event_name": "Galician Revolt",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "Camels",
       "capability_scope": "side_wide",
@@ -382,7 +382,7 @@
     "M17": {
       "side": "muslim",
       "event_name": "León y Castilla",
-      "event_persistence": "immediate",
+      "event_persistence": "this_levy",
       "no_event": false,
       "capability_name": "Arrada",
       "capability_scope": "this_lord",

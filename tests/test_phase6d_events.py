@@ -26,7 +26,9 @@ def test_c10_drains_muslim_coin_to_two_thirds() -> None:
         l.assets["coin"] = 0
     muslims[0].assets["coin"] = 6
     muslims[1].assets["coin"] = 4
-    r = resolve_event(s, "christian", "C10")
+    assert resolve_event(s, "christian", "C10")["pending"] == "devaluation_choice"
+    r = apply_action(s, {"type": "devaluation_choice", "side": "muslim",
+                         "coin_by_source": {muslims[0].id: 1, muslims[1].id: 2}})
     assert r["coin_before"] == 10
     assert r["coin_after"] == 7
     assert r["removed"] == 3
@@ -62,7 +64,9 @@ def test_m14_halves_christian_coin_per_locale() -> None:
     christians[1].cylinder = Cylinder(kind="locale", locale_id="leon")
     christians[1].in_stronghold = False
     christians[1].assets["coin"] = 1
-    r = resolve_event(s, "muslim", "M14")
+    assert resolve_event(s, "muslim", "M14")["pending"] == "devaluation_choice"
+    r = apply_action(s, {"type": "devaluation_choice", "side": "christian",
+                         "coin_by_source": {christians[0].id: 1, christians[1].id: 1}})
     assert r["total_removed"] == 2
     after = (christians[0].assets.get("coin", 0)
              + christians[1].assets.get("coin", 0))

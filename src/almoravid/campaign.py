@@ -792,6 +792,20 @@ def _greed_eligible_lords(state: GameState, side: Side, *,
     return out
 
 
+def _immediate_feed_options(state: GameState, side: Side, lord_ids: list[str],
+                            discard_lords: list[str] | None) -> dict[str, Any]:
+    """Find the next owner election for immediate Event Feed."""
+    if discard_lords is None:
+        eligible = _greed_eligible_lords(state, side, lord_ids=lord_ids)
+        if eligible:
+            return {"step": "greed", "eligible": eligible}
+    options = _feed_loot_options(state, set(discard_lords or []), lord_ids=lord_ids)
+    if options:
+        return {"step": "feed", "discard_lords": discard_lords or [],
+                "feed_options": {lid: list(bounds) for lid, bounds in options.items()}}
+    return {}
+
+
 def _economy_begin(state: GameState, side: Side, lord_id: str) -> dict[str, Any]:
     """Start the interactive 4.8 Feed/Pay/Disband cascade. Sequences,
     in rule order (Christians then Muslims): optional Greed Mule-discard
@@ -2515,7 +2529,6 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     # rejected. (Only Carts are hindered on Passes; Mules carry
     # Provender over a Pass freely.)
 
-    # Phase 6h: enemy Hold-event auto-triggers on March.
     enemy = _other(side)
     enemy_hold = held_event_ids(state, enemy)
     # C3/M3 Swollen River: blocks this and any further March on the
@@ -2622,73 +2635,150 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
             f"{side} {lord_id} marches {from_loc} -> {target} via {route_label}"
             f" ({'Laden' if laden else 'Unladen'}, {cost} actions)")
 
-    # C4/M4 Arid Terrain: forces an immediate Feed on the Marching Lord
-    # immediately AFTER the March. The card Tips allow just before through
-    # just after; choosing after keeps the completed March's Camels capacity
-    # valid if M16 is discarded to cancel Arid Terrain. Both cards are then
-    # absent for any subsequent March. Discards regardless of Feed outcome.
-    arid_id = "C4" if enemy == "christian" else "M4"
-    forced_feed: list[dict[str, Any]] = []
-    if arid_id in enemy_hold:
-        consume_held_event(state, enemy, arid_id)
-        state.decks.discard.append(arid_id)
-        # Camels (M16, Muslim side_wide, Phase 7a): the Muslim player
-        # may discard Camels to ignore Arid Terrain. Greedy: auto-
-        # discard when the marching side is Muslim and holds Camels.
-        from almoravid.capabilities import side_has_capability
-        camels_negate = (side == "muslim"
-                         and side_has_capability(state, "muslim", "M16"))
-        if camels_negate:
-            # Remove Camels from play (board-edge + capabilities_in_play).
-            state.decks.capabilities_in_play = [
-                c for c in state.decks.capabilities_in_play
-                if c.card_id != "M16"
-            ]
-            for edge in state.decks.board_edge.values():
-                if "M16" in edge:
-                    edge.remove("M16")
-            state.decks.discard.append("M16")
-            _record(state, action,
-                    f"Muslim discards Camels (M16) to ignore Arid "
-                    f"Terrain ({arid_id})")
-        else:
-            # Card: "they immediately Feed 2 Marching Lords"; Tips: "That
-            # Lord OR any two Lords Marching as a group immediately Feed."
-            # Feed the active Lord plus any group-March members, capped at 2.
-            marching = [lord_id] + [g for g in moving_lords if g != lord_id]
-            fed_lords = marching[:2]
-            forced_feed = _forced_feed_lords(state, fed_lords)
-            _record(state, action,
-                    f"{enemy} Arid Terrain ({arid_id}) forces "
-                    f"{', '.join(fed_lords)} to Feed after March")
-
-    # Phase 6b — rule 4.3.4 Approach trigger. If an Unbesieged/Unbypassed
-    # enemy Lord (not inside a Stronghold) is at `target`, the defender
-    # owes a response: Avoid Battle, Withdraw, or Stand & Fight.
-    trigger = _check_approach_trigger(
-        state, target, side, from_loc, way_type, lord_id, moving_lords,
-    )
     base = {"from": from_loc, "to": target, "way_type": way_type,
             "laden": laden, "cost": cost,
             "actions_remaining": state.meta.actions_remaining}
-    if forced_feed:
-        base["forced_feed"] = forced_feed
     if discarded_for_march:
         base["discarded_for_march"] = discarded_for_march
     if march_mode == "african_fleet":
         base["actions_consumed"] = cost
+    return _after_march(state, side, lord_id, moving_lords, base)
+
+
+def _arid_card(side: Side) -> str:
+    return "C4" if side == "christian" else "M4"
+
+
+def _after_march(state: GameState, side: Side, lord_id: str, moving_lords: list[str],
+                 result: dict[str, Any], *, sortie: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Offer Arid Terrain after movement, before the arrival response."""
+    context = {"side": side, "lord_id": lord_id, "moving_lords": moving_lords,
+               "result": result, "sortie": sortie}
+    enemy = _other(side)
+    card_id = _arid_card(enemy)
+    # The reaction is public when a Hold could exist. In the first Campaign
+    # only Capabilities were drawn, so there is no such window. The Held
+    # check also supports positions using the legacy event bucket.
+    event_draws_possible = state.meta.turn_index > 0 or any(
+        entry.action == "aow_implement_event" for entry in state.history)
+    if (card_id in held_event_ids(state, enemy)
+            or (event_draws_possible and card_id not in state.decks.discard
+                and card_id not in state.decks.removed_from_game)):
+        return {**result, "pending": _arid_prompt(state, enemy, context, "play")}
+    return _finish_march(state, context)
+
+
+def _finish_march(state: GameState, context: dict[str, Any],
+                  **effect: Any) -> dict[str, Any]:
+    side = context["side"]
+    _clear_approach_pending(state, side)
+    base = {**context["result"], **effect}
+    if base.get("encamped"):
+        return base
+    if context["sortie"] is not None:
+        other = _other(side)
+        state.pending = PendingDecision(
+            kind="march_arrival_response", waiting_on=other, payload=context["sortie"])
+        state.meta.active_player = other
+        return base
+    # Approach takes priority over Besiege or Bypass (4.3.4–4.3.5).
+    trigger = _check_approach_trigger(
+        state, base["to"], side, base["from"], base["way_type"],
+        context["lord_id"], context["moving_lords"],
+    )
     if trigger is not None:
         base["pending"] = trigger
-        return base
-    # 4.3.5 — March STOPS at an Unbesieged/Unbypassed ENEMY Stronghold
-    # (even an empty one): the arriving side must immediately Besiege
-    # (1 Siege marker, card over) or Bypass (continue actions here).
-    # Joining an already-Besieged/Bypassed Stronghold, or arriving at a
-    # Friendly/Neutral one, sets no pending (may March on).
-    if _set_besiege_or_bypass_pending(state, target, side, lord_id):
-        base["pending"] = {"kind": "besiege_or_bypass",
-                           "locale_id": target}
+    elif _set_besiege_or_bypass_pending(state, base["to"], side, context["lord_id"]):
+        base["pending"] = {"kind": "besiege_or_bypass", "locale_id": base["to"]}
     return base
+
+
+def _arid_prompt(state: GameState, side: Side, context: dict[str, Any], step: str,
+                 **options: Any) -> dict[str, Any]:
+    state.pending = PendingDecision(kind="arid_terrain_choice", waiting_on=side, payload={
+        "step": step, "marching_lord_ids": context["moving_lords"],
+        "_arid_resume": context, **options,
+    })
+    state.meta.active_player = side
+    return {"kind": "arid_terrain_choice", "waiting_on": side, "step": step}
+
+
+def _arid_feed(state: GameState, context: dict[str, Any], lord_ids: list[str], *,
+               discard_lords: list[str] | None = None,
+               feed_loot: dict[str, int] | None = None) -> dict[str, Any]:
+    side = context["side"]
+    card_id = _arid_card(_other(side))
+    if feed_loot is None:
+        options = _immediate_feed_options(state, side, lord_ids, discard_lords)
+        if options:
+            return {"arid_terrain_played": card_id, "pending": _arid_prompt(
+                state, side, context, lord_ids=lord_ids, **options)}
+    fed = _forced_feed_lords(state, lord_ids, discard_mules_lords=set(discard_lords or []),
+                             feed_loot=feed_loot)
+    return _finish_march(state, context, arid_terrain_played=card_id, forced_feed=fed)
+
+
+def _h_arid_terrain_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.capabilities import discard_capability, side_has_capability
+
+    side = _require_side(action)
+    payload = _require_pending(state, "arid_terrain_choice", side).payload
+    context = payload["_arid_resume"]
+    step = payload["step"]
+    fields = {"play": {"play", "lord_ids"}, "camels": {"discard_camels"},
+              "greed": {"discard_lords"}, "feed": {"feed_loot"}}[step]
+    _require(set(action) <= {"type", "side"} | fields,
+             f"choose only the current Arid Terrain {step} options", code="bad_arid_choice")
+    target_side = context["side"]
+    card_id = _arid_card(_other(target_side))
+    if step == "play":
+        play = action.get("play")
+        _require(type(play) is bool, "play must be true or false", code="bad_arid_choice")
+        if not play:
+            _require("lord_ids" not in action, "decline or choose Lords to Feed",
+                     code="bad_arid_choice")
+            _record(state, action, f"{side} passes the March reaction")
+            return _finish_march(state, context)
+        _require(card_id in held_event_ids(state, side), f"{card_id} is not held",
+                 code="card_not_held")
+        marching = context["moving_lords"]
+        lord_ids = action.get("lord_ids", marching if len(marching) <= 2 else None)
+        _require(isinstance(lord_ids, list) and len(lord_ids) == min(2, len(marching))
+                 and all(isinstance(lid, str) and lid in marching for lid in lord_ids)
+                 and len(set(lord_ids)) == len(lord_ids),
+                 "select distinct Marching Lords to Feed", code="bad_arid_choice")
+        consume_held_event(state, side, card_id)
+        state.decks.discard.append(card_id)
+        _record(state, action, f"{side} plays Arid Terrain ({card_id}) on {', '.join(lord_ids)}")
+        if target_side == "muslim" and side_has_capability(state, "muslim", "M16"):
+            return {"arid_terrain_played": card_id, "pending": _arid_prompt(
+                state, target_side, context, "camels", lord_ids=lord_ids)}
+        return _arid_feed(state, context, lord_ids)
+    if step == "camels":
+        cancel = action.get("discard_camels")
+        _require(type(cancel) is bool, "discard_camels must be true or false",
+                 code="bad_arid_choice")
+        _record(state, action, f"{side} {'discards' if cancel else 'keeps'} Camels")
+        if cancel:
+            _require(side_has_capability(state, side, "M16"), "Camels is unavailable",
+                     code="bad_arid_choice")
+            discard_capability(state, "M16")
+            return _finish_march(state, context, arid_terrain_played=card_id, camels_negated=True)
+        return _arid_feed(state, context, payload["lord_ids"])
+    if step == "greed":
+        discards = action.get("discard_lords", [])
+        eligible = {row["lord_id"] for row in payload["eligible"]}
+        _require(isinstance(discards, list)
+                 and all(isinstance(lid, str) and lid in eligible for lid in discards)
+                 and len(set(discards)) == len(discards),
+                 "choose distinct eligible Lords to discard excess Mules", code="bad_arid_choice")
+        _record(state, action, f"{side} resolves Arid Terrain Greed")
+        return _arid_feed(state, context, payload["lord_ids"], discard_lords=discards)
+    options = {lid: tuple(bounds) for lid, bounds in payload["feed_options"].items()}
+    feed_loot = _feed_loot_election(action.get("feed_loot", {}), options)
+    _record(state, action, f"{side} resolves Arid Terrain Feed")
+    return _arid_feed(state, context, payload["lord_ids"],
+                      discard_lords=payload["discard_lords"], feed_loot=feed_loot)
 
 
 
@@ -5184,7 +5274,7 @@ def _remove_orphaned_siege_bypass(state: GameState, locale_id: str) -> dict[str,
 
 def _check_approach_trigger(
     state: GameState, locale_id: str, active_side: Side,
-    from_locale_id: str, way_type: str, active_lord_id: str, approaching: list[str],
+    from_locale_id: str, way_type: str | None, active_lord_id: str, approaching: list[str],
 ) -> dict[str, Any] | None:
     """If an Unbesieged/Unbypassed enemy Lord is at `locale_id` not
     inside a Stronghold, set a PendingDecision and return the payload.
@@ -6364,22 +6454,14 @@ def _h_cap_al_faraj(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      for o in state.lords.values())
     _require(near_enemy, "no Enemy Lord at or adjacent to Rodrigo",
              code="no_enemy_near")
-    # Collect the enemy's Held cards (Held bucket + hold buckets).
-    held = (list(state.decks.held.get(enemy, []))
-            + list(state.decks.this_levy_events.get(enemy, []))
-            + list(state.decks.this_campaign_events.get(enemy, [])))
+    held = held_event_ids(state, enemy)
     state.meta.actions_remaining = 0   # uses the entire Command card
     from almoravid.rng import roll_d6
     if not held:
         _record(state, action, f"{side} Al-Faraj: enemy has no Held cards")
         return {"discarded": None}
     pick = held[roll_d6(state) % len(held)]
-    for bucket in (state.decks.held.get(enemy, []),
-                   state.decks.this_levy_events.get(enemy, []),
-                   state.decks.this_campaign_events.get(enemy, [])):
-        if pick in bucket:
-            bucket.remove(pick)
-            break
+    consume_held_event(state, enemy, pick)
     state.decks.discard.append(pick)
     _record(state, action, f"{side} Al-Faraj: enemy discards Held {pick}")
     return {"discarded": pick}
@@ -6925,10 +7007,12 @@ def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         loc.siege_green = max(loc.siege_green, 1)
     consumed = state.meta.actions_remaining
     state.meta.actions_remaining = 0  # ends actions on this card
+    lord.moved_fought = True
     _record(state, action,
             f"{side} {lord_id} Encamps at {here}: Bypass -> 1 Siege "
             f"(card ends, {consumed} actions spent)")
-    return {"locale": here, "encamped": True, "actions_consumed": consumed}
+    return _after_march(state, side, lord_id, [lord_id],
+                        {"locale": here, "encamped": True, "actions_consumed": consumed})
 
 
 def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -6946,7 +7030,6 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     Retreat normally (4.3.4/4.4.3 aftermath). Sortieing Lords are
     marked Moved (4.3.6 "mark Marching Lords as Moved")."""
     from almoravid.effective import is_friendly_locale
-    from almoravid.state import PendingDecision
     side = _require_side(action)
     _require_campaign_step(state, "activation")
     _require_active(state, side)
@@ -7020,15 +7103,14 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         "defender_lord_ids": bypassing_enemy,
         "sortie": True,
     }
-    state.pending = PendingDecision(
-        kind="march_arrival_response", waiting_on=other, payload=payload)
-    state.meta.active_player = other
     _record(state, action,
             f"{side} {lord_id} Sorties from {here} (4.3.6) vs Bypassing "
             f"Enemy {bypassing_enemy}; awaiting their Approach response")
-    return {"sortie": here, "sortie_lords": sortie_ids,
-            "defenders": bypassing_enemy,
-            "actions_remaining": state.meta.actions_remaining}
+    return _after_march(state, side, lord_id, sortie_ids,
+                        {"sortie": here, "sortie_lords": sortie_ids,
+                         "defenders": bypassing_enemy,
+                         "actions_remaining": state.meta.actions_remaining},
+                        sortie=payload)
 
 
 def _h_dinars_deposit(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -8253,6 +8335,7 @@ CAMPAIGN_HANDLERS = {
     "oneround_timing": _h_oneround_timing,
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
+    "arid_terrain_choice": _h_arid_terrain_choice,
     "cmd_supply": _h_cmd_supply,
     "cmd_tax": _h_cmd_tax,
     "cmd_forage": _h_cmd_forage,
