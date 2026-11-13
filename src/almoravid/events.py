@@ -29,7 +29,7 @@ import math as _math
 from collections.abc import Callable
 from typing import Any, cast
 
-from almoravid.state import GameState, Lord, Side
+from almoravid.state import GameState, Lord, PendingDecision, Side
 from almoravid.static_data import load_cards
 
 # (state, side, card_id, payload) -> result dict
@@ -287,55 +287,131 @@ def _arid_terrain(state: GameState, side: Side, card_id: str,
 @register("M5")  # Drought
 def _drought(state: GameState, side: Side, card_id: str,
          payload: dict[str, Any]) -> dict[str, Any]:
-    """Drought: Immediate. The TARGET side (opposite of the side that
-    drew) immediately Feeds 2 of their Lords not at Friendly Gardens
-    or Seat. Phase 6h: pick deterministically (first two on the map
-    who don't qualify for Gardens/Seat exemption).
-
-    Note: per card text, the side that DRAWS Drought triggers it
-    against the OTHER side ("Unless Muslims discard Camels, they
-    immediately Feed 2"). C5 drawn by Christian targets Muslims;
-    M5 drawn by Muslim targets Christians.
-    """
-    from almoravid.campaign import _forced_feed_lords
+    """Begin Drought, with the affected side choosing its eligible Lords (C5/M5)."""
+    from almoravid.actions import _other, _require
+    from almoravid.capabilities import side_has_capability
     from almoravid.effective import has_gardens, is_friendly_locale
-    target_side: Side = "muslim" if card_id == "C5" else "christian"
-    # M16 Camels: if the Muslims are the target and hold Camels, they may
-    # discard it to cancel Drought without effect (Arts of War ref C5/M16).
-    if target_side == "muslim":
-        from almoravid.capabilities import side_has_capability as _shc_dr
-        if _shc_dr(state, "muslim", "M16"):
-            state.decks.capabilities_in_play = [
-                c for c in state.decks.capabilities_in_play
-                if c.card_id != "M16"]
-            for _edge in state.decks.board_edge.values():
-                if "M16" in _edge:
-                    _edge.remove("M16")
-            state.decks.discard.append("M16")
-            state.decks.discard.append(card_id)
-            return {"card_id": card_id, "side": side, "target_side": target_side,
-                    "camels_negated": True, "fed_lords": []}
+
+    _require(not payload, "the affected side chooses how to resolve Drought",
+             code="bad_drought_choice")
+    _require(state.pending is None, "finish the pending decision before Drought",
+             code="pending_decision")
+    target_side = _other(side)
     candidates: list[str] = []
     for lord in state.lords.values():
-        if lord.side != target_side:
-            continue
-        if lord.cylinder.kind != "locale":
+        if lord.side != target_side or lord.cylinder.kind != "locale":
             continue
         loc_id = lord.cylinder.locale_id
         assert loc_id is not None
-        gardens_ok = has_gardens(state, loc_id)
-        seat_ok = loc_id in state.lords[lord.id].seats
-        friendly = is_friendly_locale(state, loc_id, target_side)
-        if (gardens_ok or seat_ok) and friendly:
+        locale = state.locales[loc_id]
+        has_seat = bool(locale.printed_seat_lord_ids or locale.seat_marker_lord_ids)
+        if (has_seat or has_gardens(state, loc_id)) and is_friendly_locale(
+                state, loc_id, target_side):
             continue
         candidates.append(lord.id)
     if not candidates:
         return _no_op_with_note(state, card_id, side,
                                 f"no eligible {target_side} Lord to Feed")
-    fed = _forced_feed_lords(state, sorted(candidates)[:2])
+    candidates.sort()
+    context = {"card_id": card_id, "side": side, "target_side": target_side,
+               "resume_active": state.meta.active_player}
+    can_cancel = target_side == "muslim" and side_has_capability(state, "muslim", "M16")
+    if len(candidates) > 2 or can_cancel:
+        return _drought_prompt(
+            state, context, "targets", eligible_lord_ids=candidates,
+            required=min(2, len(candidates)), can_discard_camels=can_cancel)
+    return _drought_feed(state, context, candidates)
+
+
+def _drought_prompt(state: GameState, context: dict[str, Any], step: str,
+                    **options: Any) -> dict[str, Any]:
+    side = context["target_side"]
+    state.pending = PendingDecision(
+        kind="drought_choice", waiting_on=side, payload={**context, "step": step, **options})
+    state.meta.active_player = side
+    return {"card_id": context["card_id"], "side": context["side"], "target_side": side,
+            "pending": "drought_choice", "waiting_on": side, "step": step}
+
+
+def _finish_drought(state: GameState, context: dict[str, Any],
+                    fed: list[dict[str, Any]]) -> dict[str, Any]:
+    card_id = context["card_id"]
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side,
-            "target_side": target_side, "fed_lords": fed}
+    state.pending = None
+    state.meta.active_player = context["resume_active"]
+    return {"card_id": card_id, "side": context["side"], "target_side": context["target_side"],
+            "fed_lords": fed}
+
+
+def _drought_feed(state: GameState, context: dict[str, Any], lord_ids: list[str], *,
+                  discard_lords: list[str] | None = None,
+                  feed_loot: dict[str, int] | None = None) -> dict[str, Any]:
+    from almoravid.campaign import _feed_loot_options, _forced_feed_lords, _greed_eligible_lords
+
+    if discard_lords is None:
+        eligible = _greed_eligible_lords(state, context["target_side"], lord_ids=lord_ids)
+        if eligible:
+            return _drought_prompt(state, context, "greed", lord_ids=lord_ids, eligible=eligible)
+    discards = set(discard_lords or [])
+    if feed_loot is None:
+        options = _feed_loot_options(state, discards, lord_ids=lord_ids)
+        if options:
+            return _drought_prompt(
+                state, context, "feed", lord_ids=lord_ids, discard_lords=discard_lords or [],
+                feed_options={lid: list(bounds) for lid, bounds in options.items()})
+    fed = _forced_feed_lords(state, lord_ids, discard_mules_lords=discards, feed_loot=feed_loot)
+    return _finish_drought(state, context, fed)
+
+
+def resolve_drought_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the affected owner's target, Greed, or resource election."""
+    from almoravid.actions import _record, _require, _require_side
+    from almoravid.campaign import _feed_loot_election, _require_pending
+    from almoravid.capabilities import discard_capability, side_has_capability
+
+    side = _require_side(action)
+    payload = _require_pending(state, "drought_choice", side).payload
+    context = {key: payload[key] for key in ("card_id", "side", "target_side", "resume_active")}
+    step = payload["step"]
+    fields = {"targets": {"lord_ids", "discard_camels"}, "greed": {"discard_lords"},
+              "feed": {"feed_loot"}}[step]
+    _require(set(action) <= {"type", "side"} | fields,
+             f"choose only the current Drought {step} options", code="bad_drought_choice")
+    if step == "targets":
+        cancel = action.get("discard_camels", False)
+        _require(type(cancel) is bool, "discard_camels must be true or false",
+                 code="bad_drought_choice")
+        if cancel:
+            _require(payload["can_discard_camels"] and side_has_capability(state, side, "M16")
+                     and "lord_ids" not in action,
+                     "cancel Drought with Camels or choose Lords to Feed",
+                     code="bad_drought_choice")
+            discard_capability(state, "M16")
+            result = {**_finish_drought(state, context, []), "camels_negated": True}
+        else:
+            ids = action.get("lord_ids")
+            _require(isinstance(ids, list) and len(ids) == payload["required"]
+                     and all(isinstance(lid, str) and lid in payload["eligible_lord_ids"]
+                             for lid in ids) and len(set(ids)) == len(ids),
+                     f"choose {payload['required']} distinct eligible Lords for Drought",
+                     code="bad_drought_choice")
+            result = _drought_feed(state, context, cast(list[str], ids))
+    elif step == "greed":
+        discards = action.get("discard_lords", [])
+        eligible = {row["lord_id"] for row in payload["eligible"]}
+        _require(isinstance(discards, list)
+                 and all(isinstance(lid, str) and lid in eligible for lid in discards)
+                 and len(set(discards)) == len(discards),
+                 "choose distinct Drought Lords eligible to discard excess Mules",
+                 code="bad_drought_choice")
+        result = _drought_feed(state, context, payload["lord_ids"], discard_lords=discards)
+    else:
+        options = {lid: tuple(bounds) for lid, bounds in payload["feed_options"].items()}
+        feed_loot = _feed_loot_election(action.get("feed_loot", {}), options)
+        result = _drought_feed(state, context, payload["lord_ids"],
+                               discard_lords=payload["discard_lords"], feed_loot=feed_loot)
+    _record(state, action, f"{side} resolves Drought {step} ({context['card_id']})")
+    return result
 
 
 @register("C7")  # Baggage Parapet

@@ -503,9 +503,13 @@ def _feed_all_moved_fought(state: GameState, *,
 
 
 def _forced_feed_lords(state: GameState, lord_ids: list[str], *,
-                       discard_excess_mules: bool = False) -> list[dict[str, Any]]:
+                       discard_excess_mules: bool = False,
+                       discard_mules_lords: set[str] | None = None,
+                       feed_loot: dict[str, int] | None = None) -> list[dict[str, Any]]:
     """Event Feed uses the same own-first/sharing/Unfed sequence as 4.8.1."""
-    summary = _feed_lords(state, lord_ids, discard_excess_mules=discard_excess_mules)
+    summary = _feed_lords(
+        state, lord_ids, discard_excess_mules=discard_excess_mules,
+        discard_mules_lords=discard_mules_lords, feed_loot=feed_loot)
     fed: list[dict[str, Any]] = summary["fed"]
     for res in fed:
         shared = [s for s in summary["shared"] if s["to"] == res["lord_id"]]
@@ -594,13 +598,15 @@ def _feed_lords(state: GameState, lord_ids: list[str], *,
 
 
 def _feed_loot_options(state: GameState, discard_lords: set[str] | None = None,
+                       *, lord_ids: list[str] | None = None,
                        ) -> dict[str, tuple[int, int]]:
     """Each payer's Loot range for its combined own Feed and Sharing."""
     on_map = {lid: lord for lid, lord in state.lords.items()
               if lord.cylinder.kind == "locale"}
     mixed = {lid: lord for lid, lord in on_map.items()
              if lord.assets.get("prov", 0) and lord.assets.get("loot", 0)}
-    feeding = [lid for lid, lord in on_map.items() if lord.moved_fought]
+    feeding = (lord_ids if lord_ids is not None
+               else [lid for lid, lord in on_map.items() if lord.moved_fought])
     if not mixed or not feeding:
         return {}
     # Mandatory food totals are independent of which Assets cover them.
@@ -611,7 +617,8 @@ def _feed_loot_options(state: GameState, discard_lords: set[str] | None = None,
     options = {}
     for lid, lord in mixed.items():
         prov, loot = lord.assets["prov"], lord.assets["loot"]
-        spent = prov + loot - mats[lid].assets["prov"] - mats[lid].assets["loot"]
+        after = mats[lid].assets
+        spent = prov + loot - after.get("prov", 0) - after.get("loot", 0)
         minimum, maximum = max(0, spent - prov), min(spent, loot)
         if minimum < maximum:
             options[lid] = (minimum, maximum)
@@ -757,15 +764,18 @@ def _economy_finalize(state: GameState, action: dict[str, Any], side: Side,
             "auto_disband": disband_result,
             "campaign_step": state.meta.campaign_step}
 
-def _greed_eligible_lords(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """4.8.1 Greed: Lords (this side) marked Moved/Fought who hold Mules
+def _greed_eligible_lords(state: GameState, side: Side, *,
+                          lord_ids: list[str] | None = None) -> list[dict[str, Any]]:
+    """4.8.1 Greed: feeding Lords (this side) who hold Mules
     they cannot Feed from their OWN Provender + Loot -- i.e. a discard
     would change the outcome (reduce or avoid an Unfed Service shift).
     Returns one record per such Lord with the counts a UI/agent needs."""
     import math
     out: list[dict[str, Any]] = []
+    feeding = set(lord_ids) if lord_ids is not None else {
+        lid for lid, lord in state.lords.items() if lord.moved_fought}
     for lid, lord in state.lords.items():
-        if lord.side != side or not lord.moved_fought:
+        if lord.side != side or lid not in feeding:
             continue
         if lord.cylinder.kind != "locale":
             continue
@@ -800,6 +810,7 @@ def _economy_begin(state: GameState, side: Side, lord_id: str) -> dict[str, Any]
 
 def _economy_advance(state: GameState, payload: dict[str, Any]) -> dict[str, Any]:
     """Emit the next economy decision in rules order."""
+    payload.pop("eligible", None)  # Greed rows belong only to the current Greed prompt.
     order: tuple[Side, Side] = ("christian", "muslim")
     if payload["phase"] == "greed":
         prompted = set(payload["greed_prompted"])
@@ -893,6 +904,7 @@ def _h_pay_before_disband(state: GameState,
     side = _require_side(action)
     pd = _require_pending(state, "pay_before_disband", side)
     payload = pd.payload
+    payload.pop("eligible", None)  # Legacy saves carried the last Greed prompt into Pay.
     _require(side == payload["cursor_side"],
              f"Pay step is waiting on {payload['cursor_side']}, not {side}",
              code="not_pay_side")

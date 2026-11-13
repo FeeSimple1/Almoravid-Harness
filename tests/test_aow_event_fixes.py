@@ -12,7 +12,9 @@ def test_c5_drought_negated_by_camels() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     s.decks.capabilities_in_play.append(
         CardInPlay(card_id="M16", scope="side_wide", owner_side="muslim"))
-    r = resolve_event(s, "christian", "C5")     # targets Muslims
+    s.lords["al_mustain"].cylinder = Cylinder(kind="locale", locale_id="transduero")
+    assert resolve_event(s, "christian", "C5")["pending"] == "drought_choice"
+    r = apply_action(s, {"type": "drought_choice", "side": "muslim", "discard_camels": True})
     assert r.get("camels_negated") is True
     assert r["fed_lords"] == []
     assert "M16" in s.decks.discard

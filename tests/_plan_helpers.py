@@ -61,20 +61,24 @@ def step_levy(s):
     the two cards, and processes them (deploy Capabilities on the first
     Levy / implement Events later); otherwise it passes the step. A
     drop-in replacement for a bare pass_step inside Levy-advance loops."""
-    from almoravid.actions import apply_action
+    from almoravid.actions import aow_capability_phase
+    from almoravid.legal_moves import legal_moves
+
     side = s.meta.active_player
-    if (s.meta.levy_step == "arts_of_war"
-            and not s.meta.aow_draw_done.get(side)):
+    if s.meta.levy_step != "arts_of_war":
+        apply_action(s, {"type": "pass_step", "side": side})
+        return
+    if s.pending is None and not s.meta.aow_draw_done.get(side):
         if not s.decks.draw and not s.decks.pending_draw.get(side):
             apply_action(s, {"type": "aow_shuffle", "side": side})
         apply_action(s, {"type": "aow_draw", "side": side})
-        while s.decks.pending_draw.get(side):
-            cid = s.decks.pending_draw[side][0]
-            if not s.meta.first_levy_done:
-                apply_action(s, {"type": "aow_deploy_capability",
-                                 "side": side, "card_id": cid})
-            else:
-                apply_action(s, {"type": "aow_implement_event",
-                                 "side": side, "card_id": cid})
-    else:
+    elif s.pending is None and not s.decks.pending_draw.get(side):
         apply_action(s, {"type": "pass_step", "side": side})
+        return
+    while s.decks.pending_draw.get(side) or s.pending is not None:
+        if s.pending is not None:
+            apply_action(s, legal_moves(s)[0])
+        else:
+            cid = s.decks.pending_draw[side][0]
+            kind = "aow_deploy_capability" if aow_capability_phase(s) else "aow_implement_event"
+            apply_action(s, {"type": kind, "side": side, "card_id": cid})

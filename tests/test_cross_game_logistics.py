@@ -84,7 +84,9 @@ def test_drought_uses_unselected_ally_without_feeding_him():
     state = position()
     place(state, "garcia_ordonez", "sahagun")
     donor = place(state, "pedro_ansurez", "sahagun", prov=2)
-    result = resolve_event(state, "muslim", "M5")
+    resolve_event(state, "muslim", "M5")
+    result = apply_action(state, {"type": "drought_choice", "side": "christian",
+                                  "lord_ids": ["alfonso", "garcia_ordonez"]})
     assert {r["lord_id"] for r in result["fed_lords"]} == {"alfonso", "garcia_ordonez"}
     assert all(not r["unfed_penalty"] for r in result["fed_lords"])
     assert donor.assets["prov"] == 0 and not donor.moved_fought
@@ -97,7 +99,9 @@ def test_partial_shared_feed_consumes_food_and_applies_one_unfed_penalty():
     place(state, "garcia_ordonez", "sahagun", prov=1)
     place(state, "pedro_ansurez", "sahagun", loot=1)
     before = service(state, "alfonso")
-    result = resolve_event(state, "muslim", "M5")
+    resolve_event(state, "muslim", "M5")
+    result = apply_action(state, {"type": "drought_choice", "side": "christian",
+                                  "lord_ids": ["alfonso", "garcia_ordonez"]})
     alfonso = next(r for r in result["fed_lords"] if r["lord_id"] == "alfonso")
     garcia = next(r for r in result["fed_lords"] if r["lord_id"] == "garcia_ordonez")
     assert alfonso["needed"] == 2 and alfonso["consumed"] == 1 and alfonso["short"] == 1
