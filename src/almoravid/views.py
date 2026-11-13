@@ -21,6 +21,7 @@ from almoravid.state import GameState, Side
 _HIDDEN_LORD_FIELDS = ("forces", "assets", "routed_units", "capabilities",
                        "vassals")
 _PRIVATE_CONTINGENT_CARDS = {"M15", "M20"}
+_LEGACY_MARCH_HOLDS = {"christian": {"C3", "C4", "C6"}, "muslim": {"M3", "M4"}}
 
 
 def _other(side: Side) -> Side:
@@ -80,7 +81,8 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
                     "_retreat_provender_resume", "_combat_hold_resume", "_relief_sally_resume",
-                    "_storm_front_resume", "_feed_loot", "_arid_resume"):
+                    "_storm_front_resume", "_feed_loot", "_arid_resume",
+                    "_march_resume", "_surprise_resume"):
             payload.pop(key, None)
         if pending["waiting_on"] != viewer_side:
             payload.pop("blocker_card", None)
@@ -143,13 +145,14 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
                            for i, entry in enumerate(plan)]
     decks["pending_draw"][opp] = None
     decks["held"][opp] = None
-    # Older saves stored an unplayed Arid Terrain in an in-play bucket.
-    # Screen it the same way as a Hold drawn by the current engine.
+    # Older saves also stored unplayed March Holds in in-play buckets.
+    legacy_holds = _LEGACY_MARCH_HOLDS[opp]
+    hidden_holds = set(state.decks.held.get(opp, []))
     for key in ("this_levy_events", "this_campaign_events"):
         cards = decks[key].get(opp, [])
-        legacy = "C4" if opp == "christian" else "M4"
-        if legacy in cards:
-            remaining = [card for card in cards if card != legacy]
+        if legacy_holds.intersection(cards):
+            hidden_holds.update(legacy_holds.intersection(cards))
+            remaining = [card for card in cards if card not in legacy_holds]
             if remaining:
                 decks[key][opp] = remaining
             else:
@@ -189,8 +192,7 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
             continue
         event_card = entry["args"].get("card_id")
         private_event = (entry["action"] == "aow_implement_event"
-                         and (event_card is None
-                              or event_card in state.decks.held.get(opp, [])))
+                         and (event_card is None or event_card in hidden_holds))
         private_capability = (entry["action"] in {"aow_deploy_capability",
                                                    "levy_take_capability"}
                               and event_card in hidden_cards)

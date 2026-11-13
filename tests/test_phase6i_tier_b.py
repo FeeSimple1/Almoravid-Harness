@@ -50,22 +50,26 @@ def test_c12_song_of_roland_mirrors_c11() -> None:
 
 
 def test_c11_eudes_musters_ready_vassals_when_on_map() -> None:
+    from almoravid.state import Vassal
+
     s = load_scenario("scenario_e_alfonso", seed=1)
-    assert "eudes" in s.lords
-    s.lords["eudes"].cylinder = Cylinder(kind="locale", locale_id="leon")
-    s.lords["eudes"].in_stronghold = False
-    # Mark Eudes's Vassals as not yet Mustered (Phase 6i auto-Musters).
-    for v in s.lords["eudes"].vassals:
-        v.ready = False
+    eudes = s.lords["eudes"]
+    eudes.cylinder = Cylinder(kind="locale", locale_id="leon")
+    eudes.in_stronghold = False
+    eudes.forces = {"knights": 1}
+    eudes.vassals = [
+        Vassal(id="eudes_v1", name="Ready", forces={"serfs": 1}, service_cost=1),
+        Vassal(id="eudes_v2", name="Exchanged", forces={"militia": 1}, service_cost=1,
+               ready=False, exchanged=True),
+    ]
     target = "alfonso"
     s.lords[target].cylinder = Cylinder(kind="locale", locale_id="leon")
     s.lords[target].in_stronghold = False
     r = resolve_event(s, "christian", "C11",
                       payload={"target_lord_id": target})
-    # If Eudes had any unready Vassals, they should now be Mustered.
-    if s.lords["eudes"].vassals:
-        assert r["eudes_vassals_mustered"] != [] or \
-            all(v.ready for v in s.lords["eudes"].vassals)
+    assert r["eudes_vassals_mustered"] == ["eudes_v1"]
+    assert eudes.forces == {"knights": 1, "serfs": 1}
+    assert not eudes.vassals[0].ready and eudes.vassals[1].exchanged
 
 
 # ---------------------------------------------------------------------------
@@ -193,14 +197,12 @@ def test_m13_waits_for_choice_when_christian_retreats() -> None:
 
 
 # ---------------------------------------------------------------------------
-# C6 Surprise — March into empty Enemy Stronghold places 2 Siege +
-# sets surprise_storm_pending flag.
+# C6 Surprise on entry into an empty Enemy Stronghold.
 # ---------------------------------------------------------------------------
 
 
 def test_c6_surprise_places_two_siege_on_empty_stronghold_march() -> None:
-    """Christian holds C6 + Marches to an Enemy Stronghold locale that
-    is empty → 2 Siege placed + surprise flag set."""
+    """Playing the optional Hold places two Siege and requires Storm."""
     from almoravid.map import neighbors_via
     s = load_scenario("scenario_a_toledo_beset", seed=11)
     # Alfonso Marches from talavera into the empty Muslim City of toledo.
@@ -217,9 +219,12 @@ def test_c6_surprise_places_two_siege_on_empty_stronghold_march() -> None:
     for lid, l in s2.lords.items():
         if l.cylinder.kind == "locale" and l.cylinder.locale_id == "toledo":
             l.cylinder = Cylinder(kind="locale", locale_id="sevilla")
-    before_siege = s2.locales["toledo"].siege_yellow
+    s2.locales["toledo"].siege_yellow = 0
     apply_action(s2, {"type": "cmd_march", "side": "christian",
                       "target_locale_id": "toledo", "way_type": "road"})
-    assert s2.locales["toledo"].siege_yellow == before_siege + 2
+    assert s2.pending.kind == "surprise_choice"
+    assert s2.locales["toledo"].siege_yellow == 0
+    apply_action(s2, {"type": "surprise_choice", "side": "christian", "play": True})
+    assert s2.locales["toledo"].siege_yellow == 2
     assert s2.meta.surprise_storm_pending_locale_id == "toledo"
     assert "C6" in s2.decks.discard

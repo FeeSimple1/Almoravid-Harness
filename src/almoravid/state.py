@@ -223,10 +223,8 @@ class Meta(StrictModel):
         default_factory=lambda: cast("dict[Side, str]",
                                      {"christian": "opposed",
                                       "muslim": "opposed"}))
-    # Phase 6i: Surprise (C6) consumed on March into empty Enemy
-    # Stronghold — payload tells the next cmd_storm to use Walls-1
-    # and applies +2 Siege markers (already placed by the cmd_march
-    # auto-trigger).
+    # Surprise has placed two Siege markers and requires a free Storm
+    # with Walls −1 before the active Lord can finish the card.
     surprise_storm_pending_locale_id: str | None = None
     # C13/M23: allegiance of the Count's currently Mustered contingent.
     # No side owns it until a paid capability/Event Muster; discard clears it.
@@ -312,10 +310,16 @@ class Vassal(StrictModel):
     # name it is the Service Rating, not a Lordship cost (Muster always
     # costs one Levy action).
     ready: bool = True
+    # C23 exchanges the marker for Assets until the Lord re-Musters.
+    exchanged: bool = False
     # Advanced Vassal Service (3.4.2): a Vassal Disbanded at its Service
     # limit goes Pennant-side-DOWN (Unready) — it cannot Muster until the
     # side flips Pennants up at the end of its Vassal Muster segment.
     pennant_down: bool = False
+
+    @property
+    def available_to_muster(self) -> bool:
+        return self.ready and not self.pennant_down and not self.exchanged
 
 
 class CardInPlay(StrictModel):
@@ -651,6 +655,66 @@ class GameState(StrictModel):
         if info.field_name is None and self.meta.phase == "levy" and self.decks.discard:
             from almoravid.events import restore_legacy_levy_events
             restore_legacy_levy_events(self)
+        return self
+
+    @model_validator(mode="after")
+    def _restore_fonsadera_exchanges(self, info: ValidationInfo) -> GameState:
+        """Identify legacy exchanged markers from exchange and Muster history."""
+        if info.field_name is not None:
+            return self
+        calendar_vassals = {(marker.lord_id, marker.vassal_id)
+                            for marker in self.calendar.service_markers}
+        seen: set[tuple[str, int]] = set()
+        for entry in reversed(self.history):
+            if entry.action not in {"cap_fonsadera", "levy_take_vassal"}:
+                continue
+            lid = entry.args.get("lord_id")
+            index = entry.args.get("vassal_index")
+            if lid is None and entry.action == "cap_fonsadera":
+                lid = entry.summary.removeprefix("C23 Fonsadera: ").split(" ", 1)[0]
+            if not isinstance(lid, str) or not isinstance(index, int):
+                continue
+            key = (lid, index)
+            if key in seen:
+                continue
+            seen.add(key)
+            lord = self.lords.get(lid)
+            if (entry.action != "cap_fonsadera" or lord is None
+                    or not 0 <= index < len(lord.vassals)):
+                continue
+            vassal = lord.vassals[index]
+            prefix = f"C23 Fonsadera: {lid} exchanges Vassal {vassal.name} for "
+            if ("exchanged" not in vassal.model_fields_set
+                    and not vassal.ready and not vassal.pennant_down
+                    and vassal.id not in lord.removed_vassal_ids
+                    and (lid, vassal.id) not in calendar_vassals
+                    and entry.summary.startswith(prefix)):
+                vassal.exchanged = True
+        return self
+
+    @model_validator(mode="after")
+    def _restore_surprise_storm(self, info: ValidationInfo) -> GameState:
+        """Retain a live Surprise and clear stale modifiers in older saves."""
+        meta = self.meta
+        here = meta.surprise_storm_pending_locale_id
+        if info.field_name is None and here is not None:
+            lord = self.lords.get(meta.active_lord_id or "")
+            locale = self.locales.get(here)
+            if (meta.phase != "campaign" or meta.campaign_step != "activation"
+                    or lord is None or lord.side != "christian"
+                    or lord.cylinder.kind != "locale" or lord.cylinder.locale_id != here
+                    or locale is None or locale.siege_yellow == 0):
+                meta.surprise_storm_pending_locale_id = None
+            else:
+                for entry in reversed(self.history):
+                    if entry.action == "surprise_choice" and entry.args.get("play") is True:
+                        break
+                    if entry.summary.startswith("christian Surprise (C6) at "):
+                        break
+                    if entry.action in {"end_card", "command_reveal"} or (
+                            entry.action == "pay_before_disband" and " Feed:" in entry.summary):
+                        meta.surprise_storm_pending_locale_id = None
+                        break
         return self
 
     @model_validator(mode="after")

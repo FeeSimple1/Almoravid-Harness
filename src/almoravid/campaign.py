@@ -663,8 +663,9 @@ def _auto_disband_at_service_limit(state: GameState, lord_id: str) -> dict[str, 
 
 
 def _clear_per_card_event_flags(state: GameState) -> None:
-    """Phase 6h: clear card-scope event flags at end_card."""
+    """Clear card-scope Event flags at end_card."""
     state.meta.swollen_river_blocked_card_lord_id = None
+    state.meta.surprise_storm_pending_locale_id = None
 
 
 def _h_end_card(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
@@ -2390,7 +2391,7 @@ def _group_laden(state: GameState, lord_ids: list[str],
 
 
 def _h_cmd_march(state: GameState, action: dict[str, Any], *,
-                 march_mode: str = "normal") -> dict[str, Any]:
+                 march_mode: str = "normal", swollen_resolved: bool = False) -> dict[str, Any]:
     """4.3 March: move the active Lord to an adjacent Locale.
 
     Args:
@@ -2407,7 +2408,7 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     and arrival procedure, replacing only the route and Fleet's cost
     (Arts of War Reference M19).
     """
-    from almoravid.effective import is_besieged
+    from almoravid.effective import is_besieged, is_enemy_locale
     from almoravid.map import neighbors_via
 
     side = _require_side(action)
@@ -2529,67 +2530,15 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
     # rejected. (Only Carts are hindered on Passes; Mules carry
     # Provender over a Pass freely.)
 
-    enemy = _other(side)
-    enemy_hold = held_event_ids(state, enemy)
-    # C3/M3 Swollen River: blocks this and any further March on the
-    # current Command card by this Lord.
-    if state.meta.swollen_river_blocked_card_lord_id == lord_id:
-        raise IllegalAction(
-            f"Swollen River already blocked {lord_id}'s March on this card",
-            code="swollen_river_blocked",
-        )
-    swollen_id = "C3" if enemy == "christian" else "M3"
-    if swollen_id in enemy_hold:
-        # Adalides (C3/C10, Christian this_lord, Phase 7a): if the
-        # Marching Christian Lord has Adalides, Muslim Swollen River
-        # (M3) is discarded without effect (M3 Tips / rule 1.9.1).
-        from almoravid.capabilities import capabilities_for_lord
-        adalides = (side == "christian" and swollen_id == "M3"
-                    and bool(set(capabilities_for_lord(state, lord_id))
-                             & {"C3", "C10"}))
-        consume_held_event(state, enemy, swollen_id)
-        state.decks.discard.append(swollen_id)
-        if adalides:
-            _record(state, action,
-                    f"Adalides cancels {enemy} Swollen River ({swollen_id}) "
-                    f"at {lord_id}'s Locale — no effect")
-        else:
-            # Declaring a March is legal; the enemy's reactive Swollen
-            # River Hold event INTERRUPTS it (the Lord does not move and
-            # may not March again on this card, but other actions remain).
-            # Modelled as a legal "blocked" outcome — not an IllegalAction
-            # — so legal_moves -> apply_action stays total (Pattern 9).
-            state.meta.swollen_river_blocked_card_lord_id = lord_id
-            _record(state, action,
-                    f"Swollen River ({swollen_id}) played by {enemy} blocks "
-                    f"{lord_id}'s March on this card (4.3.4); Lord does not "
-                    f"move, other actions on the card remain")
-            return {"from": from_loc, "to": None, "moved": False,
-                    "swollen_river_blocked": True, "by": swollen_id,
-                    "actions_remaining": state.meta.actions_remaining}
-    # Phase 6i: C6 Surprise auto-trigger for Christian attacker.
-    # When Christian holds C6 AND Marches to an Enemy Stronghold
-    # locale that contains NO Lord (either side), place 2 Siege
-    # markers and queue a forced Storm with Walls -1 via
-    # state.meta.surprise_storm_pending_locale_id.
-    if side == "christian" and "C6" in held_event_ids(state, "christian"):
-        target_loc = state.locales[target]
-        from almoravid.effective import is_enemy_locale as _iel_c6
-        is_enemy_stronghold = (target_loc.base_type != "region"
-                               and _iel_c6(state, target, "christian"))
-        any_lord_there = any(
-            lord_obj.cylinder.kind == "locale" and lord_obj.cylinder.locale_id == target
-            for lord_obj in state.lords.values()
-        )
-        if is_enemy_stronghold and not any_lord_there:
-            consume_held_event(state, "christian", "C6")
-            state.decks.discard.append("C6")
-            # Place 2 Siege markers (instead of usual 1 from Bypass).
-            target_loc.siege_yellow = min(4, target_loc.siege_yellow + 2)
-            state.meta.surprise_storm_pending_locale_id = target
-            _record(state, action,
-                    f"christian Surprise (C6) at {target}: placed 2 Siege, "
-                    f"forced Storm with Walls -1 pending")
+    if prompt := _swollen_march_prompt(state, action, side, lord_id, moving_lords,
+                                       from_loc, target, swollen_resolved, march_mode):
+        return prompt
+
+    surprise_eligible = (side == "christian" and state.locales[target].base_type != "region"
+                         and is_enemy_locale(state, target, side)
+                         and not any(other.cylinder.kind == "locale"
+                                     and other.cylinder.locale_id == target
+                                     for other in state.lords.values()))
 
     # 1.7.2: discard beyond loaded capacity, or the player's chosen
     # Unladen limit. Discards occur only after a March is not interrupted.
@@ -2642,7 +2591,95 @@ def _h_cmd_march(state: GameState, action: dict[str, Any], *,
         base["discarded_for_march"] = discarded_for_march
     if march_mode == "african_fleet":
         base["actions_consumed"] = cost
-    return _after_march(state, side, lord_id, moving_lords, base)
+    return _after_march(state, side, lord_id, moving_lords, base,
+                        surprise_eligible=surprise_eligible)
+
+
+def _swollen_card(side: Side) -> str:
+    return "C3" if side == "christian" else "M3"
+
+
+def _march_hold_possible(state: GameState, side: Side, card_id: str) -> bool:
+    # Later Campaigns offer the same public window whether the card is
+    # drawn or undrawn. Check Held as well for first-turn and legacy saves.
+    return (card_id in held_event_ids(state, side)
+            or ((state.meta.turn_index > 0 or any(
+                entry.action == "aow_implement_event" for entry in state.history))
+                and card_id not in state.decks.discard
+                and card_id not in state.decks.removed_from_game))
+
+
+def _swollen_march_prompt(
+    state: GameState, action: dict[str, Any], side: Side, lord_id: str,
+    moving_lords: list[str], origin: str, target: str, resolved: bool,
+    march_mode: str = "normal",
+) -> dict[str, Any] | None:
+    _require(state.meta.swollen_river_blocked_card_lord_id != lord_id,
+             f"Swollen River already blocked {lord_id}'s March on this card",
+             code="swollen_river_blocked")
+    other = _other(side)
+    if resolved or not _march_hold_possible(state, other, _swollen_card(other)):
+        return None
+    state.pending = PendingDecision(kind="swollen_river_march", waiting_on=other, payload={
+        "from": origin, "to": target, "marching_lord_ids": moving_lords,
+        "_march_resume": {"action": deepcopy(action), "march_mode": march_mode},
+    })
+    state.meta.active_player = other
+    return {"pending": "swollen_river_march", "waiting_on": other}
+
+
+def _choose_march_hold(state: GameState, action: dict[str, Any], side: Side,
+                        card_id: str) -> bool:
+    play = action.get("play")
+    _require(type(play) is bool and set(action) <= {"type", "side", "play"},
+             "choose play true or false for the March Event", code="bad_arg")
+    if play:
+        _require(card_id in held_event_ids(state, side), f"{card_id} is not Held",
+                 code="card_not_held")
+        consume_held_event(state, side, card_id)
+        state.decks.discard.append(card_id)
+    return play
+
+
+def _h_swollen_river_march(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    from almoravid.capabilities import capabilities_for_lord
+
+    side = _require_side(action)
+    payload = _require_pending(state, "swollen_river_march", side).payload
+    card_id = _swollen_card(side)
+    play = _choose_march_hold(state, action, side, card_id)
+    origin = payload["from"]
+    moving_side = _other(side)
+    _clear_approach_pending(state, moving_side)
+    if play:
+        # M3 can be canceled by any Christian Lord with Adalides here.
+        adalides = side == "muslim" and any(
+            lord.side == moving_side and lord.cylinder.kind == "locale"
+            and lord.cylinder.locale_id == origin
+            and {"C3", "C10"}.intersection(capabilities_for_lord(state, lord.id))
+            for lord in state.lords.values())
+        if not adalides:
+            lord_id = state.meta.active_lord_id
+            state.meta.swollen_river_blocked_card_lord_id = lord_id
+            _record(state, action,
+                    f"{side} Swollen River ({card_id}) blocks {lord_id}'s March for this card")
+            return {"from": origin, "to": None, "moved": False,
+                    "swollen_river_blocked": True, "by": card_id,
+                    "actions_remaining": state.meta.actions_remaining}
+        _record(state, action, f"Adalides cancels {side} Swollen River ({card_id}) at {origin}")
+    else:
+        _record(state, action, f"{side} passes the Swollen River reaction")
+    resume = payload["_march_resume"]
+    march = resume["action"]
+    if march["type"] == "cmd_encamp":
+        result = _h_cmd_encamp(state, march, swollen_resolved=True)
+    elif march["type"] == "cmd_sortie":
+        result = _h_cmd_sortie(state, march, swollen_resolved=True)
+    else:
+        result = _h_cmd_march(state, march, march_mode=resume["march_mode"], swollen_resolved=True)
+    if play:
+        result["swollen_river_cancelled"] = card_id
+    return result
 
 
 def _arid_card(side: Side) -> str:
@@ -2650,20 +2687,15 @@ def _arid_card(side: Side) -> str:
 
 
 def _after_march(state: GameState, side: Side, lord_id: str, moving_lords: list[str],
-                 result: dict[str, Any], *, sortie: dict[str, Any] | None = None) -> dict[str, Any]:
+                 result: dict[str, Any], *, sortie: dict[str, Any] | None = None,
+                 surprise_eligible: bool = False) -> dict[str, Any]:
     """Offer Arid Terrain after movement, before the arrival response."""
     context = {"side": side, "lord_id": lord_id, "moving_lords": moving_lords,
                "result": result, "sortie": sortie}
+    if surprise_eligible:
+        context["surprise_eligible"] = True
     enemy = _other(side)
-    card_id = _arid_card(enemy)
-    # The reaction is public when a Hold could exist. In the first Campaign
-    # only Capabilities were drawn, so there is no such window. The Held
-    # check also supports positions using the legacy event bucket.
-    event_draws_possible = state.meta.turn_index > 0 or any(
-        entry.action == "aow_implement_event" for entry in state.history)
-    if (card_id in held_event_ids(state, enemy)
-            or (event_draws_possible and card_id not in state.decks.discard
-                and card_id not in state.decks.removed_from_game)):
+    if _march_hold_possible(state, enemy, _arid_card(enemy)):
         return {**result, "pending": _arid_prompt(state, enemy, context, "play")}
     return _finish_march(state, context)
 
@@ -2681,6 +2713,12 @@ def _finish_march(state: GameState, context: dict[str, Any],
             kind="march_arrival_response", waiting_on=other, payload=context["sortie"])
         state.meta.active_player = other
         return base
+    if context.get("surprise_eligible") and _march_hold_possible(state, side, "C6"):
+        state.pending = PendingDecision(kind="surprise_choice", waiting_on=side, payload={
+            "locale_id": base["to"], "marching_lord_ids": context["moving_lords"],
+            "_surprise_resume": {**context, "result": base, "surprise_eligible": False},
+        })
+        return {**base, "pending": {"kind": "surprise_choice", "waiting_on": side}}
     # Approach takes priority over Besiege or Bypass (4.3.4–4.3.5).
     trigger = _check_approach_trigger(
         state, base["to"], side, base["from"], base["way_type"],
@@ -2691,6 +2729,22 @@ def _finish_march(state: GameState, context: dict[str, Any],
     elif _set_besiege_or_bypass_pending(state, base["to"], side, context["lord_id"]):
         base["pending"] = {"kind": "besiege_or_bypass", "locale_id": base["to"]}
     return base
+
+
+def _h_surprise_choice(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    side = _require_side(action)
+    payload = _require_pending(state, "surprise_choice", side).payload
+    context = payload["_surprise_resume"]
+    if not _choose_march_hold(state, action, side, "C6"):
+        _record(state, action, f"{side} passes the Surprise opportunity")
+        return _finish_march(state, context)
+    here = payload["locale_id"]
+    _clear_approach_pending(state, side)
+    state.locales[here].siege_yellow = 2
+    state.locales[here].bypass_yellow = False
+    state.meta.surprise_storm_pending_locale_id = here
+    _record(state, action, f"{side} plays Surprise (C6) at {here}, placing two Siege")
+    return {**context["result"], "surprise_played": "C6", "storm_required": here}
 
 
 def _arid_prompt(state: GameState, side: Side, context: dict[str, Any], step: str,
@@ -4948,13 +5002,15 @@ def _finish_storm(
     if sack is not None:
         sack["recipients"] = battle_spoils_recipients(state, side, here, [])
 
-    consumed = state.meta.actions_remaining
+    surprise = pl.get("surprise", False)
+    consumed = 0 if surprise else state.meta.actions_remaining
     state.meta.actions_remaining = 0
     _record(state, action,
             f"{side} {lord_id} Storms {here}: winner={result.winner}, "
             f"rounds={len(result.rounds)}"
             + (f", Sack: {sack}" if sack else "")
-            + f"; card spent ({consumed} actions)")
+            + ("; Surprise Storm ends actions on the card" if surprise
+               else f"; card spent ({consumed} actions)"))
     receipt = {"winner": result.winner, "rounds": len(result.rounds),
                "conquest": conq_result, "sack": sack, "actions_consumed": consumed}
     if sack is not None and sack["spoils"]:
@@ -5004,14 +5060,18 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
              code="wrong_side")
     _require(not is_besieged(state, lord_id),
              "Besieged Lord must Sally not Storm", code="besieged")
-    # Hold and defending Front continuations already validated the launch.
-    _require(_holds_chosen or state.meta.actions_remaining >= 1,
-             "Storm costs 1 Command action (4.5.2)", code="not_enough_actions")
-    _apply_absorption_policy(state, side, action)
     _require(lord.cylinder.kind == "locale",
              f"{lord_id} not at a Locale", code="not_on_map")
     here = lord.cylinder.locale_id
     assert here is not None
+    surprise_loc = state.meta.surprise_storm_pending_locale_id
+    _require(surprise_loc is None or (surprise_loc == here and side == "christian"),
+             "Storm the Stronghold where Surprise was played", code="surprise_storm_required")
+    surprise = surprise_loc is not None
+    # Hold and defending Front continuations already validated the launch.
+    _require(surprise or _holds_chosen or state.meta.actions_remaining >= 1,
+             "Storm costs 1 Command action (4.5.2)", code="not_enough_actions")
+    _apply_absorption_policy(state, side, action)
     loc = state.locales[here]
     _require(loc.base_type != "region",
              f"No Stronghold at {here} to Storm", code="region_no_storm")
@@ -5078,7 +5138,6 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
             forces={},
             capabilities_in_play=[],
         )
-    # Phase 6i: C6 Surprise pending -> modify walls_range to -1.
     if not _holds_chosen:
         prompt = _begin_combat_holds(state, action, side, besieger_ids, enemy_inside, storm=True)
         if prompt is not None:
@@ -5092,9 +5151,8 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
         })
         state.meta.active_player = defender_side
         return {"pending": "storm_front", "waiting_on": defender_side}
-    surprise_loc = state.meta.surprise_storm_pending_locale_id
     walls_override: tuple[int, int] | None = None
-    if surprise_loc == here:
+    if surprise:
         from almoravid.static_data import load_strongholds
         base_walls = load_strongholds()["strongholds"][loc.base_type]["walls_range"]
         walls_override = (base_walls[0], max(0, base_walls[1] - 1))
@@ -5109,11 +5167,12 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
         "enemy_inside": enemy_inside,
         "lord_id": lord_id,
     }
+    if surprise:
+        pl["surprise"] = True
+        state.meta.surprise_storm_pending_locale_id = None
     # Reactive (round-stepped) Storm Concede (S10, Attacker-only, Round
     # 2+). Opt-in so the synchronous default path is unchanged.
     if bool(action.get("interactive_concede")):
-        if surprise_loc == here:
-            state.meta.surprise_storm_pending_locale_id = None
         return _begin_interactive_storm(
             state, action, atk, dfd, pl,
             walls_range_override=walls_override,
@@ -5127,8 +5186,6 @@ def _h_cmd_storm(state: GameState, action: dict[str, Any], *,
         reposition_defender=reposition_defender,
         reposition_attacker=reposition_attacker,
         defender_front=_defender_front)
-    if surprise_loc == here:
-        state.meta.surprise_storm_pending_locale_id = None
     return _finish_storm(state, action, atk=atk, dfd=dfd, result=result,
                          pl=pl)
 
@@ -6977,7 +7034,8 @@ def _h_wastage_choice(state: GameState,
 
 
 
-def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_cmd_encamp(state: GameState, action: dict[str, Any], *,
+                  swollen_resolved: bool = False) -> dict[str, Any]:
     """4.3.6 Encamp: a Bypassing Lord uses 1 March action (ignore
     Laden) to replace all his Bypass markers at the Locale with 1
     Siege marker; this ends his actions on the current card."""
@@ -6999,6 +7057,9 @@ def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(getattr(loc, color_bypass),
              f"{lord_id} is not Bypassing {here} (4.3.6)",
              code="not_bypassing")
+    if prompt := _swollen_march_prompt(state, action, side, lord_id, [lord_id],
+                                       here, here, swollen_resolved):
+        return prompt
     # Replace Bypass with 1 Siege marker (our color).
     setattr(loc, color_bypass, False)
     if side == "christian":
@@ -7015,7 +7076,8 @@ def _h_cmd_encamp(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                         {"locale": here, "encamped": True, "actions_consumed": consumed})
 
 
-def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+def _h_cmd_sortie(state: GameState, action: dict[str, Any], *,
+                  swollen_resolved: bool = False) -> dict[str, Any]:
     """4.3.6 SORTIE: a Lord (or a Marshal/Lieutenant-led group, 4.3.1)
     inside a Bypassed FRIENDLY Stronghold uses one March action
     (regardless of Laden status, 4.3.2) to Approach (4.3.4) the
@@ -7084,6 +7146,9 @@ def _h_cmd_sortie(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                  code="bad_group")
     marching = _marching_lords(state, lord_id, group_req)
     sortie_ids = [lord_id, *(lid for lid in marching if lid != lord_id)]
+    if prompt := _swollen_march_prompt(state, action, side, lord_id, sortie_ids,
+                                       here, here, swollen_resolved):
+        return prompt
 
     # Come out of the Stronghold and mark Moved (4.3.6).
     for sid in sortie_ids:
@@ -7990,7 +8055,8 @@ def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]
              "vassal_index required", code="bad_arg")
     vi = cast(int, vi)
     vassal = lord.vassals[vi]
-    _require(vassal.ready, "Vassal not Ready", code="not_ready")
+    _require(vassal.available_to_muster and vassal.id not in lord.removed_vassal_ids,
+             "Vassal not Ready", code="not_ready")
     _require(not vassal.id.startswith("bishop"),
              "Bishops cannot be exchanged (Fonsadera)", code="bishop")
     mode = action.get("mode", "coin")
@@ -8003,7 +8069,8 @@ def _h_cap_fonsadera(state: GameState, action: dict[str, Any]) -> dict[str, Any]
                  code="bad_arg")
         lord.assets[tt] = lord.assets.get(tt, 0) + 3
         gained = f"3 {tt}"
-    vassal.ready = False   # set aside until re-Muster
+    vassal.ready = False
+    vassal.exchanged = True
     _record(state, action,
             f"C23 Fonsadera: {lid} exchanges Vassal {vassal.name} for {gained}")
     return {"lord": lid, "vassal": vassal.name, "gained": gained}
@@ -8336,6 +8403,8 @@ CAMPAIGN_HANDLERS = {
     "cmd_pass": _h_cmd_pass,
     "cmd_march": _h_cmd_march,
     "arid_terrain_choice": _h_arid_terrain_choice,
+    "swollen_river_march": _h_swollen_river_march,
+    "surprise_choice": _h_surprise_choice,
     "cmd_supply": _h_cmd_supply,
     "cmd_tax": _h_cmd_tax,
     "cmd_forage": _h_cmd_forage,

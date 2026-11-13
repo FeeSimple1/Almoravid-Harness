@@ -239,6 +239,7 @@ def held_event_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 for lid, lord in state.lords.items():
                     if (lord.side == side and lord.is_taifa
                             and lord.cylinder.kind == "calendar"
+                            and lid not in state.meta.muster_banned_this_levy_lord_ids
                             and _free_seats_for(state, lid)):
                         moves.append({**move, "payload": {"lord_id": lid}})
     return moves
@@ -880,6 +881,7 @@ def _crusader_event(state: GameState, side: Side, card_id: str,
     Eudes is on the map AND has Ready Vassals. We auto-Muster any
     Ready Vassals of Eudes (3.4.2 ARTS OF WAR) when triggered.
     """
+    from almoravid.actions import _muster_vassal_forces
     from almoravid.effective import is_besieged
     target_lord_id = payload.get("target_lord_id")
     available_christians = [
@@ -905,11 +907,9 @@ def _crusader_event(state: GameState, side: Side, card_id: str,
     if (eudes is not None and eudes.cylinder.kind == "locale"
             and not is_besieged(state, "eudes")):
         for v in eudes.vassals:
-            if v.ready:
+            if not v.available_to_muster or v.id in eudes.removed_vassal_ids:
                 continue
-            v.ready = True
-            for ut, n in v.forces.items():
-                eudes.forces[ut] = eudes.forces.get(ut, 0) + n
+            _muster_vassal_forces(state, eudes, v)
             eudes_mustered.append(v.id)
 
     state.decks.discard.append(card_id)
@@ -1367,7 +1367,7 @@ def _m18_refugees(state: GameState, side: Side, card_id: str,
     starting Forces + Vassal Mustered units, AND adds 1 Transport
     (Cart or Mule — pick Mule deterministically).
     """
-    from almoravid.effective import is_besieged
+    from almoravid.effective import is_besieged, mustered_vassals
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
     from almoravid.actions import _require
@@ -1386,9 +1386,7 @@ def _m18_refugees(state: GameState, side: Side, card_id: str,
             continue
         rec = statics.get(lid, {})
         starting = dict(rec.get("forces", {}))
-        for v in lord.vassals:
-            if v.ready:
-                continue  # Not Mustered
+        for v in mustered_vassals(state, lord):
             for ut, n in v.forces.items():
                 starting[ut] = starting.get(ut, 0) + n
         added: dict[str, int] = {}
@@ -1435,7 +1433,8 @@ def _m22_massacre(state: GameState, side: Side, card_id: str,
         lord = state.lords.get(lid)
         if (lord is not None and lord.is_taifa and lord.side == "muslim"
                 and lord.cylinder.kind == "calendar"):
-            from almoravid.actions import _free_seats_for
+            from almoravid.actions import _free_seats_for, _require_muster_allowed
+            _require_muster_allowed(state, lid)
             # 3.4.1: auto-Muster places only at a free Seat (neither Enemy
             # nor with an Enemy Lord present); no free Seat -> fall through
             # to the Jihad branch (the Muster cannot happen). [Door C]
@@ -1578,7 +1577,8 @@ def _m21_al_sumaisir(state: GameState, side: Side, card_id: str,
         # bypasses Fealty and steps).
         lord = state.lords[target_lord_id]
         if lord.is_taifa and lord.side == "muslim" and lord.cylinder.kind == "calendar":
-            from almoravid.actions import _free_seats_for
+            from almoravid.actions import _free_seats_for, _require_muster_allowed
+            _require_muster_allowed(state, target_lord_id)
             # 3.4.1 free Seat only; no free Seat -> fall through to Jihad. [Door C]
             free = _free_seats_for(state, target_lord_id)
             if free:
@@ -1619,16 +1619,25 @@ def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
     The printed Tips require the card under the Christian board edge
     regardless of which Christian Lord receives the Event benefit.
     """
-    from almoravid.actions import _free_seats_for, _initialize_mustered_lord, _require
+    from almoravid.actions import (
+        _free_seats_for,
+        _initialize_mustered_lord,
+        _require,
+        _require_muster_allowed,
+    )
     from almoravid.state import CardInPlay
     result: dict[str, Any] = {"card_id": card_id, "side": side}
     mode = payload.get("mode", "service_right")
     _require(mode in ("service_right", "muster"), "unknown Bernard mode", code="bad_arg")
     if mode == "muster":
+        requested = payload.get("lord_id")
+        if isinstance(requested, str):
+            _require_muster_allowed(state, requested)
         eligible = [lord.id for lord in state.lords.values()
                     if lord.side == "christian" and lord.cylinder.kind == "calendar"
+                    and lord.id not in state.meta.muster_banned_this_levy_lord_ids
                     and _free_seats_for(state, lord.id)]
-        lid = payload.get("lord_id") or (eligible[0] if eligible else None)
+        lid = requested or (eligible[0] if eligible else None)
         if lid not in eligible:
             result.update(no_op=True, note="no Christian Lord with a free Seat to Muster")
         else:
@@ -1709,7 +1718,7 @@ def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
     """C18 (Hold played in Muster): Christian Lords restore Lost Foot
     units + add Transport. Mirror of M18 Refugees for the Christian
     Foot triumvirate (men_at_arms, militia, serfs)."""
-    from almoravid.effective import is_besieged
+    from almoravid.effective import is_besieged, mustered_vassals
     from almoravid.static_data import load_lords
     statics = load_lords()["lords"]
     from almoravid.actions import _require
@@ -1728,9 +1737,7 @@ def _c18_runaway_slaves(state: GameState, side: Side, card_id: str,
             continue
         rec = statics.get(lid, {})
         starting = dict(rec.get("forces", {}))
-        for v in lord.vassals:
-            if v.ready:
-                continue
+        for v in mustered_vassals(state, lord):
             for ut, n in v.forces.items():
                 starting[ut] = starting.get(ut, 0) + n
         added: dict[str, int] = {}

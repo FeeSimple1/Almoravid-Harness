@@ -54,8 +54,9 @@ def test_swollen_river_blocks_first_march() -> None:
     s.decks.this_levy_events["muslim"] = ["M3"]
     # Declaring the March is legal; the enemy's reactive Swollen River
     # interrupts it (a legal "blocked" outcome, not an IllegalAction).
-    r = apply_action(s, {"type": "cmd_march", "side": "christian",
-                         "target_locale_id": "sahagun", "way_type": "road"})
+    apply_action(s, {"type": "cmd_march", "side": "christian",
+                     "target_locale_id": "sahagun", "way_type": "road"})
+    r = apply_action(s, {"type": "swollen_river_march", "side": "muslim", "play": True})
     assert r["swollen_river_blocked"] is True and r["moved"] is False
     assert s.meta.swollen_river_blocked_card_lord_id == "alfonso"
     # Card moved to discard.
