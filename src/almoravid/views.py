@@ -67,21 +67,34 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
     full state remains available through GameState.model_dump()."""
     dump = state.model_dump()
     if dump.get("pending") is not None:
+        pending = dump["pending"]
+        payload = pending["payload"]
         if state.pending is not None and state.pending.kind == "battle_fate":
             from almoravid.battle import available_battle_fates
 
             pl = state.pending.payload
             available, _ = available_battle_fates(
                 state, pl["options"], pl["withdraw_slots"], pl["fates"])
-            dump["pending"]["payload"]["options"] = available
+            payload["options"] = available
         for key in ("_wastage_resume", "_end_campaign_resume", "_severed_heads_resume",
                     "_reset_discard_resume", "_battle_spoils_resume",
                     "_retreat_provender_resume", "_combat_hold_resume", "_relief_sally_resume",
                     "_storm_front_resume", "_feed_loot"):
-            dump["pending"]["payload"].pop(key, None)
-        if dump["pending"]["waiting_on"] != viewer_side:
-            dump["pending"]["payload"].pop("blocker_card", None)
-            dump["pending"]["payload"].pop("feed_options", None)
+            payload.pop(key, None)
+        if pending["waiting_on"] != viewer_side:
+            payload.pop("blocker_card", None)
+            payload.pop("feed_options", None)
+        if (state.meta.hidden_mats and "eligible" in payload
+                and pending["kind"] in {"greed_mule_choice", "feed_resource_choice",
+                                        "pay_before_disband", "drought_choice"}):
+            # Old Pay saves can contain rows from the other side's Greed.
+            # Each mat's owner controls visibility regardless of the current actor.
+            own = [row for row in payload["eligible"]
+                   if dump["lords"].get(row["lord_id"], {}).get("side") == viewer_side]
+            if own:
+                payload["eligible"] = own
+            else:
+                payload.pop("eligible")
     # Controller saves retain RNG inputs; player snapshots must not expose
     # enough information to reconstruct future dice or shuffles.
     dump["meta"].pop("seed", None)
@@ -127,7 +140,9 @@ def redacted_view(state: GameState, viewer_side: Side) -> dict[str, Any]:
         entry["args"].pop("rng_state", None)
         if entry["actor"] != opp:
             continue
-        if state.meta.hidden_mats and entry["action"] in {"end_card", "feed_resource_choice"}:
+        if state.meta.hidden_mats and entry["action"] in {
+            "end_card", "feed_resource_choice", "drought_choice",
+        }:
             entry["args"].pop("feed_loot", None)
         if state.meta.hidden_mats and entry["action"] in {"levy_take_vassal", "levy_transport"}:
             # The Lord's expenditure is public. For Advanced Vassal Service,

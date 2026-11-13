@@ -260,8 +260,8 @@ Draw `n` cards from the top of the deck into `decks.pending_draw[side]`.
 
 ### Held Events (3.1.3)
 
-On later Levies, `aow_implement_event` resolves the next card in
-`pending_draw`. Immediate Events execute then; Hold Events go to
+On later Levies, `aow_implement_event` implements the next card in
+`pending_draw`. Immediate Events begin resolving then. Hold Events go to
 `decks.held[side]` without executing. Starting scenario Holds use the
 same collection. Unplayed Holds survive Levy/Campaign boundaries and
 unrelated Battles; legacy saves' event buckets remain supported.
@@ -287,6 +287,30 @@ resolver's optional targets (`locale_id`, `jihad_targets`, or `mode`).
 
 `legal_moves` includes executable examples for held Events, including
 the Marriage card held at the start of Scenario A.
+
+### Drought (C5 and M5)
+
+If Drought offers a choice, the affected player answers with
+`drought_choice`. Follow `pending.waiting_on` and `legal_moves` after
+each response. The target prompt offers all pairs of eligible Lords
+(one Lord if only one is eligible) and the Muslim option to submit
+`"discard_camels": true` when M16 is in play. If no Lords are eligible,
+Drought is discarded and Camels remain in play.
+
+```json
+{"type": "drought_choice", "side": "christian",
+ "lord_ids": ["garcia_ordonez", "pedro_ansurez"]}
+```
+
+At the Greed prompt, use `discard_lords` for any chosen subset of eligible
+Lords. An empty list keeps the Mules. At the Feed prompt, `feed_loot`
+maps each payer to its total Loot expenditure for own Feed and Sharing.
+The owner view lists the valid ranges and the action accepts multiple
+payers in one submission. Omitted payers spend Provender first.
+
+The pending choice can be saved and reloaded. After Drought resolves,
+the drawing player resumes Arts of War. Pay and Disband take place in
+their usual Levy steps.
 
 ## 3.2 Pay
 

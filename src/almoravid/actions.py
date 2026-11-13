@@ -516,9 +516,14 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
     if load_cards()["cards"][card_id].get("event_persistence") == "hold":
         res = hold_drawn_event(state, side, card_id)
     else:
-        res = resolve_event(state, side, card_id, action.get("payload"))
-    # Remove from pending; the resolver routed the card (hold bucket,
-    # this-levy bucket, or immediate apply+discard).
+        payload = action.get("payload")
+        if card_id in {"C5", "M5"}:
+            _require(payload is None or payload == {},
+                     "the affected side chooses how to resolve Drought",
+                     code="bad_drought_choice")
+        res = resolve_event(state, side, card_id, payload)
+    # Move the card out of the draw queue. A Drought decision holds its
+    # card in pending until the affected side finishes Feed or spends Camels.
     state.decks.pending_draw[side] = pend[1:]
     _record(state, action, f"{side} implements Event {card_id} (3.1.3)")
     return {"card_id": card_id, "event_result": res,
@@ -2059,7 +2064,9 @@ def _ensure_campaign_handlers() -> None:
         return
     from almoravid.campaign import CAMPAIGN_HANDLERS
     _HANDLERS.update(CAMPAIGN_HANDLERS)
-    from almoravid.events import play_held_event
+    from almoravid.events import play_held_event, resolve_drought_choice
+
+    _HANDLERS["drought_choice"] = resolve_drought_choice
     _HANDLERS["play_event"] = play_held_event
 
 
@@ -2080,6 +2087,9 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
+    if state.pending is not None and state.pending.kind == "drought_choice":
+        _require(action_type in {"drought_choice", "cap_bishoprics"},
+                 "finish Drought before continuing Arts of War", code="pending_decision")
     if state.pending is not None and state.pending.kind in {
         "combat_holds", "relief_sally", "oneround_timing", "storm_front", "camp_attack",
     }:

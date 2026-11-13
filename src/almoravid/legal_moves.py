@@ -33,6 +33,14 @@ def _spoils_moves(base: dict[str, Any], choice: dict[str, Any]) -> list[dict[str
     ]
 
 
+def _feed_resource_moves(base: dict[str, Any], options: dict[str, Any]) -> list[dict[str, Any]]:
+    return [base] + [
+        {**base, "feed_loot": {lid: amount}}
+        for lid, (minimum, maximum) in options.items()
+        for amount in range(minimum + 1, maximum + 1)
+    ]
+
+
 def legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Return legal actions, including free at-any-time Bishop placement."""
     moves = _phase_legal_moves(state)
@@ -50,6 +58,25 @@ def legal_moves(state: GameState) -> list[dict[str, Any]]:
 def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     """Ordinary phase/pending-decision palette."""
     moves: list[dict[str, Any]] = []
+
+    if state.pending is not None and state.pending.kind == "drought_choice":
+        from itertools import combinations
+
+        payload = state.pending.payload
+        drought: dict[str, Any] = {"type": "drought_choice", "side": state.pending.waiting_on}
+        if payload["step"] == "targets":
+            target_moves = [
+                {**drought, "lord_ids": list(ids)}
+                for ids in combinations(payload["eligible_lord_ids"], payload["required"])
+            ]
+            if payload["can_discard_camels"]:
+                target_moves.append({**drought, "discard_camels": True})
+            return target_moves
+        if payload["step"] == "greed":
+            eligible = [row["lord_id"] for row in payload["eligible"]]
+            return [{**drought, "discard_lords": list(ids)}
+                    for count in range(len(eligible) + 1) for ids in combinations(eligible, count)]
+        return _feed_resource_moves(drought, payload["feed_options"])
 
     if state.pending is not None and state.pending.kind == "storm_front":
         return [{"type": "storm_front", "side": state.pending.waiting_on, "lord_id": lid}
@@ -338,11 +365,7 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
 
     if state.pending is not None and state.pending.kind == "feed_resource_choice":
         move = {"type": "feed_resource_choice", "side": state.pending.waiting_on}
-        moves.append(move)
-        for lid, (minimum, maximum) in state.pending.payload["feed_options"].items():
-            moves.extend({**move, "feed_loot": {lid: amount}}
-                         for amount in range(minimum + 1, maximum + 1))
-        return moves
+        return _feed_resource_moves(move, state.pending.payload["feed_options"])
 
     # 4.8.2 voluntary PAY before the mandatory at-limit Disband (interactive
     # Feed/Pay/Disband). The waiting side may Pay (3.2) any eligible Lord to
