@@ -528,11 +528,7 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
     # marker; +2 Lordship applies to any usable target). [Advisory #3 under-enum]
     if (state.meta.active_player == "christian"
             and state.meta.phase in ("levy", "campaign")):
-        from almoravid.actions import _free_seats_for as _fs_c
-
-        def _has_svc_marker(lid: str) -> bool:
-            return any(sm.lord_id == lid and sm.vassal_id is None
-                       for sm in state.calendar.service_markers)
+        from almoravid.actions import _free_seats_for, _lord_service_box
 
         _held_c = held_event_ids(state, "christian")
         _c_targets = {
@@ -549,7 +545,7 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                     continue  # set-aside: not a usable target
                 if (_l.cylinder.kind == "calendar"
                         and _lid not in state.meta.muster_banned_this_levy_lord_ids
-                        and _fs_c(state, _lid)):
+                        and _free_seats_for(state, _lid)):
                     muster_move = {"type": _atype, "side": "christian",
                                    "lord_id": _lid,
                                    "mode": "muster_from_calendar"}
@@ -574,10 +570,13 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                             moves.append({**muster_move, "payments": payments})
                     else:
                         moves.append(muster_move)
-                if _has_svc_marker(_lid):
-                    moves.append({"type": _atype, "side": "christian",
-                                  "lord_id": _lid,
-                                  "mode": "service_shift_right"})
+                if _lord_service_box(state, _lid) is not None:
+                    shift = {"type": _atype, "side": "christian", "lord_id": _lid,
+                             "mode": "service_shift_right"}
+                    moves.append(shift)
+                    # C14 leaves the direction to the executing player (2.2.3).
+                    if _card == "C14":
+                        moves.append({**shift, "mode": "service_shift_left"})
                 from almoravid.campaign import _muster_cap_lord_eligible
                 if (state.meta.phase == "levy" and state.meta.levy_step == "muster"
                         and _muster_cap_lord_eligible(state, _lid, "christian")):
