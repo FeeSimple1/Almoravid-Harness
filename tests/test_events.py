@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from almoravid.actions import apply_action
 from almoravid.events import (
     EventNotResolvable,
     registered_cards,
@@ -75,14 +76,15 @@ def test_devaluation_no_op_when_target_has_no_coin() -> None:
 
 
 def test_devaluation_with_target_coin_defers() -> None:
-    """C10 Devaluation: now wired in Phase 6d to actually drain Muslim
-    Coin to 2/3 of total (rounded up)."""
+    """C10 leaves the allocation to the affected owner."""
     import math
     s = load_scenario("scenario_a_toledo_beset")
     total_before = sum(l.assets.get("coin", 0) for l in s.lords.values()
                        if l.side == "muslim")
     assert total_before > 0
-    r = resolve_event(s, "christian", "C10")
+    assert resolve_event(s, "christian", "C10")["pending"] == "devaluation_choice"
+    r = apply_action(s, {"type": "devaluation_choice", "side": "muslim",
+                         "coin_by_source": {"al_mutamid": total_before // 3}})
     assert r.get("no_op") is not True
     expected = math.ceil(total_before * 2 / 3)
     assert r["coin_after"] == expected

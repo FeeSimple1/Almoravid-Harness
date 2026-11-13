@@ -125,6 +125,8 @@ def _advance_step_if_both_done(state: GameState) -> None:
     step (or finish the Levy phase) and reset per-side flags. Otherwise
     pass the baton to the other side.
     """
+    from almoravid.events import discard_levy_events
+
     if not (state.meta.levy_step_completed_christian
             and state.meta.levy_step_completed_muslim):
         # The side that just ratified hands the baton to the other side.
@@ -136,6 +138,8 @@ def _advance_step_if_both_done(state: GameState) -> None:
     state.meta.levy_step_completed_christian = False
     state.meta.levy_step_completed_muslim = False
     if current is None or current == "done":
+        discard_levy_events(state)
+        state.meta.muster_banned_this_levy_lord_ids = []
         state.meta.levy_step = "done"
         state.meta.phase = "campaign"  # Phase 3 hook
         state.meta.active_player = ACTOR_ORDER[0]
@@ -175,7 +179,8 @@ def _advance_step_if_both_done(state: GameState) -> None:
         state.meta.active_lord_id = None
         state.decks.plan = {"christian": [], "muslim": []}
         state.meta.first_levy_done = True
-        state.meta.muster_banned_this_levy_lord_ids = []  # Phase 6d
+        discard_levy_events(state)
+        state.meta.muster_banned_this_levy_lord_ids = []
         state.meta.active_player = ACTOR_ORDER[0]
         # Rule 5.2: entering the Campaign, a side with no Mustered Lords
         # on the map loses immediately (it also could not legally build a
@@ -521,9 +526,13 @@ def _h_aow_implement_event(state: GameState, action: dict[str, Any]) -> dict[str
             _require(payload is None or payload == {},
                      "the affected side chooses how to resolve Drought",
                      code="bad_drought_choice")
+        if card_id in {"C10", "M14"}:
+            _require(payload is None or payload == {},
+                     "the affected side chooses the Devaluation allocation",
+                     code="bad_devaluation_choice")
         res = resolve_event(state, side, card_id, payload)
-    # Move the card out of the draw queue. A Drought decision holds its
-    # card in pending until the affected side finishes Feed or spends Camels.
+    # Move the card out of the draw queue. Drought and Devaluation retain
+    # their cards in pending until the affected side finishes the response.
     state.decks.pending_draw[side] = pend[1:]
     _record(state, action, f"{side} implements Event {card_id} (3.1.3)")
     return {"card_id": card_id, "event_result": res,
@@ -783,6 +792,8 @@ def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any
     just_arrived. Taifa Lords adjust their Taifa to Independent (3.4.1).
     """
     lord = state.lords[lord_id]
+    _require(lord_id not in state.meta.muster_banned_this_levy_lord_ids,
+             f"{lord_id} cannot Muster this Levy (3.1.3)", code="muster_banned")
     # 3.4.1: place the cylinder at a Seat "neither Enemy nor has any Enemy
     # Lords present". CtA auto-Muster must obey the usual Muster rule
     # (3.4.1 ARTS OF WAR "must otherwise still Muster by the usual rules"),
@@ -2064,9 +2075,10 @@ def _ensure_campaign_handlers() -> None:
         return
     from almoravid.campaign import CAMPAIGN_HANDLERS
     _HANDLERS.update(CAMPAIGN_HANDLERS)
-    from almoravid.events import play_held_event, resolve_drought_choice
+    from almoravid.events import play_held_event, resolve_devaluation_choice, resolve_drought_choice
 
     _HANDLERS["drought_choice"] = resolve_drought_choice
+    _HANDLERS["devaluation_choice"] = resolve_devaluation_choice
     _HANDLERS["play_event"] = play_held_event
 
 
@@ -2087,9 +2099,12 @@ def apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
 def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _ensure_campaign_handlers()
     action_type = action.get("type")
-    if state.pending is not None and state.pending.kind == "drought_choice":
-        _require(action_type in {"drought_choice", "cap_bishoprics"},
-                 "finish Drought before continuing Arts of War", code="pending_decision")
+    if state.pending is not None and state.pending.kind in {"drought_choice", "devaluation_choice"}:
+        _require(action_type in {state.pending.kind, "cap_bishoprics"},
+                 "resolve the Event before continuing Arts of War", code="pending_decision")
+    if state.pending is not None and state.pending.kind == "arid_terrain_choice":
+        _require(action_type in {"arid_terrain_choice", "cap_bishoprics"},
+                 "resolve the March reaction before continuing", code="pending_decision")
     if state.pending is not None and state.pending.kind in {
         "combat_holds", "relief_sally", "oneround_timing", "storm_front", "camp_attack",
     }:

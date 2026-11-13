@@ -156,6 +156,7 @@ def test_arid_terrain_group_march_feeds_two_lords() -> None:
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "sahagun", "way_type": "road",
                      "group_lord_ids": ["garcia_ordonez"]})
+    apply_action(s, {"type": "arid_terrain_choice", "side": "muslim", "play": True})
     # BOTH marching Lords fed (each lost Provender), not just the leader.
     assert s.lords["alfonso"].assets.get("prov", 0) < prov_before["alfonso"]
     assert s.lords["garcia_ordonez"].assets.get("prov", 0) < prov_before["garcia_ordonez"]

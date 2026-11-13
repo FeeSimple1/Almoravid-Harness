@@ -520,9 +520,9 @@ class Decks(StrictModel):
     `capabilities_in_play` holds side-wide-scope cards (Pattern 14).
     This-lord-scope cards live on `Lord.capabilities`.
 
-    `this_levy_events` and `this_campaign_events` are the persistence
-    buckets for hold-events drawn this turn (cleared at the relevant
-    window boundary per Pattern 13).
+    `this_levy_events` holds continuing Levy Events and also contains some
+    played combat Events and legacy Holds. `this_campaign_events` tracks
+    Campaign-duration effects.
     """
 
     draw: list[str] = Field(default_factory=list)
@@ -644,6 +644,13 @@ class GameState(StrictModel):
             if self.pending is not None and self.pending.kind in ("battle_fate", "combat_holds"):
                 from almoravid.campaign import _restore_pending_lieutenant_choices
                 _restore_pending_lieutenant_choices(self)
+        return self
+
+    @model_validator(mode="after")
+    def _restore_levy_events(self, info: ValidationInfo) -> GameState:
+        if info.field_name is None and self.meta.phase == "levy" and self.decks.discard:
+            from almoravid.events import restore_legacy_levy_events
+            restore_legacy_levy_events(self)
         return self
 
     @model_validator(mode="after")

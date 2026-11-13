@@ -55,8 +55,9 @@ def test_all_phase5j_resolvers_callable_without_raise() -> None:
     # Sample of cards across categories
     for cid in ("C11", "C12", "C13", "C16", "C19", "C25", "C26",
                 "M8", "M9", "M11", "M15", "M19", "M22"):
+        payload = {"lord_ids": ["abu_bakr", "al_mustain"]} if cid == "C19" else None
         r = resolve_event(s, "christian" if cid.startswith("C") else "muslim",
-                          cid)
+                          cid, payload)
         assert isinstance(r, dict)
 
 

@@ -70,6 +70,8 @@ def test_arid_discards_camels_after_the_completed_march():
     state.decks.held["christian"] = ["C4"]
     apply_action(state, {"type": "cmd_march", "side": "muslim",
                          "target_locale_id": "jerez", "way_type": "road"})
+    apply_action(state, {"type": "arid_terrain_choice", "side": "christian", "play": True})
+    apply_action(state, {"type": "arid_terrain_choice", "side": "muslim", "discard_camels": True})
     assert state.lords["yusuf"].assets["prov"] == 4
     assert "M16" in state.decks.discard and "C4" in state.decks.discard
     state.meta.actions_remaining = 2

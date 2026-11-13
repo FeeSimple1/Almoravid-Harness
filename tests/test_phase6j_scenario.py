@@ -64,7 +64,7 @@ def test_m21_jihad_branch_doubled_with_yusuf() -> None:
 
 def test_c19_fitna_shifts_two_taifa_lords_and_bans() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
-    r = resolve_event(s, "christian", "C19")
+    r = resolve_event(s, "christian", "C19", {"lord_ids": ["abu_bakr", "al_mustain"]})
     assert not r.get("no_op"), "expected Taifa Lords on Calendar (C19)"
     assert len(r["shifted"]) == 2
     banned = set(s.meta.muster_banned_this_levy_lord_ids)

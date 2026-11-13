@@ -86,7 +86,7 @@ def test_swollen_river_flag_clears_at_end_card() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_arid_terrain_forces_feed_before_march() -> None:
+def test_arid_terrain_forces_feed_after_march() -> None:
     s = _setup_active_lord("scenario_a_toledo_beset", "alfonso", "leon")
     s.decks.this_levy_events["muslim"] = ["M4"]
     s.lords["alfonso"].assets = {"prov": 3}
@@ -95,6 +95,7 @@ def test_arid_terrain_forces_feed_before_march() -> None:
     apply_action(s, {"type": "cmd_march", "side": "christian",
                      "target_locale_id": "sahagun",
                      "way_type": "road"})
+    apply_action(s, {"type": "arid_terrain_choice", "side": "muslim", "play": True})
     # Feed consumed some Provender.
     assert s.lords["alfonso"].assets.get("prov", 0) < prov_before
     # Card discarded.
