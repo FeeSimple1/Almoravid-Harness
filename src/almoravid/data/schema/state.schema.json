@@ -1347,6 +1347,11 @@
           "title": "Ready",
           "type": "boolean"
         },
+        "exchanged": {
+          "default": false,
+          "title": "Exchanged",
+          "type": "boolean"
+        },
         "pennant_down": {
           "default": false,
           "title": "Pennant Down",

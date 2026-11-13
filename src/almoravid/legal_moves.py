@@ -69,6 +69,23 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                 for amount in range(choice["min"], choice["max"] + 1)]
 
     if state.pending is not None and state.pending.kind in {
+        "swollen_river_march", "surprise_choice",
+    }:
+        from almoravid.campaign import _swollen_card
+
+        side = state.pending.waiting_on
+        kind = state.pending.kind
+        card_id = "C6" if kind == "surprise_choice" else _swollen_card(side)
+        moves = [{"type": kind, "side": side, "play": False}]
+        if card_id in held_event_ids(state, side):
+            moves.append({**moves[0], "play": True})
+        return moves
+
+    if state.pending is None and state.meta.surprise_storm_pending_locale_id is not None:
+        storm = {"type": "cmd_storm", "side": "christian", "interactive_spoils": True}
+        return [storm, {**storm, "interactive_concede": True}]
+
+    if state.pending is not None and state.pending.kind in {
         "drought_choice", "arid_terrain_choice",
     }:
         from itertools import combinations
@@ -481,16 +498,9 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
             return moves
         # Pay step: offer Pay for Lords at Sieges of the current side + done.
         from almoravid.campaign import _siege_locale_lords
-        siege_lords = [lid for lid in _siege_locale_lords(state)
-                       if state.lords[lid].side == side]
-        for lid in siege_lords:
-            # 3.2.1: the paying Lord spends his OWN Coin to shift his Service
-            # marker; the executor requires payer_lord_id. Only advertise the
-            # Pay when that Lord has Coin to spend.
-            if state.lords[lid].assets.get("coin", 0) >= 1:
-                moves.append({"type": "winter_siege_pay", "side": side,
-                              "resource": "coin", "amount": 1,
-                              "payer_lord_id": lid, "target_lord_id": lid})
+        siege_lords = set(_siege_locale_lords(state))
+        moves.extend({**mv, "type": "winter_siege_pay"} for mv in _pay_moves(state, side)
+                     if mv["target_lord_id"] in siege_lords)
         moves.append({"type": "winter_siege_pay", "side": side, "done": True})
         return moves
 
@@ -537,7 +547,9 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
                 _l = state.lords.get(_lid)
                 if _l is None or _l.cylinder.kind not in ("calendar", "locale"):
                     continue  # set-aside: not a usable target
-                if _l.cylinder.kind == "calendar" and _fs_c(state, _lid):
+                if (_l.cylinder.kind == "calendar"
+                        and _lid not in state.meta.muster_banned_this_levy_lord_ids
+                        and _fs_c(state, _lid)):
                     muster_move = {"type": _atype, "side": "christian",
                                    "lord_id": _lid,
                                    "mode": "muster_from_calendar"}
@@ -734,49 +746,34 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
 
 
 def _pay_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
-    """3.2 Pay: spend Coin (3.2.1) / Loot (3.2.2) / Taifa-box Coin to
-    shift a Service marker rightward. Surfaces the simplest faithful
-    options (pay 1 to a payer's own marker, and Taifa-box Coin to any
-    Unbesieged Muslim Lord); richer same-Locale / multi-amount targets
-    are reachable by supplying explicit parameters."""
+    """Offer one-resource payments. Larger amounts can use the same action."""
+    from almoravid.actions import _payable_service_steps
     from almoravid.effective import is_besieged, is_friendly_locale
     out: list[dict[str, Any]] = []
-    has_marker = {sm.lord_id for sm in state.calendar.service_markers
-                  if sm.vassal_id is None}
-    # Box 0 is on the Calendar for Pay (2.2.3, 3.2).
-    has_marker.update(state.calendar.off_left_service)
-    for lid, lord in state.lords.items():
-        if lord.side != side or lord.cylinder.kind != "locale":
-            continue
-        if lid not in has_marker:
-            continue
+    on_map = [lord for lord in state.lords.values()
+              if lord.side == side and lord.cylinder.kind == "locale"]
+    payable = [lord for lord in on_map if _payable_service_steps(state, lord.id) > 0]
+    for lord in on_map:
+        here = lord.cylinder.locale_id
+        assert here is not None
+        targets = [target.id for target in payable if target.cylinder.locale_id == here]
+        if lord.id in targets:
+            targets.remove(lord.id)
+            targets.insert(0, lord.id)
+        resources = []
         if lord.assets.get("coin", 0) >= 1:
-            out.append({"type": "pay_lord", "side": side,
-                        "payer_lord_id": lid, "target_lord_id": lid,
-                        "resource": "coin", "amount": 1})
-        if lord.assets.get("loot", 0) >= 1:
-            try:
-                here = lord.cylinder.locale_id
-                assert here is not None
-                if (is_friendly_locale(state, here, side)
-                        and not is_besieged(state, lid)):
-                    out.append({"type": "pay_lord", "side": side,
-                                "payer_lord_id": lid, "target_lord_id": lid,
-                                "resource": "loot", "amount": 1})
-            except (ImportError, KeyError, AttributeError, FileNotFoundError):
-                pass
-    # Taifa-box Coin -> any Unbesieged Muslim Lord with a marker.
+            resources.append("coin")
+        if (lord.assets.get("loot", 0) >= 1 and is_friendly_locale(state, here, side)
+                and not is_besieged(state, lord.id)):
+            resources.append("loot")
+        out.extend({"type": "pay_lord", "side": side,
+                    "payer_lord_id": lord.id, "target_lord_id": target,
+                    "resource": resource, "amount": 1}
+                   for target in targets for resource in resources)
     if side == "muslim" and state.taifas_box_coin >= 1:
-        for lid, lord in state.lords.items():
-            if (lord.side == "muslim" and lid in has_marker
-                    and lord.cylinder.kind == "locale"):
-                try:
-                    if not is_besieged(state, lid):
-                        out.append({"type": "pay_lord", "side": "muslim",
-                                    "target_lord_id": lid,
-                                    "resource": "taifa_coin", "amount": 1})
-                except (ImportError, KeyError, AttributeError, FileNotFoundError):
-                    pass
+        out.extend({"type": "pay_lord", "side": side, "target_lord_id": lord.id,
+                    "resource": "taifa_coin", "amount": 1}
+                   for lord in payable if not is_besieged(state, lord.id))
     return out
 
 
@@ -866,7 +863,7 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
         # Path 2: the same eligible Lord spends his own Lordship.
         if lid in leviers:
             for i, v in enumerate(lord.vassals):
-                if v.ready:
+                if v.available_to_muster and v.id not in lord.removed_vassal_ids:
                     out.append({"type": "levy_take_vassal", "side": side,
                                 "lord_id": lid, "vassal_index": i})
             from almoravid.actions import _unused_capability_cards
@@ -950,7 +947,8 @@ def _muster_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 and _mce(state, lid, side, need_friendly=False)
                 and _shc_m(state, "christian", "C23")):
             for _vi, _v in enumerate(lord.vassals):
-                if _v.ready and not _v.id.startswith("bishop"):
+                if (_v.available_to_muster and not _v.id.startswith("bishop")
+                        and _v.id not in lord.removed_vassal_ids):
                     out.append({"type": "cap_fonsadera",
                                 "side": "christian", "lord_id": lid,
                                 "vassal_index": _vi, "mode": "coin"})
@@ -1648,6 +1646,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     # Encamp (4.3.6): a Bypassing Lord (our Bypass marker
                     # here) may replace it with 1 Siege marker.
                     if (lord.cylinder.kind == "locale"
+                            and state.meta.swollen_river_blocked_card_lord_id != lord_id
                             and state.meta.actions_remaining >= 1):
                         here = lord.cylinder.locale_id
                         assert here is not None
@@ -1661,6 +1660,7 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                     # Bypassing Enemy.
                     if (lord.cylinder.kind == "locale"
                             and lord.in_stronghold
+                            and state.meta.swollen_river_blocked_card_lord_id != lord_id
                             and state.meta.actions_remaining >= 1):
                         here = lord.cylinder.locale_id
                         assert here is not None

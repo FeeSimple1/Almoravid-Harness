@@ -274,6 +274,16 @@ def render_summary(state: GameState) -> str:
     if state.pending:
         lines.append("")
         lines.append(f"PENDING: {state.pending.kind} (waiting on {state.pending.waiting_on})")
+        if state.pending.kind == "swollen_river_march":
+            origin = state.pending.payload["from"]
+            target = state.pending.payload["to"]
+            route = f"{origin} to {target}" if origin != target else f"at {origin}"
+            lords = ", ".join(state.pending.payload["marching_lord_ids"])
+            lines.append(f"Declared March {route} by {lords}.")
+        elif state.pending.kind == "surprise_choice":
+            lines.append(f"Arrived at empty Enemy Stronghold {state.pending.payload['locale_id']}.")
+    elif here := state.meta.surprise_storm_pending_locale_id:
+        lines.append(f"Surprise requires a free Storm at {here}")
 
     return "\n".join(lines)
 
@@ -330,7 +340,8 @@ def render_verbose(state: GameState) -> str:
         if lord.vassals:
             out.append(
                 "      vassals: " + ", ".join(
-                    f"{v.name}{'[r]' if v.ready else '[d]'}" for v in lord.vassals
+                    f"{v.name}{'[set aside]' if v.exchanged else '[r]' if v.ready else '[d]'}"
+                    for v in lord.vassals
                 )
             )
 
@@ -401,8 +412,9 @@ def _render_focus_lord(state: GameState, lord_id: str) -> str:
         out.append("")
         out.append("Vassals:")
         for v in lord.vassals:
-            ready = "ready" if v.ready else "Disbanded"
-            out.append(f"  {v.name} — {_forces_short(v.forces)} — svc {v.service_cost} — {ready}")
+            status = "Set aside (Fonsadera)" if v.exchanged else "Ready" if v.ready else (
+                "Disbanded" if v.pennant_down or v.id in lord.removed_vassal_ids else "Mustered")
+            out.append(f"  {v.name} — {_forces_short(v.forces)} — svc {v.service_cost} — {status}")
     if lord.routed_units:
         out.append("")
         out.append(f"Routed units (this engagement): {_forces_short(lord.routed_units)}")

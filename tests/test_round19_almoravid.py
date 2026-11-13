@@ -262,6 +262,8 @@ def test_arid_reaction_keeps_hold_private_and_resumes_the_original_command():
     alfonso = state.lords["alfonso"]
     remaining, food = state.meta.actions_remaining, alfonso.assets["prov"]
     assert _replay(state, move) == _replay(empty, move)
+    swollen_decline = _listed(state, "swollen_river_march", play=False)[0]
+    assert _replay(state, swollen_decline) == _replay(empty, swollen_decline)
     assert state.meta.actions_remaining == remaining - 1 and alfonso.assets["prov"] == food
     assert state.pending.waiting_on == "muslim"
     assert redacted_view(state, "christian") == redacted_view(empty, "christian")
@@ -269,6 +271,7 @@ def test_arid_reaction_keeps_hold_private_and_resumes_the_original_command():
                      "card_not_held")
     decline = _listed(state, "arid_terrain_choice", play=False)[0]
     _replay(played, move)
+    _replay(played, swollen_decline)
     _replay(state, decline)
     _replay(empty, decline)
     assert redacted_view(state, "christian") == redacted_view(empty, "christian")

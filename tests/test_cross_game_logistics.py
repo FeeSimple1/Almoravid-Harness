@@ -242,9 +242,10 @@ def test_swollen_river_interruption_keeps_proposed_discards():
     state = position(actions=1)
     state.lords["alfonso"].assets = {"loot": 1}
     state.decks.held["muslim"] = ["M3"]
-    result = apply_action(state, {"type": "cmd_march", "side": "christian",
-                                 "target_locale_id": "leon", "way_type": "road",
-                                 "discard_to_unladen": True})
+    apply_action(state, {"type": "cmd_march", "side": "christian",
+                         "target_locale_id": "leon", "way_type": "road",
+                         "discard_to_unladen": True})
+    result = apply_action(state, {"type": "swollen_river_march", "side": "muslim", "play": True})
     assert not result["moved"] and result["swollen_river_blocked"]
     assert state.lords["alfonso"].assets["loot"] == 1
     assert state.lords["alfonso"].cylinder.locale_id == "sahagun"

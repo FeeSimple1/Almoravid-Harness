@@ -37,6 +37,7 @@ from almoravid.state import (
     LevyStep,
     Lord,
     Side,
+    Vassal,
 )
 from almoravid.static_data import load_cards, load_lords
 
@@ -584,8 +585,9 @@ def _initialize_mustered_lord(state: GameState, lord_id: str,
     Vassals, and the Lord's Service marker. Vassal Forces remain in the
     pool until separately Mustered (3.4.2).
     """
-    from almoravid.state import Cylinder, ServiceMarker, Vassal
+    from almoravid.state import Cylinder, ServiceMarker
 
+    _require_muster_allowed(state, lord_id)
     lord = state.lords[lord_id]
     static = load_lords()["lords"][lord_id]
     lord.cylinder = Cylinder(kind="locale", locale_id=seat)
@@ -624,6 +626,11 @@ def _initialize_mustered_lord(state: GameState, lord_id: str,
             "taifa_adjust": taifa_adjust}
 
 
+def _require_muster_allowed(state: GameState, lord_id: str) -> None:
+    _require(lord_id not in state.meta.muster_banned_this_levy_lord_ids,
+             f"{lord_id} cannot Muster this Levy (3.1.3)", code="muster_banned")
+
+
 def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """Muster a Lord at one of his Seats (SoP §3.4).
 
@@ -647,10 +654,7 @@ def _h_muster_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
              f"{lord_id} has no Fealty — must use Call to Arms",
              code="cta_only_lord")
     # Phase 6d: M16/M17 ban Muster of/by specified Lord for the Levy.
-    _require(lord_id not in state.meta.muster_banned_this_levy_lord_ids,
-             f"{lord_id} cannot Muster this Levy "
-             f"(M16/M17 Revolt ban active)",
-             code="muster_banned")
+    _require_muster_allowed(state, lord_id)
     # 3.4.1: a Levying Lord spends one point of his Lordship to enable
     # the roll (L9b). The Levying Lord must be on the map, eligible to
     # take Levy actions (Friendly + Unbesieged, 3.4), have spare
@@ -792,8 +796,7 @@ def _cta_auto_muster(state: GameState, lord_id: str, seat: str) -> dict[str, Any
     just_arrived. Taifa Lords adjust their Taifa to Independent (3.4.1).
     """
     lord = state.lords[lord_id]
-    _require(lord_id not in state.meta.muster_banned_this_levy_lord_ids,
-             f"{lord_id} cannot Muster this Levy (3.1.3)", code="muster_banned")
+    _require_muster_allowed(state, lord_id)
     # 3.4.1: place the cylinder at a Seat "neither Enemy nor has any Enemy
     # Lords present". CtA auto-Muster must obey the usual Muster rule
     # (3.4.1 ARTS OF WAR "must otherwise still Muster by the usual rules"),
@@ -1317,6 +1320,25 @@ def _shift_service_left(state: GameState, lord_id: str, boxes: int = 1) -> int:
     sm.box = new_box
     return new_box
 
+
+def _payable_service_steps(state: GameState, lord_id: str) -> int:
+    """How many one-box payments can still move a Service marker (3.2)."""
+    markers = [m for m in state.calendar.service_markers if m.lord_id == lord_id]
+    own = next((m.box for m in markers if m.vassal_id is None), None)
+    if own is None:
+        if lord_id in state.calendar.off_left_service:
+            own = 0
+        elif lord_id in state.calendar.off_right_service:
+            own = 17
+        else:
+            return 0
+    leftmost = own
+    if state.meta.advanced_vassal_service:
+        leftmost = min(own, min((m.box for m in markers if m.vassal_id is not None),
+                                default=own))
+    return 17 - leftmost
+
+
 def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
     """Shift a Lord's Service marker N boxes right (ahead / away from
     Disband), per Pay (3.2). Box caps at 17 (the "17+" box). If the
@@ -1331,11 +1353,15 @@ def _shift_service_right(state: GameState, lord_id: str, boxes: int = 1) -> int:
     sm = next((s for s in state.calendar.service_markers
                if s.lord_id == lord_id and s.vassal_id is None), None)
     if sm is None:
-        # Off-left lane: re-enter onto the track.
+        # Resume the edge position stored by older saves.
+        box = 0
         if lord_id in state.calendar.off_left_service:
             state.calendar.off_left_service.remove(lord_id)
+        elif lord_id in state.calendar.off_right_service:
+            state.calendar.off_right_service.remove(lord_id)
+            box = 17
         from almoravid.state import ServiceMarker
-        sm = ServiceMarker(lord_id=lord_id, box=0)
+        sm = ServiceMarker(lord_id=lord_id, box=box)
         state.calendar.service_markers.append(sm)
     sm.box = min(17, sm.box + boxes)
     return sm.box
@@ -1484,6 +1510,7 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     _require(target.side == side, "Pay may only target a Lord on your side (3.2)",
              code="wrong_side")
 
+    payer: Lord | None = None
     if resource == "taifa_coin":
         _require(side == "muslim", "Taifa-box Coin is Muslim only",
                  code="wrong_side")
@@ -1495,7 +1522,6 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(not is_besieged(state, target_lord_id),
                  f"{target_lord_id} is Besieged (3.2.1 Taifa-Coin needs "
                  f"Unbesieged)", code="besieged")
-        state.taifas_box_coin -= amount
     else:
         payer_lord_id = action.get("payer_lord_id")
         _require(payer_lord_id in state.lords,
@@ -1527,9 +1553,20 @@ def _h_pay_lord(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
                      f"Pay-with-Loot requires a Locale free of Siege "
                      f"(3.2.2); {payer_lord_id} is Besieged",
                      code="besieged")
-        payer.assets[resource] = have - amount
-        if payer.assets[resource] == 0:
-            payer.assets.pop(resource, None)
+    _require(target.cylinder.kind == "locale", f"{target_lord_id} not on map",
+             code="not_on_map")
+    steps = _payable_service_steps(state, target_lord_id)
+    _require(amount <= steps,
+             f"{target_lord_id} can Pay for at most {steps} more Service boxes (3.2)",
+             code="pay_exceeds_service_limit")
+    if payer is None:
+        state.taifas_box_coin -= amount
+    else:
+        remaining = payer.assets[resource] - amount
+        if remaining:
+            payer.assets[resource] = remaining
+        else:
+            del payer.assets[resource]
 
     new_box = _shift_service_right(state, target_lord_id, boxes=amount)
     _record(state, action,
@@ -1847,13 +1884,7 @@ def _h_levy_transport(state: GameState, action: dict[str, Any]) -> dict[str, Any
 
 def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     """3.4 Muster Levy action: spend 1 Lordship to add a Vassal's Forces
-    to the Lord's mat. The Vassal must be Ready.
-
-    Phase 5g baseline: just bring a Ready Vassal into play (set ready=False
-    means in-play / spent; for now we track via a marker on the Lord).
-    Actual Service marker advancement of the Vassal happens with the
-    advanced Vassal Service rule (3.4.2), deferred.
-    """
+    to the Lord's mat. The Vassal must be Ready."""
     side = _require_side(action)
     _require_levy_step(state, "muster")
     _require_active(state, side)
@@ -1880,20 +1911,28 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
              f"vassal_index {vassal_index} out of range",
              code="bad_arg")
     vassal = lord.vassals[vassal_index]
-    _require(vassal.ready, f"vassal {vassal.name} not Ready",
+    _require(vassal.ready and not vassal.exchanged and vassal.id not in lord.removed_vassal_ids,
+             f"vassal {vassal.name} not Ready",
              code="vassal_not_ready")
     # 3.4.2 advanced rule: a Pennant-down (Unready) Vassal may not Muster.
     if state.meta.advanced_vassal_service:
         _require(not vassal.pennant_down,
                  f"vassal {vassal.name} is Pennant-down (Unready) this "
                  f"Levy (3.4.2)", code="vassal_unready")
+    _muster_vassal_forces(state, lord, vassal)
+    lord.lordship_used += 1
+    _record(state, action,
+            f"{side} {lord_id} spends Lordship -> takes Vassal {vassal.name}")
+    return {"lord_id": lord_id, "vassal_name": vassal.name,
+            "lordship_used": lord.lordship_used}
+
+
+def _muster_vassal_forces(state: GameState, lord: Lord, vassal: Vassal) -> None:
+    """Place a Ready Vassal's Forces and Service marker (3.4.2)."""
     # Bring Vassal's Forces onto the Lord's mat
     for ut, n in vassal.forces.items():
         lord.forces[ut] = lord.forces.get(ut, 0) + n
     vassal.ready = False
-    lord.lordship_used += 1
-    # Phase 7d: advanced Vassal Service (3.4.2) — place the Vassal's
-    # Service marker on the Calendar at the Lord's current Service box.
     if state.meta.advanced_vassal_service and not vassal.id.startswith("bishop_"):
         from almoravid.state import ServiceMarker
         # Bishops are exempt from advanced Service (3.4.2 / C22 Tips).
@@ -1901,15 +1940,11 @@ def _h_levy_take_vassal(state: GameState, action: dict[str, Any]) -> dict[str, A
         # marker by the Vassal's Service Rating (service_cost), just as
         # for a Lord (3.4.1) — NOT at the Lord's current box.
         box = min(17, state.calendar.current_box + vassal.service_cost)
-        already = any(s.lord_id == lord_id and s.vassal_id == vassal.id
+        already = any(s.lord_id == lord.id and s.vassal_id == vassal.id
                       for s in state.calendar.service_markers)
         if not already:
             state.calendar.service_markers.append(
-                ServiceMarker(lord_id=lord_id, box=box, vassal_id=vassal.id))
-    _record(state, action,
-            f"{side} {lord_id} spends Lordship -> takes Vassal {vassal.name}")
-    return {"lord_id": lord_id, "vassal_name": vassal.name,
-            "lordship_used": lord.lordship_used}
+                ServiceMarker(lord_id=lord.id, box=box, vassal_id=vassal.id))
 
 
 def _unused_capability_cards(state: GameState, side: Side) -> list[str]:
@@ -2102,9 +2137,15 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
     if state.pending is not None and state.pending.kind in {"drought_choice", "devaluation_choice"}:
         _require(action_type in {state.pending.kind, "cap_bishoprics"},
                  "resolve the Event before continuing Arts of War", code="pending_decision")
-    if state.pending is not None and state.pending.kind == "arid_terrain_choice":
-        _require(action_type in {"arid_terrain_choice", "cap_bishoprics"},
+    if state.pending is not None and state.pending.kind in {
+        "swollen_river_march", "arid_terrain_choice", "surprise_choice",
+    }:
+        _require(action_type in {state.pending.kind, "cap_bishoprics"},
                  "resolve the March reaction before continuing", code="pending_decision")
+    if state.pending is None and state.meta.surprise_storm_pending_locale_id is not None:
+        _require(action_type in {"cmd_storm", "cap_bishoprics",
+                                 "set_absorption_policy", "set_array_tactics"},
+                 "Surprise requires an immediate Storm", code="surprise_storm_required")
     if state.pending is not None and state.pending.kind in {
         "combat_holds", "relief_sally", "oneround_timing", "storm_front", "camp_attack",
     }:

@@ -314,8 +314,17 @@ their usual Levy steps.
 
 ## 3.2 Pay
 
-Phase 2c: only `pass_step` is currently legal in this step. Payment
-handlers (`pay_with_coin`, `pay_with_loot`) land in a future phase.
+Use `pay_lord` in Levy, `pay_before_disband` in the interactive Campaign
+Pay step, or `winter_siege_pay` during Winter Siege Pay. Supply
+`target_lord_id`, `resource` (`coin`, `loot`, or `taifa_coin`), and
+`payer_lord_id` for Coin or Loot from a Lord's mat. Each listed payment
+spends one resource. Use `amount` to pay several at once. Each resource
+must advance the target Lord's Service marker or at least one of his
+Advanced Vassal Service markers toward 17+.
+
+Coin on a mat can pay its owner or a Lord at the same Locale. Loot also
+requires a Friendly Locale free of Siege. Taifa Coin can pay an
+Unbesieged Muslim Lord. Winter Siege Pay targets Lords at Siege Locales.
 
 ## 3.3 Service / Disband
 
@@ -479,6 +488,27 @@ the remaining selections, which survive save/load. Immediate Campaign victory
 ends play before further selections or Calendar advance. Otherwise, after the
 Muslim election finishes, the Calendar advances once and the existing
 Levy/Curias/Winter sequence resumes. No other action may bypass Reset.
+
+## March reactions
+
+When Swollen River could be available, a validated March declaration
+opens `swollen_river_march` for the opposing side. The owner can submit
+`play: false` to let the March proceed with its declared choices or
+`play: true` to use C3/M3. A successful block preserves the Marching
+Lord's actions and Assets and bars further March actions on the card.
+If Adalides cancels M3 at the origin, the March proceeds.
+
+Arid Terrain follows movement and precedes the arrival decision. On
+entry into an empty Enemy Stronghold, `surprise_choice` lets the
+Christian player use C6 or keep it and continue with the normal arrival.
+Playing C6 places two Siege markers. The next Command must be
+`cmd_storm` at that Stronghold, even with zero remaining actions. This
+Storm costs no actions, uses Walls reduced by one, and must fight the
+first Round before the Attacker can Concede. Use `interactive_concede`
+to make that choice during the Storm.
+
+These windows use public timing. Each owner sees Play when they Hold
+the card. Saved games retain the pending decision and March choices.
 
 ## Avoid reaction and player visibility
 

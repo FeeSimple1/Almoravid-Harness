@@ -16,7 +16,7 @@ Per BRIEF and FUTURE_PROJECTS_LESSONS.md Pattern 5:
 
 from __future__ import annotations
 
-from almoravid.state import GameState, Lord, Side, StrongholdType
+from almoravid.state import GameState, Lord, Side, StrongholdType, Vassal
 
 
 def same_stack_position(lower: Lord, upper: Lord) -> bool:
@@ -149,6 +149,19 @@ def is_friendly_locale(state: GameState, locale_id: str, side: Side) -> bool:
     if taifa.status == "kingdoms":
         return side == "christian"  # Castile-style absorbed Christian kingdom
     return False
+
+
+def mustered_vassals(state: GameState, lord: Lord) -> list[Vassal]:
+    """Vassal markers currently contributing Forces, including Lost units."""
+    calendar_ids = {sm.vassal_id for sm in state.calendar.service_markers
+                    if sm.lord_id == lord.id and sm.vassal_id is not None}
+    return [
+        v for v in lord.vassals
+        if not v.ready and not v.pennant_down and not v.exchanged
+        and v.id not in lord.removed_vassal_ids
+        and (not state.meta.advanced_vassal_service or v.id.startswith("bishop_")
+             or v.id in calendar_ids)
+    ]
 
 
 def muster_ineligibility(
