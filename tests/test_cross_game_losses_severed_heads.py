@@ -424,8 +424,9 @@ def test_caballeria_only_rolls_in_kingdoms(monkeypatch):
 def test_event_placed_ravage_does_not_trigger_m13():
     from almoravid.events import resolve_event
     state = _base()
-    result = resolve_event(state, "muslim", "M24", {})
-    assert result["ravaged"]
+    selected = ["calahorra", "jaca"]
+    result = resolve_event(state, "muslim", "M24", {"locale_ids": selected})
+    assert result["ravaged"] == selected
     assert getattr(state.meta, "severed_heads_trigger", None) is None
     assert state.pending is None
     assert state.decks.held["muslim"] == ["M13"]

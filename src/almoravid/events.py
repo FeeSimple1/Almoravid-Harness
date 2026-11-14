@@ -28,11 +28,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-from almoravid.state import GameState, PendingDecision, Side
+from almoravid.state import GameState, PendingDecision, RavagedState, Side
 from almoravid.static_data import load_cards
 
 # (state, side, card_id, payload) -> result dict
 ResolverFn = Callable[[GameState, Side, str, dict[str, Any]], dict[str, Any]]
+RAVAGE_EVENT_CARDS = frozenset({"C17", "M24"})
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +286,11 @@ def resolve_event(
     resolver = _RESOLVERS.get(card_id)
     if resolver is None:
         raise EventNotResolvable(card_id)
+    if card_id in RAVAGE_EVENT_CARDS:
+        from almoravid.actions import _require
+
+        _require(payload is None or isinstance(payload, dict),
+                 "Event payload must be an object", code="bad_arg")
     result = resolver(state, side, card_id, payload or {})
     if _is_levy_event(card_id):
         state.decks.this_levy_events.setdefault(side, []).append(card_id)
@@ -1734,38 +1740,82 @@ def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
     return result
 
 
-@register("C17")  # Genoa & Pisa
-def _c17_genoa_pisa(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """C17 (Immediate): Place Ravaged at 2 Unravaged Enemy Ports where
-    no Muslim Lords. Total +1 Christian VP per card text Tips."""
-    from almoravid.effective import is_friendly_locale
-    ports: list[str] = []
-    for lid, loc in state.locales.items():
-        if not loc.has_port:
-            continue
-        if loc.ravaged != "none":
-            continue
-        if not is_friendly_locale(state, lid, "muslim"):
-            continue
-        muslim_here = any(
-            lord.side == "muslim" and lord.cylinder.kind == "locale"
-            and lord.cylinder.locale_id == lid
+def _ravage_event_targets(state: GameState, card_id: str) -> tuple[list[str], str]:
+    """Eligible Locales for C17 or M24 and the reason if none can be Ravaged."""
+    from almoravid.capabilities import side_has_capability
+    from almoravid.effective import effective_stronghold_type, is_friendly_locale
+    from almoravid.map import neighbors_via
+
+    if card_id == "C17":
+        occupied = {
+            lord.cylinder.locale_id
             for lord in state.lords.values()
-        )
-        if muslim_here:
-            continue
-        ports.append(lid)
-    placed: list[str] = []
-    for p in ports[:2]:
-        state.locales[p].ravaged = "yellow"  # Christian-placed
-        placed.append(p)
-    if not placed:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Muslim Port")
-    state.score.christian += 0.5 * len(placed)  # 1 VP per 2 markers
+            if lord.side == "muslim" and lord.cylinder.kind == "locale"
+        }
+        return [
+            lid for lid, loc in state.locales.items()
+            if loc.has_port and loc.ravaged == "none" and lid not in occupied
+            and effective_stronghold_type(state, lid) != "region"
+            and is_friendly_locale(state, lid, "muslim")
+        ], "no eligible Muslim Port"
+
+    if side_has_capability(state, "christian", "C19"):
+        return [], "blocked by C19 Caballeria Villana"
+    return [
+        lid for lid, loc in state.locales.items()
+        if loc.ravaged == "none" and is_friendly_locale(state, lid, "christian")
+        and any(is_friendly_locale(state, neighbor, "muslim")
+                for way in ("road", "pass") for neighbor in neighbors_via(lid, way))
+    ], "no eligible Christian Locale"
+
+
+def ravage_event_choices(state: GameState, card_id: str) -> list[list[str]]:
+    """Every distinct pair, or the single target if only one qualifies."""
+    from itertools import combinations
+
+    eligible, _ = _ravage_event_targets(state, card_id)
+    if not eligible:
+        return []
+    return [list(pair) for pair in combinations(eligible, min(2, len(eligible)))]
+
+
+@register("C17")  # Genoa & Pisa
+@register("M24")  # Al-Maghawir
+def _place_ravaged_event(state: GameState, side: Side, card_id: str,
+                         payload: dict[str, Any]) -> dict[str, Any]:
+    """The drawing side chooses where to put the two Event markers (3.1.3)."""
+    from almoravid.actions import _require
+
+    owner = "christian" if card_id == "C17" else "muslim"
+    _require(side == owner, f"{card_id} belongs to {owner}", code="wrong_side")
+    _require(payload.keys() <= {"locale_ids"},
+             f"{card_id} expects payload.locale_ids", code="bad_arg")
+    eligible, no_effect_reason = _ravage_event_targets(state, card_id)
+    required = min(2, len(eligible))
+    if payload:
+        selected = payload["locale_ids"]
+        _require(isinstance(selected, list) and all(isinstance(lid, str) for lid in selected),
+                 "locale_ids must be a list of Locale ids", code="bad_arg")
+        _require(len(selected) == len(set(selected)) == required
+                 and all(lid in eligible for lid in selected),
+                 f"{card_id} requires {required} distinct eligible Locales", code="bad_target")
+    else:
+        _require(len(eligible) <= 2, f"{card_id}: select two Locales with payload.locale_ids",
+                 code="choice_required")
+        selected = eligible
+    if not selected:
+        return _no_op_with_note(state, card_id, side, no_effect_reason)
+
+    marker: RavagedState = "yellow" if side == "christian" else "green"
+    for lid in selected:
+        state.locales[lid].ravaged = marker
+    points = 0.5 * len(selected)
+    if side == "christian":
+        state.score.christian += points
+    else:
+        state.score.muslim += points
     state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "ravaged": placed}
+    return {"card_id": card_id, "side": side, "ravaged": list(selected)}
 
 
 @register("C18")  # Runaway Slaves
@@ -2017,43 +2067,6 @@ def _c24_abu_bakr(state: GameState, side: Side, card_id: str,
         new_box = _shift_service_left(state, lid, boxes=1)
         shifted.append({"lord_id": lid, "new_service_box": new_box})
     return {"card_id": card_id, "side": side, "shifted": shifted}
-
-
-@register("M24")  # Al-Maghawir
-def _m24_al_maghawir(state: GameState, side: Side, card_id: str,
-         payload: dict[str, Any]) -> dict[str, Any]:
-    """M24 (Immediate): Unless C19 Caballeria Villana, place Ravaged at
-    2 Unravaged Enemy Locales adjacent to Friendly Locales."""
-    from almoravid.effective import is_friendly_locale
-    from almoravid.map import neighbors_via
-    # C19 Caballeria Villana (capability) blocks: check
-    # state.decks.capabilities_in_play.
-    for cip in state.decks.capabilities_in_play:
-        if cip.card_id == "C19":
-            return _no_op_with_note(state, card_id, side,
-                                    "blocked by C19 Caballeria Villana")
-    eligible: list[str] = []
-    for lid, loc in state.locales.items():
-        if loc.ravaged != "none":
-            continue
-        if not is_friendly_locale(state, lid, "christian"):
-            continue
-        # Adjacent to a Muslim-friendly locale?
-        all_n = set()
-        for wt in ("road", "pass"):
-            all_n.update(neighbors_via(lid, wt))
-        if any(is_friendly_locale(state, n, "muslim") for n in all_n):
-            eligible.append(lid)
-    placed: list[str] = []
-    for p in eligible[:2]:
-        state.locales[p].ravaged = "green"
-        placed.append(p)
-    if not placed:
-        return _no_op_with_note(state, card_id, side,
-                                "no eligible Christian Locale")
-    state.score.muslim += 0.5 * len(placed)
-    state.decks.discard.append(card_id)
-    return {"card_id": card_id, "side": side, "ravaged": placed}
 
 
 # C21 Mozarabes — Hold: parked in this_levy_events; the auto-success on a

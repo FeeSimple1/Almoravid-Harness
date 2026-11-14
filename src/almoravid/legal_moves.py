@@ -20,7 +20,14 @@ from __future__ import annotations
 from typing import Any
 
 from almoravid.effective import includes_whole_lieutenant_pairs, lieutenant_for, lower_lord_for
-from almoravid.events import fitna_choices, held_event_ids, held_event_moves, illness_choices
+from almoravid.events import (
+    RAVAGE_EVENT_CARDS,
+    fitna_choices,
+    held_event_ids,
+    held_event_moves,
+    illness_choices,
+    ravage_event_choices,
+)
 from almoravid.state import FIELD_CONCEDE_KINDS, GameState, Lord, Side
 
 
@@ -696,6 +703,9 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
             event = {"type": "aow_implement_event", "side": side, "card_id": pend[0]}
             if pend[0] == "C19":
                 return [{**event, "payload": {"lord_ids": ids}} for ids in fitna_choices(state)]
+            if pend[0] in RAVAGE_EVENT_CARDS:
+                targets = ravage_event_choices(state, pend[0])
+                return [{**event, "payload": {"locale_ids": ids}} for ids in targets] or [event]
             if pend[0] == "C23":
                 choices = illness_choices(state)
                 return [{**event, "payload": choice} for choice in choices] or [event]
