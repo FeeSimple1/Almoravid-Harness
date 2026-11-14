@@ -2169,6 +2169,10 @@ def _apply_action(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
         _require(action_type in {state.pending.kind, "cap_bishoprics"},
                  "resolve the pending aftermath choice before continuing",
                  code="pending_decision")
+    if state.pending is not None and state.pending.kind == "cathedral_jihad":
+        _require(action_type in {"cathedral_jihad", "cap_bishoprics"},
+                 "the Muslim player must choose the Cathedrals Jihad Locale",
+                 code="pending_decision")
     if action_type not in _HANDLERS:
         raise IllegalAction(
             f"unknown action type {action_type!r}. "

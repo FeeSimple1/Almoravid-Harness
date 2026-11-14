@@ -3754,17 +3754,22 @@ def _h_betrayal_of_terms(state: GameState, action: dict[str, Any]) -> dict[str, 
 
 
 def _h_betrayal_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    return _resolve_jihad_choice(state, action, "betrayal_jihad", "Betrayal of Terms")
+
+
+def _resolve_jihad_choice(state: GameState, action: dict[str, Any],
+                          kind: str, source: str) -> dict[str, Any]:
     from almoravid.events import _add_jihad, _jihad_eligible_locales
 
     side = _require_side(action)
-    _require_pending(state, "betrayal_jihad", side)
+    pd = _require_pending(state, kind, side)
     target = action.get("target_locale_id")
-    _require(target in _jihad_eligible_locales(state), "choose an eligible Jihad Locale",
-             code="bad_target")
+    _require(isinstance(target, str) and target in _jihad_eligible_locales(state),
+             "choose an eligible Jihad Locale", code="bad_target")
     placement = _add_jihad(state, 1, {"jihad_targets": [target]})
     state.pending = None
-    state.meta.active_player = "christian"
-    _record(state, action, f"Muslim places Betrayal of Terms Jihad at {target}")
+    state.meta.active_player = pd.payload.get("resume_active", "christian")
+    _record(state, action, f"Muslim places {source} Jihad at {target}")
     return {"jihad_placed": placement}
 
 
@@ -7347,16 +7352,15 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
     exist — when both are on the map the Christians may relocate one
     (relocate_from). Scenario F: may not place until Yusuf or Sir Muster.
 
-    Modeled as a free (0-action) placement during Alfonso's Activation;
-    optional (the Christian chooses). The +1 Jihad rider is placed
-    deterministically via _add_jihad (the Muslim 'where' choice is a
-    minor placement detail; VP totals are unaffected by which eligible
-    Stronghold receives it)."""
+    The Christian chooses whether to place a Seat for free during Alfonso's
+    Activation. The Muslim chooses the resulting Jihad destination."""
     side = _require_side(action)
     _require(side == "christian", "Cathedrals is a Christian capability",
              code="wrong_side")
     _require_campaign_step(state, "activation")
     _require_active(state, side)
+    _require(state.pending is None, "resolve the pending decision before placing a Cathedral Seat",
+             code="pending_decision")
     _require(state.meta.active_lord_id == "alfonso",
              "only Alfonso may place a Cathedral Seat (C16)",
              code="not_alfonso")
@@ -7379,6 +7383,8 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
     here = alfonso.cylinder.locale_id
     assert here is not None
     loc = state.locales[here]
+    _require(not ({"target_locale_id", "jihad_targets", "jihad_locale", "payload"} & action.keys()),
+             "the Muslim player chooses the Jihad Locale after placement", code="bad_arg")
     _require(loc.base_type == "city",
              f"{here} is not a City (Cathedral Seat requires a Conquered "
              f"City)", code="not_city")
@@ -7388,9 +7394,9 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
     _require(here not in state.cathedral_seat_locales,
              f"{here} already has a Cathedral Seat", code="already_seat")
     # Two-marker cap; relocate one if both already placed.
-    relocate_from = action.get("relocate_from")
-    relocate_from = cast(str, relocate_from)
+    relocate_from = None
     if len(state.cathedral_seat_locales) >= 2:
+        relocate_from = action.get("relocate_from")
         _require(relocate_from in state.cathedral_seat_locales,
                  "both Cathedral Seats are placed; specify relocate_from "
                  "(a current Cathedral Seat locale) to move one",
@@ -7403,16 +7409,29 @@ def _h_place_cathedral_seat(state: GameState, action: dict[str, Any]) -> dict[st
     state.cathedral_seat_locales.append(here)
     if "alfonso" not in loc.seat_marker_lord_ids:
         loc.seat_marker_lord_ids.append("alfonso")
-    # Jihad rider: Muslims add +1 Jihad (1.4.4).
-    from almoravid.events import _add_jihad
-    jihad = _add_jihad(state, 1, {})
+    from almoravid.events import _jihad_eligible_locales
+
+    response: dict[str, Any] = {}
+    if _jihad_eligible_locales(state):
+        state.pending = PendingDecision(
+            kind="cathedral_jihad", waiting_on="muslim",
+            payload={"locale_id": here, "resume_active": side},
+        )
+        state.meta.active_player = "muslim"
+        response.update(pending="cathedral_jihad", waiting_on="muslim")
     _record(state, action,
             f"christian places Cathedral Seat at {here} (+1 VP, C16)"
             + (f"; relocated from {relocate_from}" if relocate_from else "")
-            + f"; Muslim +1 Jihad rider: {jihad}")
+            + ("; Muslims choose where to add 1 Jihad" if response
+               else "; no eligible Jihad Locale"))
     return {"cathedral_seat": here, "relocated_from": relocate_from,
-            "jihad_rider": jihad,
-            "cathedral_seats": list(state.cathedral_seat_locales)}
+            "cathedral_seats": list(state.cathedral_seat_locales),
+            **response}
+
+
+def _h_cathedral_jihad(state: GameState, action: dict[str, Any]) -> dict[str, Any]:
+    _require_campaign_step(state, "activation")
+    return _resolve_jihad_choice(state, action, "cathedral_jihad", "Cathedrals")
 
 
 def _set_neutrality_pending(state: GameState, deferred: list[Any],
@@ -8386,6 +8405,7 @@ CAMPAIGN_HANDLERS = {
     "storm_front": _h_storm_front,
     "respond_neutrality_choice": _h_respond_neutrality_choice,
     "place_cathedral_seat": _h_place_cathedral_seat,
+    "cathedral_jihad": _h_cathedral_jihad,
     "cap_fueros": _h_cap_fueros,
     "cap_sisnando": _h_cap_sisnando,
     "cap_count_barcelona": _h_cap_count_barcelona,

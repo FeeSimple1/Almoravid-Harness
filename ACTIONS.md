@@ -312,6 +312,21 @@ The pending choice can be saved and reloaded. After Drought resolves,
 the drawing player resumes Arts of War. Pay and Disband take place in
 their usual Levy steps.
 
+### Bernard de Sédirac and Cathedrals (C16)
+
+When Bernard is drawn as an Event, choose one of the C16 payloads in the
+Arts of War menu. `service_right` moves the selected Christian Lord's Service
+and all of his advanced Vassal Service markers one box right. `muster` brings
+an eligible Lord from the Calendar to the chosen free Seat. Either branch
+deploys Cathedrals at the Christian board edge.
+
+During Alfonso's activation, `place_cathedral_seat` places a free Seat at his
+eligible Conquered City. When both markers are deployed, specify the one to move
+with `relocate_from`. If a Jihad destination is available, the Muslim player
+chooses it with `{"type":"cathedral_jihad","side":"muslim","target_locale_id":"talavera"}`
+or a different listed Locale. Alfonso resumes his activation with the same
+remaining Command actions. The pending Jihad choice survives save and reload.
+
 ## 3.2 Pay
 
 Use `pay_lord` in Levy, `pay_before_disband` in the interactive Campaign

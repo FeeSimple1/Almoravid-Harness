@@ -6,6 +6,7 @@ import pytest
 
 from almoravid.actions import IllegalAction, apply_action
 from almoravid.campaign import _conquer_stronghold, compute_final_vp
+from almoravid.legal_moves import legal_moves
 from almoravid.scenarios import load_scenario
 from almoravid.state import Cylinder
 
@@ -28,6 +29,12 @@ def _setup_alfonso_at_conquered_city(s, city=None):
     return city
 
 
+def _finish_jihad(s):
+    if s.pending is not None:
+        assert s.pending.kind == "cathedral_jihad"
+        apply_action(s, legal_moves(s)[0])
+
+
 def test_place_cathedral_seat_adds_vp_and_jihad_rider() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     city = _setup_alfonso_at_conquered_city(s)
@@ -38,6 +45,9 @@ def test_place_cathedral_seat_adds_vp_and_jihad_rider() -> None:
     assert "alfonso" in s.locales[city].seat_marker_lord_ids
     cvp_after, _ = compute_final_vp(s)
     assert cvp_after == cvp_before + 1          # +1 Christian VP
+    assert r["pending"] == "cathedral_jihad"
+    assert sum(l.jihad_markers for l in s.locales.values()) == jihad_before
+    _finish_jihad(s)
     jihad_after = sum(l.jihad_markers for l in s.locales.values())
     assert jihad_after == jihad_before + 1      # +1 Jihad rider
     # Free placement: actions unchanged.
@@ -48,6 +58,7 @@ def test_cannot_place_two_at_same_city() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     _setup_alfonso_at_conquered_city(s)
     apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
+    _finish_jihad(s)
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
     assert ei.value.code == "already_seat"
@@ -63,16 +74,20 @@ def test_cap_two_markers_requires_relocate() -> None:
     # Place two.
     _setup_alfonso_at_conquered_city(s, cities[0])
     apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
+    _finish_jihad(s)
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id=cities[1])
     apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
+    _finish_jihad(s)
     assert len(s.cathedral_seat_locales) == 2
     # Third placement requires relocate_from.
     s.lords["alfonso"].cylinder = Cylinder(kind="locale", locale_id=cities[2])
     with pytest.raises(IllegalAction) as ei:
         apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
     assert ei.value.code == "cathedral_cap"
-    apply_action(s, {"type": "place_cathedral_seat", "side": "christian",
-                     "relocate_from": cities[0]})
+    relocations = [m for m in legal_moves(s) if m["type"] == "place_cathedral_seat"]
+    assert {m["relocate_from"] for m in relocations} == set(cities[:2])
+    apply_action(s, next(m for m in relocations if m["relocate_from"] == cities[0]))
+    _finish_jihad(s)
     assert set(s.cathedral_seat_locales) == {cities[1], cities[2]}
 
 
@@ -80,6 +95,7 @@ def test_muslim_conquest_removes_cathedral_seat() -> None:
     s = load_scenario("scenario_a_toledo_beset", seed=1)
     city = _setup_alfonso_at_conquered_city(s)
     apply_action(s, {"type": "place_cathedral_seat", "side": "christian"})
+    _finish_jihad(s)
     s.taifas[s.locales[city].territory].status = "reconquista"
     _conquer_stronghold(s, city, "muslim")     # Muslim re-conquers
     assert city not in s.cathedral_seat_locales

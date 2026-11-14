@@ -265,10 +265,11 @@ def _phase_legal_moves(state: GameState) -> list[dict[str, Any]]:
         return [{"type": "betrayal_of_terms", "side": "christian", "mode": mode}
                 for mode in modes]
 
-    if state.pending is not None and state.pending.kind == "betrayal_jihad":
+    if state.pending is not None and state.pending.kind in ("betrayal_jihad", "cathedral_jihad"):
         from almoravid.events import _jihad_eligible_locales
 
-        return [{"type": "betrayal_jihad", "side": "muslim", "target_locale_id": lid}
+        return [{"type": state.pending.kind, "side": state.pending.waiting_on,
+                 "target_locale_id": lid}
                 for lid in _jihad_eligible_locales(state)]
 
     if state.pending is not None and state.pending.kind == "retreat_provender":
@@ -697,6 +698,11 @@ def _aow_moves(state: GameState, side: Side) -> list[dict[str, Any]]:
                 return [{**event, "payload": {"lord_ids": ids}} for ids in fitna_choices(state)]
             if pend[0] == "C23":
                 choices = illness_choices(state)
+                return [{**event, "payload": choice} for choice in choices] or [event]
+            if pend[0] == "C16":
+                from almoravid.events import bernard_choices
+
+                choices = bernard_choices(state)
                 return [{**event, "payload": choice} for choice in choices] or [event]
             out.append(event)
             if pend[0] in ("C13", "M23"):
@@ -1215,10 +1221,11 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
         else:
             # C16 Cathedrals: Alfonso at a Christian-Conquered City with
             # the capability may place a Cathedral Seat (free, optional).
-            if (state.meta.active_lord_id == "alfonso"
+            from almoravid.capabilities import side_has_capability
+
+            if (active == "christian" and state.meta.active_lord_id == "alfonso"
                     and ("C16" in state.lords["alfonso"].capabilities
-                         or any(c.card_id == "C16" and c.owner_side == "christian"
-                                for c in state.decks.capabilities_in_play))
+                         or side_has_capability(state, "christian", "C16"))
                     and state.lords["alfonso"].cylinder.kind == "locale"):
                 _al = state.lords["alfonso"]
                 assert _al.cylinder.locale_id is not None
@@ -1232,10 +1239,13 @@ def _campaign_moves(state: GameState) -> list[dict[str, Any]]:
                         and _loc.territory in state.taifas
                         and _al.cylinder.locale_id
                         not in state.cathedral_seat_locales
-                        and len(state.cathedral_seat_locales) < 2
                         and _gate):
-                    out.append({"type": "place_cathedral_seat",
-                                "side": "christian"})
+                    cathedral = {"type": "place_cathedral_seat", "side": "christian"}
+                    if len(state.cathedral_seat_locales) < 2:
+                        out.append(cathedral)
+                    else:
+                        out.extend({**cathedral, "relocate_from": lid}
+                                   for lid in state.cathedral_seat_locales)
             # (C13/M23, M15, M20, C18, C23 moved to _muster_moves —
             # they are Muster-segment Levy effects per 3.4.2/3.4.3.)
             _alid = state.meta.active_lord_id
