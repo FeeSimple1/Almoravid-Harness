@@ -114,9 +114,9 @@ def test_c17_genoa_pisa_ravages_two_muslim_ports() -> None:
             if (l.side == "muslim" and l.cylinder.kind == "locale"
                     and l.cylinder.locale_id == lid):
                 l.cylinder = Cylinder(kind="locale", locale_id="sahagun")
-    r = resolve_event(s, "christian", "C17")
-    assert not r.get("no_op"), "expected eligible Muslim Ports (C17)"
-    assert len(r["ravaged"]) <= 2
+    selected = ports_before[-2:]
+    r = resolve_event(s, "christian", "C17", {"locale_ids": selected})
+    assert r["ravaged"] == selected and len(selected) == 2
     for p in r["ravaged"]:
         assert s.locales[p].ravaged == "yellow"
 

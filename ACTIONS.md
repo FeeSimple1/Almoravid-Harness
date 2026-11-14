@@ -258,6 +258,19 @@ Draw `n` cards from the top of the deck into `decks.pending_draw[side]`.
 {"type": "aow_draw", "side": "christian", "n": 3}
 ```
 
+### Genoa & Pisa and Al-Maghawir (3.1.3)
+
+For C17 and M24, choose a listed `aow_implement_event` action or supply
+`payload.locale_ids` with two distinct eligible Locales. If only one
+Locale qualifies, place one marker there. If none qualify, discard the
+Event without effect. A payload is optional when the outcome is forced.
+Caballería Villana (C19) in play blocks M24.
+
+```
+{"type": "aow_implement_event", "side": "christian", "card_id": "C17",
+ "payload": {"locale_ids": ["huelva", "cartagena"]}}
+```
+
 ### Held Events (3.1.3)
 
 On later Levies, `aow_implement_event` implements the next card in
