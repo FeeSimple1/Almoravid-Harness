@@ -1236,6 +1236,16 @@ def _first_jihad_eligible_locale(
     return eligible[0] if eligible else None
 
 
+def _place_jihad_marker(state: GameState, locale_id: str) -> None:
+    from almoravid.effective import is_friendly_locale
+
+    loc = state.locales[locale_id]
+    loc.add_jihad(1)
+    # 1.4.4 Open Gates also clears a Muslim Bypass if Jihad makes it Friendly.
+    if loc.bypass_green and is_friendly_locale(state, locale_id, "muslim"):
+        loc.bypass_green = False
+
+
 def _add_jihad(
     state: GameState,
     count: int,
@@ -1268,21 +1278,21 @@ def _add_jihad(
             if placed >= count:
                 break
             if lid in eligible:
-                state.locales[lid].add_jihad(1)
+                _place_jihad_marker(state, lid)
                 placement[lid] = placement.get(lid, 0) + 1
                 placed += 1
         # Any leftover markers spill round-robin onto eligible Locales.
         i = 0
         while placed < count and eligible:
             lid = eligible[i % len(eligible)]
-            state.locales[lid].add_jihad(1)
+            _place_jihad_marker(state, lid)
             placement[lid] = placement.get(lid, 0) + 1
             placed += 1
             i += 1
     else:
         for n in range(count):
             lid = eligible[n % len(eligible)]
-            state.locales[lid].add_jihad(1)
+            _place_jihad_marker(state, lid)
             placement[lid] = placement.get(lid, 0) + 1
     return placement
 
@@ -1610,8 +1620,55 @@ def _m21_al_sumaisir(state: GameState, side: Side, card_id: str,
 # ---------------------------------------------------------------------------
 
 
-@register("C16")
+def _bernard_service_targets(state: GameState) -> dict[str, int]:
+    from almoravid.actions import _lord_service_box
 
+    return {
+        lord.id: box for lord in state.lords.values()
+        if lord.side == "christian" and lord.cylinder.kind == "locale"
+        and (box := _lord_service_box(state, lord.id)) is not None
+    }
+
+
+def _bernard_muster_seats(state: GameState) -> dict[str, list[str]]:
+    from almoravid.actions import _free_seats_for
+
+    return {
+        lord.id: seats for lord in state.lords.values()
+        if lord.side == "christian" and lord.cylinder.kind == "calendar"
+        and lord.id not in state.meta.muster_banned_this_levy_lord_ids
+        and (seats := _free_seats_for(state, lord.id))
+    }
+
+
+def bernard_choices(state: GameState) -> list[dict[str, Any]]:
+    """The Christian player's immediate Service and Muster alternatives."""
+    from itertools import combinations
+
+    from almoravid.effective import is_besieged
+
+    targets = _bernard_service_targets(state)
+    choices: list[dict[str, Any]] = [
+        {"mode": "service_right", "lord_id": lord_id}
+        for lord_id in sorted(targets, key=targets.__getitem__)
+    ]
+    for lord_id, seats in _bernard_muster_seats(state).items():
+        muster = {"mode": "muster", "lord_id": lord_id}
+        if lord_id != "rodrigo_campeador":
+            choices.extend({**muster, "seat": seat} for seat in seats)
+            continue
+        payers = {lord.id: lord.assets["coin"] for lord in state.lords.values()
+                  if lord.side == "christian" and lord.cylinder.kind == "locale"
+                  and lord.assets.get("coin", 0) > 0 and not is_besieged(state, lord.id)}
+        payments = [[{"lord_id": lid, "coin": 2}] for lid, coin in payers.items() if coin >= 2]
+        payments.extend([{"lord_id": a, "coin": 1}, {"lord_id": b, "coin": 1}]
+                        for a, b in combinations(payers, 2))
+        choices.extend({**muster, "seat": seat, "payments": payment}
+                       for seat in seats for payment in payments)
+    return choices
+
+
+@register("C16")
 def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
                             payload: dict[str, Any]) -> dict[str, Any]:
     """C16: immediate Service/Muster choice, then compulsory Cathedrals.
@@ -1620,28 +1677,30 @@ def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
     regardless of which Christian Lord receives the Event benefit.
     """
     from almoravid.actions import (
-        _free_seats_for,
         _initialize_mustered_lord,
         _require,
         _require_muster_allowed,
     )
+    from almoravid.campaign import _shift_event_service
     from almoravid.state import CardInPlay
+
     result: dict[str, Any] = {"card_id": card_id, "side": side}
+    candidates = _bernard_service_targets(state)
+    if not payload and not candidates:
+        # A bare replay still resolves if only the Muster branch is possible.
+        payload = next(iter(bernard_choices(state)), {})
     mode = payload.get("mode", "service_right")
     _require(mode in ("service_right", "muster"), "unknown Bernard mode", code="bad_arg")
     if mode == "muster":
         requested = payload.get("lord_id")
         if isinstance(requested, str):
             _require_muster_allowed(state, requested)
-        eligible = [lord.id for lord in state.lords.values()
-                    if lord.side == "christian" and lord.cylinder.kind == "calendar"
-                    and lord.id not in state.meta.muster_banned_this_levy_lord_ids
-                    and _free_seats_for(state, lord.id)]
-        lid = requested or (eligible[0] if eligible else None)
+        eligible = _bernard_muster_seats(state)
+        lid = requested or next(iter(eligible), None)
         if lid not in eligible:
             result.update(no_op=True, note="no Christian Lord with a free Seat to Muster")
         else:
-            free = _free_seats_for(state, lid)
+            free = eligible[lid]
             seat = payload.get("seat", free[0])
             _require(seat in free, "choose a free Seat", code="bad_seat")
             if lid == "rodrigo_campeador":
@@ -1651,20 +1710,17 @@ def _c16_bernard_de_sedirac(state: GameState, side: Side, card_id: str,
             muster = _initialize_mustered_lord(state, lid, seat)
             result.update(mustered=lid, seat=seat, **muster)
     else:
-        candidates = [sm for sm in state.calendar.service_markers
-                      if sm.vassal_id is None and sm.lord_id in state.lords
-                      and state.lords[sm.lord_id].side == "christian"
-                      and state.lords[sm.lord_id].cylinder.kind == "locale"]
-        target = next((sm for sm in candidates if sm.lord_id == payload.get("lord_id")), None)
-        if target is None and not payload.get("lord_id") and candidates:
-            target = min(candidates, key=lambda sm: sm.box)
+        target = payload.get("lord_id")
+        if "lord_id" in payload:
+            _require(isinstance(target, str) and target in candidates,
+                     "choose a Christian Lord's own Service marker", code="bad_target")
+        elif candidates:
+            target = min(candidates, key=lambda lid: candidates[lid])
         if target is None:
             result.update(no_op=True, note="no Christian Lord Service marker to shift")
         else:
-            target.box = min(17, target.box + 1)
-            if target.box == 17 and target.lord_id not in state.calendar.off_right_service:
-                state.calendar.off_right_service.append(target.lord_id)
-            result.update(shifted_right=target.lord_id, new_service_box=target.box)
+            result.update(shifted_right=target,
+                          new_service_box=_shift_event_service(state, target, 1))
     # This compulsory Levy costs no action and does not consume a mat slot.
     state.decks.discard = [c for c in state.decks.discard if c != card_id]
     state.decks.draw = [c for c in state.decks.draw if c != card_id]

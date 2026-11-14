@@ -282,6 +282,9 @@ def render_summary(state: GameState) -> str:
             lines.append(f"Declared March {route} by {lords}.")
         elif state.pending.kind == "surprise_choice":
             lines.append(f"Arrived at empty Enemy Stronghold {state.pending.payload['locale_id']}.")
+        elif state.pending.kind == "cathedral_jihad":
+            here = state.pending.payload["locale_id"]
+            lines.append(f"Cathedral Seat at {here}. Muslims choose where to add 1 Jihad.")
     elif here := state.meta.surprise_storm_pending_locale_id:
         lines.append(f"Surprise requires a free Storm at {here}")
 
